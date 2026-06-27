@@ -180,11 +180,17 @@ OFFSETS = build_offsets()
 # !!! SAFETY: NEVER write a value < 1 (e.g. -1 to "un-obtain") to a key-item or
 # skill entry while the game is running — it leaves a dangling skill-object
 # pointer and FREEZES the game. apply_item enforces this. !!!
+# NOTE: the item array and the location-flag array are the SAME unified
+# `g_flags[]` array: base +0x36B91C, 512 int32 entries (index = (off-0x36B91C)/4).
+# Items at low indices, location/event flags at high indices. A chest grants via
+# the event-script VM opcode 0x64 (`g_flags[idx] = value`) with idx/value baked
+# into per-map heap bytecode — there is NO static contents table to neutralize.
 ITEM_OFFSETS: dict[str, int] = {
-    "Roda Fruit": 0x36BA78,              # consumable (count-safe)
-    "Celcetan Panacea": 0x36BA80,        # consumable (count-safe)
-    "Cerulean Flabellum": 0x36BAC8,      # key item; grants the bubble skill
-    "Protective Bubble": 0x36BAEC,        # the skill granted by the Flabellum
+    "Roda Fruit": 0x36BA78,              # consumable (count-safe)   idx 0x57
+    "Celcetan Panacea": 0x36BA80,        # consumable (count-safe)   idx 0x59
+    "Cerulean Flabellum": 0x36BAC8,      # key item; grants bubble   idx 0x6B
+    "Protective Bubble": 0x36BAEC,        # skill from the Flabellum   idx 0x74
+    "Blue Moon Crest": 0x36BAD8,         # key item                   idx 0x6F
 }
 
 # Per-location/event flags from the universal progress array at ~+0x36BDxx
@@ -196,6 +202,7 @@ LOCATION_FLAG_OFFSETS: dict[str, int] = {
     "Pressure Plate (4F)": 0x36BDE4,
     "Chest 2 - Roda Fruit (4F)": 0x36BDE8,
     "Pressure Plate 2 - Door East (4F)": 0x36BDF0,
+    "Chest 3 - Blue Moon Crest": 0x36BCFC,
 }
 
 # Minimum value apply_item is allowed to write to an ITEM_OFFSETS entry. Writing

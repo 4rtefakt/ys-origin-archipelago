@@ -6,6 +6,8 @@
     "armor_id": "0x34C0F0",
     "current_level": "0x36A760",
     "current_sp": "0x36A75C",
-    "location_flags_base": "0x36BCB0"
+    "item_array_base": "0x36B91C",
+    "location_flags_base": "0x36B91C",
+    "weapon_level": "0x367B8C"
   }
 }
