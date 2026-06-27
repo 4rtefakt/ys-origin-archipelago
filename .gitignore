@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# apworld build artifact (zip ys_origin/ to produce this)
+*.apworld
+
+# OS / editor
+Thumbs.db
+.DS_Store
+
+# local Archipelago install, RE scratch, etc. live OUTSIDE this repo
+# (D:\Archipelago, D:\ghidra-work) — nothing to ignore here, noted for clarity

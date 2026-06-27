@@ -1,0 +1,11 @@
+# Client runtime dependencies.
+#
+# The memory layer (client/memory.py) is pure ctypes — no third-party package
+# is required to read/write the game. pymem is listed as an optional drop-in
+# alternative if you prefer its API; it is not imported by default.
+#
+# pymem>=1.13.1   # optional: alternative Win32 memory backend
+#
+# Archipelago itself is NOT a pip dependency — it is a source tree. Point the
+# AP_ROOT environment variable at your Archipelago checkout when running the
+# client (see README / setup guide).

@@ -1,0 +1,16 @@
+[project]
+name = "ys-origin-ap"
+version = "0.1.0"
+description = "Archipelago integration (apworld + memory client) for Ys Origin"
+requires-python = ">=3.11"
+dependencies = []  # client memory layer is pure ctypes; see requirements.txt
+
+[project.optional-dependencies]
+pymem = ["pymem>=1.13.1"]
+
+[tool.setuptools]
+packages = ["client", "tools", "ys_origin"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

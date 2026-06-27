@@ -1,0 +1,11 @@
+{
+  "module": "yso_win.exe",
+  "version": "1.1.1.0",
+  "offsets": {
+    "accessory_id": "0x33A4A8",
+    "armor_id": "0x34C0F0",
+    "current_level": "0x36A760",
+    "current_sp": "0x36A75C",
+    "location_flags_base": "0x36BCB0"
+  }
+}
