@@ -23,7 +23,11 @@ from .items import (
     item_name_to_id,
     item_table,
 )
-from .locations import location_name_to_id, locations_by_region
+from .locations import (
+    location_box_flag,
+    location_name_to_id,
+    locations_by_region,
+)
 from .options import YsOriginOptions
 from .regions import ALL_REGIONS, CONNECTIONS
 from .rules import set_completion_condition, set_rules
@@ -127,10 +131,17 @@ class YsOriginWorld(World):
         set_completion_condition(self)
 
     def fill_slot_data(self) -> dict[str, Any]:
-        # The client uses location_signals to turn detected flag flips into
-        # LocationChecks. Names here == client LOCATION_FLAG_OFFSETS keys.
+        # The client turns a detected box-flag flip into a LocationCheck:
+        #   location_signals    : location name -> AP location id
+        #   location_box_flags  : location name -> g_flags box-flag index (hex str)
+        # so the client can build its detection map from slot data rather than a
+        # hand-maintained registry.
         return {
             "character": int(self.options.character.value),
             "goal": int(self.options.goal.value),
             "location_signals": dict(self.location_name_to_id),
+            "location_box_flags": {
+                name: flag for name, flag in location_box_flag.items()
+                if flag is not None
+            },
         }

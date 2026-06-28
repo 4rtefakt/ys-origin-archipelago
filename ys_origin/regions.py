@@ -1,16 +1,12 @@
 """Region definitions for the Ys Origin apworld.
 
-Vertical slice: a single Darm Tower region for the Hugo route, reached from the
-mandatory ``Menu`` origin. Floor-by-floor regions and per-character gating come
-later as more of the route is mapped.
+A linear chain of Darm Tower zone regions (Wailing Blue → … → Demonic Core)
+from the ``Menu`` origin, derived from the extracted dataset. Boss-medallion
+gates between zones are attached in ``rules.py``.
 """
 
 from __future__ import annotations
 
-MENU = "Menu"
-HUGO_REGION = "Darm Tower (Hugo)"
+from .data_tables import ALL_REGIONS, CONNECTIONS, MENU
 
-ALL_REGIONS: list[str] = [MENU, HUGO_REGION]
-
-# (from_region, to_region) — rules attached in rules.py (none for the slice).
-CONNECTIONS: list[tuple[str, str]] = [(MENU, HUGO_REGION)]
+__all__ = ["ALL_REGIONS", "CONNECTIONS", "MENU"]

@@ -1,11 +1,8 @@
-"""Item definitions for the Ys Origin apworld — Hugo slice.
+"""Item definitions for the Ys Origin apworld.
 
-Names of *grantable* items **must exactly match a key in the client's
-``ITEM_OFFSETS``** (``client/offsets.py``): when the AP server sends the item,
-the client's ``apply_item`` writes value 1 (or increments) into the item array.
-
-The slice pool is sized to exactly fill the slice's locations. Grow alongside
-``locations.py`` as the route is mapped.
+Derived from the extracted game data (``data_tables``): the vanilla item pool is
+the canonical item of each chest, classified by the INVINFO id-ranges. Grantable
+names match the client's item registry (g_flags item index → name).
 """
 
 from __future__ import annotations
@@ -13,7 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
-BASE_ID = 0x59_5000
+from .data_tables import (
+    FILLER_ITEM_NAME,
+    item_classification,
+    item_counts,
+    item_name_to_id as _item_name_to_id,
+)
 
 
 class ItemKind(IntEnum):
@@ -31,21 +33,21 @@ class ItemDef:
     count: int = 1
 
 
-# Append-only. Grantable names must match client ITEM_OFFSETS keys.
-_ITEM_DEFS: list[ItemDef] = [
-    ItemDef("Cerulean Flabellum", ItemKind.PROGRESSION),  # key item; grants Ventus Bracelet
-    ItemDef("Celcetan Panacea", ItemKind.FILLER, count=2),
-    ItemDef("Roda Fruit", ItemKind.FILLER, count=2),
-]
-
-item_table: dict[str, ItemDef] = {d.name: d for d in _ITEM_DEFS}
-item_name_to_id: dict[str, int] = {
-    d.name: BASE_ID + i for i, d in enumerate(_ITEM_DEFS)
+_CLASS_TO_KIND = {
+    "filler": ItemKind.FILLER,
+    "progression": ItemKind.PROGRESSION,
+    "useful": ItemKind.USEFUL,
+    "trap": ItemKind.TRAP,
 }
 
-item_name_groups: dict[str, set[str]] = {
-    "Consumables": {"Celcetan Panacea", "Roda Fruit"},
-    "Key Items": {"Cerulean Flabellum"},
+item_table: dict[str, ItemDef] = {
+    name: ItemDef(name, _CLASS_TO_KIND[item_classification(name)], count)
+    for name, count in item_counts.items()
 }
 
-FILLER_ITEM_NAME = "Roda Fruit"
+item_name_to_id: dict[str, int] = dict(_item_name_to_id)
+
+# Group items by classification for the YAML/UI.
+item_name_groups: dict[str, set[str]] = {}
+for _name, _d in item_table.items():
+    item_name_groups.setdefault(_d.kind.name.title(), set()).add(_name)
