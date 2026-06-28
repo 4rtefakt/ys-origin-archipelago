@@ -50,11 +50,42 @@ if(NOT imgui_POPULATED)
 endif()
 set(IMGUI_DIR ${imgui_SOURCE_DIR})
 
+# --- Archipelago C++ client (apclientpp) + its header-only deps ------------ #
+# Self-contained AP networking inside the mod (no Python at runtime). For local
+# ws:// play we define WSWRAP_NO_SSL so no OpenSSL is needed — everything below
+# is header-only.
+FetchContent_Declare(json GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3)
+FetchContent_Declare(asio GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+    GIT_TAG asio-1-28-0)
+FetchContent_Declare(websocketpp GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+    GIT_TAG 0.8.2)
+FetchContent_Declare(wswrap GIT_REPOSITORY https://github.com/black-sliver/wswrap.git
+    GIT_TAG main)
+FetchContent_Declare(valijson GIT_REPOSITORY https://github.com/tristanpenman/valijson.git
+    GIT_TAG v1.0.1)
+FetchContent_Declare(apclientpp GIT_REPOSITORY https://github.com/black-sliver/apclientpp.git
+    GIT_TAG main)
+foreach(dep json asio websocketpp wswrap valijson apclientpp)
+    FetchContent_GetProperties(${dep})
+    if(NOT ${dep}_POPULATED)
+        FetchContent_Populate(${dep})
+    endif()
+endforeach()
+set(AP_INCLUDE_DIRS
+    ${json_SOURCE_DIR}/single_include
+    ${asio_SOURCE_DIR}/asio/include
+    ${websocketpp_SOURCE_DIR}
+    ${wswrap_SOURCE_DIR}/include
+    ${valijson_SOURCE_DIR}/include
+    ${apclientpp_SOURCE_DIR})
+
 add_library(dinput8 SHARED
     src/dllmain.cpp
     src/proxy_dinput8.cpp
     src/hook_d3d9.cpp
     src/hook_vm.cpp
+    src/hook_ap.cpp
     src/hook_bridge.cpp
     src/hook_watch.cpp
     src/overlay.cpp
@@ -68,8 +99,20 @@ add_library(dinput8 SHARED
     ${MINHOOK_SRC}
 )
 target_include_directories(dinput8 PRIVATE
-    src ${IMGUI_DIR} ${IMGUI_DIR}/backends ${minhook_SOURCE_DIR}/include)
-target_link_libraries(dinput8 PRIVATE d3d9 dxguid)
+    src ${IMGUI_DIR} ${IMGUI_DIR}/backends ${minhook_SOURCE_DIR}/include
+    ${AP_INCLUDE_DIRS})
+target_link_libraries(dinput8 PRIVATE d3d9 dxguid ws2_32 crypt32)
+
+# apclientpp / asio / websocketpp build knobs (local ws:// only, no OpenSSL).
+target_compile_definitions(dinput8 PRIVATE
+    ASIO_STANDALONE
+    _WEBSOCKETPP_CPP11_STL_
+    WSWRAP_NO_SSL
+    WSWRAP_NO_COMPRESSION   # avoid zlib (not header-only)
+    WIN32_LEAN_AND_MEAN
+    _WIN32_WINNT=0x0600)
+# MSVC needs accurate __cplusplus and big object files for asio/json/websocketpp.
+target_compile_options(dinput8 PRIVATE /Zc:__cplusplus /bigobj)
 
 # Name the artifact exactly dinput8.dll (no "lib" prefix on MinGW).
 set_target_properties(dinput8 PROPERTIES PREFIX "" OUTPUT_NAME "dinput8")

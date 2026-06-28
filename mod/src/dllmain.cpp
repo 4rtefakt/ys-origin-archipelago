@@ -6,13 +6,15 @@ void proxy_load_real();
 void hook_d3d9_install();
 void hook_vm_install();
 void bridge_install();
+void ap_install();
 void watch_install();
 void mod_log(const char* fmt, ...);
 
 static DWORD WINAPI init_thread(LPVOID) {
     mod_log("init_thread: started, installing hooks");
     hook_d3d9_install();   // overlay
-    bridge_install();      // localhost socket bridge to the Python AP client
+    bridge_install();      // localhost socket bridge (legacy / fallback)
+    ap_install();          // self-contained Archipelago client (apclientpp)
     hook_vm_install();     // event-VM grant interception (suppress/detect/give)
     // watch_install();    // DR write-watchpoint diagnostic (used to find the
                            //   real writer @0x567D17; re-enable if needed)
