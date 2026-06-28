@@ -205,7 +205,9 @@ def detect_checks(prev: GameState, curr: GameState) -> List[str]:
     # string is the raw flag name, which equals the apworld location name (so the
     # AP client maps it via slot_data['location_signals']).
     for loc, val in curr.location_flags.items():
-        if val == 1 and prev.location_flags.get(loc, 0) != 1:
+        # Fire when a watched cell crosses into "done": box flags 0->1, item /
+        # blessing flags -1/0 -> >=1. (prev has all keys after the first poll.)
+        if val >= 1 and prev.location_flags.get(loc, 1) < 1:
             checks.append(loc)
 
     # newly-obtained items/skills (entry goes from <1 to >=1).

@@ -146,4 +146,6 @@ class YsOriginWorld(World):
             "location_detect": {
                 n: LOC_META[n]["detect"] for n in active
             },
+            # item name -> g_flags item index, so the client can grant anything.
+            "item_index": dt.item_index,
         }

@@ -138,7 +138,17 @@ def build_context_class():
                     self.location_signal_to_id.update(
                         {str(k): int(v) for k, v in mapping.items()}
                     )
-                log.info("connected to slot %s", args.get("slot"))
+                # Rebuild the live detect/grant registries from slot data so the
+                # client matches the generated world (all checks/items), then
+                # re-prime so the next poll diffs against fresh state.
+                from .offsets import apply_slot_data
+                apply_slot_data(slot_data.get("location_detect"),
+                                slot_data.get("item_index"))
+                self.prev_state = None
+                self.suppressor.reset()
+                log.info("connected to slot %s — %d locations, %d items mapped",
+                         args.get("slot"), len(self.location_signal_to_id),
+                         len(slot_data.get("item_index", {})))
             elif cmd == "ReceivedItems":
                 asyncio.create_task(self._apply_received_items())
 

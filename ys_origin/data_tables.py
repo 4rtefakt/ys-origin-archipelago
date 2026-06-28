@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, List, Set
 
 _DATA_PATH = Path(__file__).parent / "data" / "locations.json"
+_ITEMS_PATH = Path(__file__).parent / "data" / "items.json"
 
 LOC_BASE_ID = 0x59_6000
 ITEM_BASE_ID = 0x59_5000
@@ -132,6 +133,11 @@ def is_excluded(loc_name: str) -> bool:
     """True if AP should keep this location FILLER-only (provisional checks)."""
     meta = LOC_META.get(loc_name)
     return bool(meta and meta["type"] in EXCLUDED_TYPES)
+
+
+# item name -> g_flags item index (== INVINFO id); the client grants by writing
+# that array entry. Published in slot_data so the client needs no local table.
+item_index: Dict[str, int] = json.loads(_ITEMS_PATH.read_text(encoding="utf-8"))
 
 
 def vanilla_items(enabled: Set[str]) -> List[str]:

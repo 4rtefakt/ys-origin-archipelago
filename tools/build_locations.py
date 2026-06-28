@@ -247,8 +247,19 @@ def main(argv) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "locations.json").write_text(
         json.dumps(locs, indent=1, ensure_ascii=False), encoding="utf-8")
+
+    # items.json: item name -> g_flags index (== INVINFO id), so the client can
+    # grant any received item. First id wins on duplicate names.
+    from tools.invinfo import names as invinfo_names
+    name_to_idx: dict = {}
+    for idx, nm in invinfo_names(_INV).items():
+        if nm and not nm.startswith("Reserved") and nm not in name_to_idx:
+            name_to_idx[nm] = idx
+    (out / "items.json").write_text(
+        json.dumps(name_to_idx, indent=1, ensure_ascii=False), encoding="utf-8")
+
     by_type = Counter(l["type"] for l in locs)
-    print(f"  wrote {len(locs)} locations to {out}\\locations.json")
+    print(f"  wrote {len(locs)} locations + {len(name_to_idx)} items to {out}")
     print("  by type:", dict(by_type))
     return 0
 

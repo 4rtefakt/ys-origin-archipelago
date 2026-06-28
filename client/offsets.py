@@ -246,3 +246,33 @@ BLESSING_COUNT = 32             # scan width until the live index map is pinned
 BLESSING_DIRTY = 0x36B914       # combat/state bitfield; bit 0x10 = recompute req
 BLESSING_DIRTY_BIT = 0x10
 
+# Base of the unified g_flags[] array (items at low indices, event/location
+# flags at high indices). Used to turn an AP item index into a write offset.
+GFLAGS_BASE = 0x36B91C
+
+
+def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> None:
+    """Rebuild the live detect/grant registries from AP slot_data, so the client
+    matches the generated world (any number of checks/items) with no local table.
+
+      * ``location_detect`` : {loc name -> {"method": "flag", "offset": "0x.."}}.
+        Only flag-method entries are watchable today (scene-method = pending).
+      * ``item_index``      : {item name -> g_flags item index}.
+
+    Mutates LOCATION_FLAG_OFFSETS / ITEM_OFFSETS in place so every module that
+    imported them sees the update.
+    """
+    LOCATION_FLAG_OFFSETS.clear()
+    for name, d in (location_detect or {}).items():
+        if isinstance(d, dict) and d.get("method") == "flag" and "offset" in d:
+            try:
+                LOCATION_FLAG_OFFSETS[name] = int(str(d["offset"]), 16)
+            except ValueError:
+                pass
+    ITEM_OFFSETS.clear()
+    for name, idx in (item_index or {}).items():
+        try:
+            ITEM_OFFSETS[name] = GFLAGS_BASE + int(idx) * 4
+        except (ValueError, TypeError):
+            pass
+
