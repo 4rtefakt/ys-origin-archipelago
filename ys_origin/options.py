@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from Options import Choice, PerGameCommonOptions
+from Options import Choice, DefaultOnToggle, PerGameCommonOptions, Toggle
 
 
 class Character(Choice):
@@ -32,7 +32,25 @@ class Goal(Choice):
     default = 0
 
 
+class BossChecks(DefaultOnToggle):
+    """Add a check for defeating each boss / mid-boss (~12)."""
+    display_name = "Boss checks"
+
+
+class FloorChecks(DefaultOnToggle):
+    """Add a check for reaching each tower floor (~21)."""
+    display_name = "Floor checks"
+
+
+class RoomChecks(Toggle):
+    """Add a check for entering each tower room (~145). Big, filler-heavy."""
+    display_name = "Room checks (sanity)"
+
+
 @dataclass
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
     goal: Goal
+    boss_checks: BossChecks
+    floor_checks: FloorChecks
+    room_checks: RoomChecks

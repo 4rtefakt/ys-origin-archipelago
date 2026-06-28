@@ -1,36 +1,26 @@
 """Item definitions for the Ys Origin apworld.
 
-Derived from the extracted game data (``data_tables``): the vanilla item pool is
-the canonical item of each chest, classified by the INVINFO id-ranges. Grantable
-names match the client's item registry (g_flags item index → name).
+The pool is built per-world from the active locations (see ``__init__`` /
+``data_tables``); this module just maps names→ids, names→classification, and
+exposes the item groups. Names match the client's item registry.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import IntEnum
 
 from .data_tables import (
-    FILLER_ITEM_NAME,
     item_classification,
-    item_counts,
     item_name_to_id as _item_name_to_id,
 )
 
 
 class ItemKind(IntEnum):
-    """Mirror of AP's ItemClassification (import-free for standalone use)."""
+    """Mirror of AP's ItemClassification."""
     FILLER = 0
     PROGRESSION = 1
     USEFUL = 2
     TRAP = 4
-
-
-@dataclass(frozen=True)
-class ItemDef:
-    name: str
-    kind: ItemKind
-    count: int = 1
 
 
 _CLASS_TO_KIND = {
@@ -40,14 +30,13 @@ _CLASS_TO_KIND = {
     "trap": ItemKind.TRAP,
 }
 
-item_table: dict[str, ItemDef] = {
-    name: ItemDef(name, _CLASS_TO_KIND[item_classification(name)], count)
-    for name, count in item_counts.items()
-}
+
+def kind_of(name: str) -> ItemKind:
+    return _CLASS_TO_KIND[item_classification(name)]
+
 
 item_name_to_id: dict[str, int] = dict(_item_name_to_id)
 
-# Group items by classification for the YAML/UI.
 item_name_groups: dict[str, set[str]] = {}
-for _name, _d in item_table.items():
-    item_name_groups.setdefault(_d.kind.name.title(), set()).add(_name)
+for _name in item_name_to_id:
+    item_name_groups.setdefault(kind_of(_name).name.title(), set()).add(_name)

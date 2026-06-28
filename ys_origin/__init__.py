@@ -16,21 +16,12 @@ from typing import Any
 from BaseClasses import Item, ItemClassification, Location, Region, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
-from .items import (
-    FILLER_ITEM_NAME,
-    ItemKind,
-    item_name_groups,
-    item_name_to_id,
-    item_table,
-)
-from .locations import (
-    location_box_flag,
-    location_name_to_id,
-    locations_by_region,
-)
+from .items import ItemKind, item_name_groups, item_name_to_id, kind_of
+from .locations import LOC_META, location_name_to_id
 from .options import YsOriginOptions
 from .regions import ALL_REGIONS, CONNECTIONS
 from .rules import set_completion_condition, set_rules
+from . import data_tables as dt
 
 _KIND_TO_AP = {
     ItemKind.FILLER: ItemClassification.filler,
@@ -78,27 +69,26 @@ class YsOriginWorld(World):
     # -- items --------------------------------------------------------------- #
 
     def create_item(self, name: str) -> YsOriginItem:
-        kind = item_table[name].kind if name in item_table else ItemKind.FILLER
         return YsOriginItem(
-            name, _KIND_TO_AP[kind], self.item_name_to_id[name], self.player
+            name, _KIND_TO_AP[kind_of(name)], self.item_name_to_id[name],
+            self.player,
         )
 
     def get_filler_item_name(self) -> str:
-        return FILLER_ITEM_NAME
+        return self.random.choice(dt.FILLER_POOL)
+
+    def _active_locations(self) -> dict[str, list[str]]:
+        return dt.locations_by_region(dt.enabled_categories(self.options))
 
     def create_items(self) -> None:
-        pool: list[YsOriginItem] = []
-        for name, d in item_table.items():
-            for _ in range(d.count):
-                pool.append(self.create_item(name))
+        enabled = dt.enabled_categories(self.options)
+        n_locations = sum(len(v) for v in dt.locations_by_region(enabled).values())
 
-        # Size the pool to exactly fill the (non-event) locations.
-        gap = len(self.location_name_to_id) - len(pool)
-        if gap > 0:
-            for _ in range(gap):
-                pool.append(self.create_item(self.get_filler_item_name()))
-        elif gap < 0:
-            pool = pool[:len(self.location_name_to_id)]
+        # One real (vanilla) item per enabled chest/event location; pad the rest
+        # (boss/floor/room sanity checks) with varied filler.
+        pool = [self.create_item(n) for n in dt.vanilla_items(enabled)]
+        for _ in range(n_locations - len(pool)):
+            pool.append(self.create_item(self.get_filler_item_name()))
 
         self.multiworld.itempool += pool
 
@@ -111,7 +101,7 @@ class YsOriginWorld(World):
             regions[name] = region
             self.multiworld.regions.append(region)
 
-        for region_name, loc_names in locations_by_region.items():
+        for region_name, loc_names in self._active_locations().items():
             region = regions[region_name]
             for loc_name in loc_names:
                 region.locations.append(
@@ -131,17 +121,19 @@ class YsOriginWorld(World):
         set_completion_condition(self)
 
     def fill_slot_data(self) -> dict[str, Any]:
-        # The client turns a detected box-flag flip into a LocationCheck:
-        #   location_signals    : location name -> AP location id
-        #   location_box_flags  : location name -> g_flags box-flag index (hex str)
-        # so the client can build its detection map from slot data rather than a
-        # hand-maintained registry.
+        # The client builds its detection map from slot data:
+        #   location_signals : active location name -> AP location id
+        #   location_detect  : active location name -> {method, flag/item/scene}
+        # method is "box_flag" / "item_flag" (detectable live today) or
+        # "scene"/"scene_floor" (needs a current-scene memory offset — pending).
+        active = {n for names in self._active_locations().values() for n in names}
         return {
             "character": int(self.options.character.value),
             "goal": int(self.options.goal.value),
-            "location_signals": dict(self.location_name_to_id),
-            "location_box_flags": {
-                name: flag for name, flag in location_box_flag.items()
-                if flag is not None
+            "location_signals": {
+                n: i for n, i in self.location_name_to_id.items() if n in active
+            },
+            "location_detect": {
+                n: LOC_META[n]["detect"] for n in active
             },
         }
