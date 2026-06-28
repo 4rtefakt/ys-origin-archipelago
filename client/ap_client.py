@@ -32,11 +32,23 @@ from .game_state import (
 )
 from .memory import ProcessMemory, MemoryError_
 from .offsets import MODULE_NAME, OffsetNotMapped
+from .suppression import Suppressor
 
 log = logging.getLogger("ys_origin.client")
 
 GAME_NAME = "Ys Origin"
 ITEMS_HANDLING = 0b111  # full remote items (receive own + others' items)
+
+
+def _suppress_enabled() -> bool:
+    """Whether vanilla item grants are replaced (default) or left additive.
+
+    Set ``YSO_SUPPRESS=0`` (or false/no/off) to keep the old additive loop —
+    useful for debugging detection without the revert path interfering.
+    """
+    import os
+    val = os.environ.get("YSO_SUPPRESS", "1").strip().lower()
+    return val not in ("0", "false", "no", "off")
 
 
 # --------------------------------------------------------------------------- #
@@ -88,6 +100,9 @@ def build_context_class():
             self.prev_state: Optional[GameState] = None
             self.checked_signals: set[str] = set()
             self.applied_item_index: int = 0  # how many received items processed
+            # Replaces vanilla chest contents with the AP item (content
+            # replacement). Disable via YSO_SUPPRESS=0 for an additive loop.
+            self.suppressor = Suppressor(enabled=_suppress_enabled())
             # signal-string -> AP location id; filled from slot data / datapackage
             self.location_signal_to_id: Dict[str, int] = {}
 
@@ -123,7 +138,8 @@ def build_context_class():
                 item_name = self.item_names.lookup_in_game(net_item.item) \
                     if hasattr(self, "item_names") else str(net_item.item)
                 try:
-                    did = apply_item(self.mem, item_name)
+                    did = apply_item(self.mem, item_name,
+                                     suppressor=self.suppressor)
                     log.info("applied item #%d %r (write=%s)",
                              self.applied_item_index, item_name, did)
                 except OffsetNotMapped as e:
@@ -145,6 +161,15 @@ def build_context_class():
                 log.info("attached to %s pid=%d base=0x%X",
                          MODULE_NAME, self.mem.pid, self.mem.base_address)
                 self.prev_state = None
+                # Re-prime suppression from the freshly-loaded save: everything
+                # already present is the legitimate floor, not a vanilla grant.
+                self.suppressor.reset()
+                try:
+                    snapshot = poll(self.mem)
+                    if snapshot.valid:
+                        self.suppressor.prime(snapshot)
+                except MemoryError_:
+                    pass  # game_watcher will prime on the first good poll
                 return True
             except MemoryError_:
                 self.mem = None
@@ -184,11 +209,18 @@ async def game_watcher(ctx) -> None:
             continue
         if not state.valid:
             continue
+        if not ctx.suppressor.primed:
+            ctx.suppressor.prime(state)  # fallback if attach-time prime failed
         if ctx.prev_state is not None:
+            # Detect FIRST: location/event flags are our check signals and must
+            # fire before the item-array gets reverted.
             for signal in detect_checks(ctx.prev_state, state):
                 if signal not in ctx.checked_signals:
                     ctx.checked_signals.add(signal)
                     await ctx.send_location_signal(signal)
+        # Then neutralize any vanilla item grant (mutates state.items so prev_state
+        # stays consistent). No-op when suppression is disabled.
+        ctx.suppressor.suppress(ctx.mem, state)
         ctx.prev_state = state
         # Re-apply received items in case we just (re)attached after a restart.
         await ctx._apply_received_items()

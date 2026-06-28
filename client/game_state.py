@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:  # avoid an import cycle (suppression imports this module)
+    from .suppression import Suppressor
 
 from .memory import ProcessMemory, MemoryError_
 from .offsets import (
@@ -261,20 +264,29 @@ def _grant_item(memory: ProcessMemory, name: str, count: int = 1) -> None:
 
 
 def apply_item(memory: ProcessMemory, item_name: str,
-               offsets: Offsets = OFFSETS) -> bool:
+               offsets: Offsets = OFFSETS,
+               suppressor: "Optional[Suppressor]" = None) -> bool:
     """Apply the effect of a received AP item to the running game.
 
     Returns ``True`` if a write was performed. Raises :class:`OffsetNotMapped`
     if the item maps to an offset that has not been reverse-engineered yet —
     callers should surface this rather than silently dropping the item.
     Returns ``False`` for items that have no in-memory effect (pure filler).
+
+    When ``suppressor`` is supplied and enabled, item-array grants go through it
+    so the grant raises the suppression baseline (and is therefore never mistaken
+    for a vanilla pickup to revert). Without it, the legacy additive grant is
+    used — convenient for tests and for running the loop without replacement.
     """
     name = item_name.strip()
 
     # Confirmed item/skill array entries (key items, granted skills, consumables)
     # — granted by writing the array directly. Checked first so mapped items win.
     if name in ITEM_OFFSETS:
-        _grant_item(memory, name)
+        if suppressor is not None and suppressor.enabled:
+            suppressor.grant(memory, name)
+        else:
+            _grant_item(memory, name)
         return True
 
     # Simple unlock flags.

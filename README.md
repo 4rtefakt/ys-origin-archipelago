@@ -23,10 +23,15 @@ memory access via the Win32 API.
 > (`+0x36BDxx`, bidirectional), SP/level, equipment reads. 5 Hugo locations + 4
 > items/skills mapped and wired in.
 >
-> **Next:** *content replacement* — currently the loop is additive (you get the
-> vanilla item **and** the AP item). True randomization needs to neutralize each
-> randomized location's vanilla contents so the AP item *replaces* it. Plus
-> mapping the rest of the route and generalizing to Yunica/Toal.
+> **Content replacement implemented.** The loop is no longer additive: the
+> client now neutralizes the vanilla item a chest grants so the AP item
+> *replaces* it (see [Content replacement](#content-replacement) below). Set
+> `YSO_SUPPRESS=0` to fall back to the old additive behaviour.
+>
+> **Next:** map the rest of the Hugo route, then generalize to Yunica/Toal. The
+> one open suppression gap is skill slots (e.g. Protective Bubble): they are left
+> cosmetic because safely reverting one needs the equipped-skill slot, which is
+> not yet mapped.
 
 ## Architecture
 
@@ -206,7 +211,29 @@ $env:AP_ROOT = "C:\path\to\Archipelago"
 
 Then trigger a mapped location in-game (open a chest / step on a plate). The
 server logs `Hugo sent <item> ... (<location>)` and the client writes that item
-into your game. (Note: currently **additive** — see Status; replacement is next.)
+into your game, while the vanilla item the chest would have given is suppressed
+(see [Content replacement](#content-replacement)).
+
+### Content replacement
+
+The chest's location/event flag still flips (that is our check signal and plays
+the normal cutscene/door), but the vanilla **item** it grants is reverted so the
+AP item replaces it rather than stacking on top. There is no static per-chest
+contents table to patch and we do no code injection, so this happens after the
+fact at the unified `g_flags[]` item-array level (`client/suppression.py`):
+
+- The client tracks a per-slot **baseline** = the value each item slot should
+  have given only AP grants (primed from the save on attach). Every poll, a slot
+  above its baseline is a vanilla grant and gets rewritten back down; a slot
+  below it is legitimate consumption and lowers the baseline. AP grants raise the
+  baseline (and write that value), so they are never mistaken for vanilla ones.
+- You may see the vanilla item for up to one poll (~500 ms) before it vanishes.
+- **Skill slots are left alone.** Lowering a skill entry (e.g. Protective Bubble)
+  is unsafe — the game freezes if it later casts a skill whose entry is `-1`, and
+  the equipped-skill slot needed to safely unequip it is not yet mapped. The key
+  *item* that grants a skill (the Cerulean Flabellum) is a normal key item and is
+  still reverted; only the granted skill slot stays (cosmetic).
+- Set `YSO_SUPPRESS=0` to disable suppression and keep the additive loop.
 
 > Setup gotchas: Archipelago's `Generate.py` needs `pkg_resources`
 > (`pip install "setuptools<81"`). To avoid pulling every bundled world's

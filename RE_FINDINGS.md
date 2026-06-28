@@ -27,10 +27,24 @@ Each entry is an `int32`: `-1` = never obtained, `>= 1` = obtained / count.
 **Items, key items, AND the skills key-items grant all live in this one array.**
 
 - **Granting works** (write the entry to ≥1). Verified: set Panacea to 9 → showed ×9.
-- **NEVER write below 1.** Clearing a key-item/skill entry to `-1` mid-session
-  leaves a dangling skill-object pointer and **freezes the game** (verified;
-  restoring to 1 recovered it). `apply_item` enforces a hard floor (`GRANT_SAFE_MIN`).
 - Consumable *counts* may be written to any positive value.
+- **Safety (refined by live testing):** the `-1` write *itself* is safe for items,
+  key-items, **and** skills — the entry cleanly disappears, no freeze. The game
+  only freezes when it later **casts a skill** whose entry is `-1` (dangling
+  runtime-object deref; verified — restoring to 1 recovered it). So:
+  - `apply_item` only ever grants (≥1), enforcing a hard floor (`GRANT_SAFE_MIN`).
+  - **Suppression** (`client/suppression.py`) may revert anything *except* the
+    skill slots in `SKILL_ITEMS` (Protective Bubble), which are left cosmetic to
+    avoid the cast-freeze until the equipped-skill slot is mapped (so we could
+    unequip before reverting). The Flabellum key item is reverted normally.
+
+**Content replacement (suppression).** A chest grants its item via the event-
+script VM (opcode `0x64` = `g_flags[idx] = value`, id/value baked into per-map
+heap bytecode) — there is **no static contents table to patch**, and we do no
+code injection. So the vanilla grant is neutralized *after the fact* at this
+array: the client keeps a per-slot **baseline** (the value a slot should have
+from AP grants alone) and on each poll reverts any slot that climbed above it,
+while AP grants raise the baseline. See README "Content replacement".
 
 Confirmed entries:
 
