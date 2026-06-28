@@ -123,11 +123,65 @@ client, which only reads them. The writable equip *master* was not hunted.
    to the `ITEM_OFFSETS` / `LOCATION_FLAG_OFFSETS` registries in `offsets.py`.
 
 > Key structural fact (from Ghidra): individual array entries have **no direct
-> code xrefs** — they're set/read via a generic indexed get/set function. That's
-> why byte-pattern scanning and xref hunting can't pin them, and why
-> **snapshot-diff (observing the data change) is the reliable method.** Mapping
-> a flag *index → location name* fundamentally requires play-through correlation;
-> no static tool provides it.
+> code xrefs** — they're set/read via a generic indexed get/set function (the
+> event-script VM, below). That's why byte-pattern scanning and xref hunting
+> can't pin them via the exe. Two complementary discovery methods now exist:
+> **(a)** snapshot-diff / the live `g_flags` logger (observe the data change in a
+> running game — gives human location *names*); **(b)** the **offline script
+> pipeline** (below) — disassemble the event scripts to recover every chest's
+> *index → granted item/value* without playing. Use (b) for the complete map,
+> (a) to attach human names to indices.
+
+## Offline script pipeline (archive → bytecode → grant map)
+
+The big win: the chest/event logic is compiled **event-script bytecode**, and it
+can be extracted and disassembled offline. Both tools live in `tools/`.
+
+**1. Archives.** `release/data.ni` + `data.na` (and `data_us.*`) are Falcom's
+**NNI** format. `tools/ni_unpack.py` cracks it:
+- `.ni` header (16 B): `"NNI\0"`, uint32 `n_entries`, uint32 `names_size`,
+  uint32 `flags` (bit0 = incremental link, unsupported). Then an encrypted TOC
+  (`n_entries`×16 B: `hash, size, pos, namepos`) and an encrypted CP932 names
+  blob. **Each section is encrypted independently** (cipher key resets):
+  `k=0x7C53F961; per byte: k=(k*0x3D09)&0xFFFFFFFF; plain=(enc-(k>>16))&0xFF`.
+- `.na` holds the files at `pos`; names ending `.z` are zlib with an 8-byte
+  prefix (CRC32, uncompressed size) then the stream. 15945 files; **2225 are
+  `.XSO`** event scripts (`tools/ni_unpack.py <data.ni> --stats|--list|--extract`).
+
+**2. Event-script VM** (`FUN_004472e0` @0x4472e0). Scripts are `XSR\0` files:
+0x24-byte header (`+0x1C` = code length in **words**), then a code stream of
+32-bit words, then a label table. `class = word>>24`:
+
+| class | meaning | len (words) |
+|---|---|---|
+| 0 | nop | 1 |
+| 1 | end / return | 1 |
+| 2 | **function** (sub-op = `(w>>12)&0xfff`) | `1+((w>>8)&0xf)+(w&0xff)` |
+| 3, 0xb | jump | 2 |
+| 4 | reg op (imm) | 2 |
+| 5–0xa | conditional jump (on accumulator `obj[0x2f]`) | 2 |
+| 0xc,0xd | reg = 0 | 1 |
+| 0xe–0x13 | reg `<op>=` imm | 2 |
+
+Class-2 length is computed *before* the sub-switch, so it's uniform regardless of
+sub-op. Operands are int32 immediates starting at `+1+((w>>8)&0xf)`. Index
+`< 0x200` ⇒ `g_flags[idx]`; `>= 0x200` ⇒ script-local var `obj[idx-0x1c5]`.
+
+**3. The grant.** Class-2 **sub-op 100 (0x64): `g_flags[op0] = op1`** (set index
+to immediate) — this is how a chest grants its item and sets its box-open flag.
+Related stores: `0x65` copy, `0x66` store-accumulator, `0x67`/`0x69`/`0x6B`
+add/sub/mul, `0x77` zero. `tools/xso_dis.py <file>` disassembles one;
+`tools/xso_dis.py <dir> --grants out.csv` dumps every store under a tree.
+
+**Validated** against the live slice (`MAP/S_10/S_1001/S_BOX01.XSO` sets idx
+`0x59` Panacea; `S_1003` sets `0x57` Roda; `S_1014` sets `0x6F` Blue Moon Crest
++ flag `0xF8`). Run produced **14992 grants from 4450 scripts, 0 unreadable**.
+Scene→zone: `S_00` entrance/prologue, `S_10` Wailing Blue, `S_20` Flooded
+Prison, `S_30` Flames of Guilt, `S_40` Silent Sands, `S_50` Corrupted Blood,
+`S_60` Demonic Core, `S_91` Rado's Annex. Per chest, the script sets *both* its
+box-open flag (high index, the location signal) and its item index (low index,
+the grant) — pairing them gives the apworld's location↔vanilla-item table.
+Low indices `0x1E`–`0x4E` (stepping by 6) are likely per-character equipment.
 
 ## Ghidra (set up for future deep dives)
 
@@ -137,5 +191,7 @@ client, which only reads them. The writable equip *master* was not hunted.
   `analyzeHeadless D:\ghidra-work YsOproj -process yso_win.exe -noanalysis -postScript X.java -scriptPath D:\ghidra-work`
   (set `JAVA_HOME` to the JDK).
 - **Ghidra 12 dropped Jython** — use **Java** GhidraScripts (`.java`), not `.py`.
-- The game's text/data archive (`release/data_us.na`) is **encrypted**; item
-  names load into `.data` at runtime (not in the on-disk exe).
+- The game's archives (`release/data*.ni`/`.na`) are encrypted+zlib but now
+  **fully unpackable** offline — see "Offline script pipeline" above
+  (`tools/ni_unpack.py`). Item *names* still load into `.data` at runtime, but
+  the chest/event *logic* is in the extractable `.XSO` scripts.
