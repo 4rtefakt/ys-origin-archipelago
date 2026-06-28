@@ -29,3 +29,7 @@ Thumbs.db
 
 # room-mapping scene transition log (regenerate locally)
 scenelog.jsonl
+
+# third-party reference material (copyrighted) — local only, never published
+fanmade_maps/
+Ys-Origin-Guide.md
