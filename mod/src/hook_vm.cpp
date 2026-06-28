@@ -19,6 +19,7 @@
 // No ASLR (image base 0x400000) so the absolute address is valid at runtime.
 #include <windows.h>
 #include <cstdio>
+#include <cstring>
 #include "MinHook.h"
 
 void mod_log(const char* fmt, ...);
@@ -107,12 +108,78 @@ __declspec(naked) static void Hook_Grant() {
 static const uintptr_t kGiveItemFn = 0x00573210;
 static void* g_orig_give = nullptr;
 
+// 0x573210 (called from the give-item op 0x116) is the floating give EFFECT, not
+// the "Acquired" box (suppressing it leaves the box untouched). We keep it
+// suppressed for randomized items so the vanilla floating effect doesn't play.
 static int __cdecl popup_decide(int arg1, int arg2, int arg3) {
-    // The item id is arg1 (confirmed live: a1=0x59 == Panacea).
-    int id = arg1;
+    int id = arg1;  // confirmed live: a1=0x59 == Panacea
     int supp = (id >= 0 && id < 0x200 && g_supp_item[id]) ? 1 : 0;
-    mod_log("popup give: id=0x%X suppress=%d", id, supp);
     return supp;
+}
+
+// --- relabel the native "Acquired <item> x<n>" box (VM sub-op 0xD5) --------- #
+//
+// The chest script does, in order: give-item op 0x116 (-> 0x573210, suppressed),
+// then sets its location CHECK flag (0x64 g_flags[0x12E]=1), THEN the 0xD5 op
+// which calls the box fn 0x574410(arg1, arg2=item id, arg3=name string). The box
+// content fn 0x5781f0 byte-copies arg3 as the displayed NAME and uses arg2 to
+// index the item-ART table. Because the check fires *before* the box, by box time
+// the AP client knows the actually-placed item; it stashes the art id + name via
+// set_pending_box(), and we overwrite arg2 (art) and arg3 (name string) so the
+// box shows the REAL item. This works for foreign items too: pass the foreign
+// name + a generic art id (no fake item-data needed).
+static const uintptr_t kBoxFn = 0x00574410;
+static void* g_orig_box = nullptr;
+static volatile int g_box_art_id = -1;          // art id to show (-1 = keep)
+static volatile unsigned long g_box_tick = 0;
+static char g_box_name[128] = {0};
+static volatile int g_box_name_set = 0;
+// resolved each call by box_decide(), consumed by the naked stub:
+static volatile int g_apply_art = -1;
+static volatile uintptr_t g_apply_name = 0;
+
+extern "C" void set_pending_box(int art_id, const char* name) {
+    g_box_art_id = art_id;
+    if (name && name[0]) {
+        strncpy(g_box_name, name, sizeof(g_box_name) - 1);
+        g_box_name[sizeof(g_box_name) - 1] = 0;
+        g_box_name_set = 1;
+    } else {
+        g_box_name_set = 0;
+    }
+    g_box_tick = GetTickCount();
+}
+
+static void __cdecl box_decide() {
+    g_apply_art = -1;
+    g_apply_name = 0;
+    if ((GetTickCount() - g_box_tick) >= 1500) return;  // stale -> leave vanilla
+    g_apply_art = g_box_art_id;
+    if (g_box_name_set) g_apply_name = (uintptr_t)g_box_name;
+    mod_log("box: art=%d name='%s'", g_apply_art,
+            g_box_name_set ? g_box_name : "(keep)");
+}
+
+// Entry: [esp]=ret, [esp+4]=arg1, [esp+8]=arg2 (item id/art), [esp+0xc]=arg3 (name).
+__declspec(naked) static void Hook_Box() {
+    __asm {
+        pushad
+        pushfd
+        call box_decide
+        popfd
+        popad
+        mov  eax, g_apply_art
+        cmp  eax, 0
+        jl   skip_art
+        mov  dword ptr [esp + 8], eax    // overwrite arg2 (art id)
+    skip_art:
+        mov  eax, g_apply_name
+        test eax, eax
+        jz   skip_name
+        mov  dword ptr [esp + 0xc], eax  // overwrite arg3 (name string ptr)
+    skip_name:
+        jmp  dword ptr [g_orig_box]
+    }
 }
 
 // Function-entry hook. Entry stack: [esp]=ret, [+4]=arg1, [+8]=arg2, [+0xc]=arg3;
@@ -165,9 +232,18 @@ static int __cdecl skill_supp_active() {
 
 // ctx = VM script context (edi in the loop). End the script + restore the event
 // state flag the (now-skipped) tail would have set, so no cutscene lock lingers.
+// Standard box position (from the event's own 0xD5 ops: 512.0, 121.5).
+static float g_altar_box_pos[2] = {512.0f, 121.5f};
+
 static void __cdecl abort_skill_event(void* ctx) {
     *(volatile unsigned long*)((unsigned char*)ctx + 0x1e4) = 0x7FFFFFFFul;
     *(volatile int*)(kGFlagsBase + 0xB9 * 4) = 1;  // event-state: mark finished
+    // NOTE: manually triggering the native box here (0x574410 with this ctx) gets
+    // STUCK — the box's dismiss is driven by the script's following dialog ops
+    // (0xF2/0xF3), which the abort skips, so it never closes. The altar item
+    // still arrives via AP + shows on the overlay. A proper in-event box needs a
+    // different abort point (after the event's own Flabellum box) — TODO.
+    (void)g_altar_box_pos;
     mod_log("skill event: aborted (PC->end), check already fired");
 }
 
@@ -205,6 +281,8 @@ void hook_vm_install() {
     MH_STATUS eg = MH_EnableHook((void*)kGiveItemFn);
     MH_STATUS cs = MH_CreateHook((void*)kEquip12C, (void*)&Hook_Equip12C, &g_orig_12c);
     MH_STATUS es = MH_EnableHook((void*)kEquip12C);
-    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d",
+    MH_CreateHook((void*)kBoxFn, (void*)&Hook_Box, &g_orig_box);
+    MH_EnableHook((void*)kBoxFn);
+    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d (+box)",
             (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es);
 }

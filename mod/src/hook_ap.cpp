@@ -33,6 +33,7 @@
 #include <vector>
 
 void mod_log(const char* fmt, ...);
+extern "C" void set_pending_box(int art_id, const char* name);  // relabel box (hook_vm.cpp)
 namespace overlay {
 void push_item(const std::string& text);
 void set_status(const std::string& text);
@@ -107,6 +108,14 @@ static int g_applied_through = -1;
 // a chest is opened we can show the real item + owning world (incl. other games).
 static std::mutex g_scout_mtx;
 static std::map<int64_t, std::string> g_loc_found;
+// AP location id -> local Ys Origin item id (g_flags index) of what's placed
+// there, for the native box's ART; -1 if foreign (use a generic art). And the
+// item's display NAME for the box text. Populated from LocationScouts.
+static std::map<int64_t, int> g_loc_local_id;
+static std::map<int64_t, std::string> g_loc_item_name;
+// Generic art id for foreign items (a real Ys item id used as a placeholder
+// icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
+static const int kForeignArtId = 0x57;
 
 // Grant an item in g_flags (give semantics: -1 -> 1, else +count). Atomic int32.
 static void ap_give(int idx, int count) {
@@ -129,13 +138,23 @@ void ap_on_check(int flag_idx) {
         std::lock_guard<std::mutex> lk(g_check_mtx);
         g_checks.push_back(loc);
     }
-    std::string found;
+    std::string found, name;
+    int local_id = -1;
     {
         std::lock_guard<std::mutex> lk(g_scout_mtx);
         auto it = g_loc_found.find(loc);
         if (it != g_loc_found.end()) found = it->second;
+        auto il = g_loc_local_id.find(loc);
+        if (il != g_loc_local_id.end()) local_id = il->second;
+        auto in = g_loc_item_name.find(loc);
+        if (in != g_loc_item_name.end()) name = in->second;
     }
     if (!found.empty()) overlay::push_item("Found: " + found);
+    // Stash the actually-placed item so the native "Acquired <item>" box (the
+    // 0xD5 op, which runs just after this check flag) shows the REAL item: its
+    // art (local id, or a generic icon for foreign) and its name text.
+    int art = (local_id >= 0) ? local_id : kForeignArtId;
+    set_pending_box(art, name.c_str());
 }
 
 // Reply to LocationScouts: learn the item + recipient at each of our locations.
@@ -147,6 +166,16 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
         std::string who = g_ap->get_player_alias(it.player);
         g_loc_found[it.location] =
             (who == g_slot) ? (item + "  (yours)") : (item + "  -> " + who);
+        // Local Ys Origin item -> remember its g_flags index for the native
+        // box art; foreign (other game) -> -1 (use the generic art). Always keep
+        // the display name for the box text.
+        int lid = -1;
+        if (game == AP_GAME) {
+            auto f = g_name_to_idx.find(item);
+            if (f != g_name_to_idx.end()) lid = f->second;
+        }
+        g_loc_local_id[it.location] = lid;
+        g_loc_item_name[it.location] = item;
     }
     mod_log("ap: scouted %d location(s)", (int)items.size());
 }
