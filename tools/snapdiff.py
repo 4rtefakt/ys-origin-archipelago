@@ -207,6 +207,29 @@ class SnapDiff:
         if len(self.cands) > 80:
             print(f"    ... and {len(self.cands) - 80} more")
 
+    def gdiff(self, a: str, b: str) -> None:
+        """Diff ONLY the g_flags array (item/flag state) between two snapshots.
+
+        g_flags is the unified item/event array (base +0x36B91C, 512 int32). This
+        is the cleanest mapping view: it ignores all cutscene/combat/render noise
+        elsewhere and prints exactly which flags/items changed, with their index
+        (index = (off - 0x36B91C) / 4). Ideal for pinning a location/item after a
+        single in-game action.
+        """
+        if a not in self.snaps or b not in self.snaps:
+            print("  unknown snapshot name; see `snaps`"); return
+        gbase = self.mem.base_address + 0x36B91C
+        sa, sb = self.snaps[a], self.snaps[b]
+        changes = 0
+        for i in range(512):
+            addr = gbase + i * 4
+            va, vb = sa.value_at(addr), sb.value_at(addr)
+            if va is None or vb is None or va == vb:
+                continue
+            changes += 1
+            print(f"    idx {i:3d} (0x{i:X})  {self._fmt_addr(addr):26s} {va} -> {vb}")
+        print(f"  ({changes} g_flags entries changed)")
+
     # -- persistence & write test ------------------------------------------ #
 
     def save(self, field: str, idx: int = 0) -> None:
@@ -243,6 +266,8 @@ commands:
   snaps                  list captured snapshots
   diff <a> <b> [mode]    candidates where a->b matches mode
                          (modes: changed unchanged inc dec; default changed)
+  gdiff <a> <b>          diff ONLY g_flags (item/event array) — cleanest mapping
+                         view, ignores cutscene/combat noise; shows index
   narrow [mode]          re-read live, keep candidates matching mode vs last seen
   list                   show current candidates (int + float)
   xref <a> <b>           show each candidate's value in a / b / live
@@ -280,6 +305,8 @@ def repl(mem: ProcessMemory) -> None:
                 print("  " + (", ".join(sd.snaps) or "(none)"))
             elif cmd == "diff" and len(rest) >= 2:
                 sd.diff(rest[0], rest[1], rest[2] if len(rest) > 2 else "changed")
+            elif cmd == "gdiff" and len(rest) >= 2:
+                sd.gdiff(rest[0], rest[1])
             elif cmd == "narrow":
                 sd.narrow(rest[0] if rest else "changed")
             elif cmd == "list":

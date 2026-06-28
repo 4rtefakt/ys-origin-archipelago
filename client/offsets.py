@@ -208,6 +208,7 @@ LOCATION_FLAG_OFFSETS: dict[str, int] = {
     "Chest 2 - Roda Fruit (4F)": 0x36BDE8,
     "Pressure Plate 2 - Door East (4F)": 0x36BDF0,
     "Chest 3 - Blue Moon Crest": 0x36BCFC,
+    "Blue Moon Altar (Door)": 0x36C004,   # g_flags idx 0x1BA; consumes Blue Moon Crest
 }
 
 # Entries that spawn a live runtime object — clearing them (value < 1) FREEZES
