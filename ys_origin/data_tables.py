@@ -141,9 +141,20 @@ for _sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
     _key = (SCENE_ZONE.get(_sc, ""), SCENE_FLOOR.get(_sc, ""))
     _floor_rep.setdefault(_key, _sc)
 
-# Authored per-scene room logic. A scene present here is "authored": it gets
-# only its listed incoming edges (default zone edge suppressed).
-_room_logic: dict = json.loads(_ROOM_LOGIC_PATH.read_text("utf-8")).get("scenes", {})
+# Authored room logic. `scenes`: a scene present here is "authored" — it gets
+# only its listed incoming edges (default zone edge suppressed). `locations`: a
+# per-location region OVERRIDE (location name -> scene id or zone name) for
+# locations physically reached from a different room than their script scene
+# (e.g. an elevated chest entered from above, or a boss drop mis-scened to a
+# chest's room).
+_room_logic_doc: dict = json.loads(_ROOM_LOGIC_PATH.read_text("utf-8"))
+_room_logic: dict = _room_logic_doc.get("scenes", {})
+_loc_region_override: Dict[str, str] = _room_logic_doc.get("locations", {})
+# zone -> the authored scene you physically EXIT through to the next zone. For an
+# authored zone we route the next zone's entry from this room (so the next zone
+# is only reachable after the full intra-zone traversal), instead of the coarse
+# zone->zone "highway" that would let AP bypass the room gates.
+_zone_exits: Dict[str, str] = _room_logic_doc.get("zone_exits", {})
 
 
 def _src_region(src: str) -> str:
@@ -164,13 +175,17 @@ def _add_edge(src: str, dst: str, req: Optional[list] = None) -> None:
         EDGE_REQS[(src, dst)] = req
 
 
-# Zone backbone (Menu -> z0 -> z1 -> ...). Boss-medallion gates on the zone->zone
-# entrances are applied in rules.py via active_gates() (which also checks the
-# medallion is actually in the pool); EDGE_REQS carries only room-logic reqs.
+# Zone backbone (Menu -> z0 -> z1 -> ...). For an AUTHORED zone (one with a
+# zone_exit), the next zone is entered from that physical exit ROOM, so you can't
+# skip the zone's internal gates; un-authored zones use the coarse zone->zone
+# edge. Boss-medallion gates are applied in rules.py via active_gates() (and for
+# an authored zone the medallion is already required deeper in, e.g. at the boss
+# door, so the coarse gate is just a redundant backstop).
 if _present:
     _add_edge(MENU, _present[0])
     for _a, _b in zip(_present, _present[1:]):
-        _add_edge(_a, _b)
+        _exit = _zone_exits.get(_a)
+        _add_edge(scene_region(_exit) if _exit else _a, _b)
 
 # Scene edges: authored -> explicit; otherwise default from the zone region.
 for _sc in sorted(SCENE_ROOM):
@@ -183,6 +198,22 @@ for _sc in sorted(SCENE_ROOM):
     else:
         _zone = SCENE_ZONE.get(_sc)
         _add_edge(_zone if _zone in _present else MENU, _dst)
+
+
+# Every item named in a room-logic requirement MUST be treated as progression,
+# else AP may place it out of logic (as filler/useful) and soft-lock the seed.
+def _collect_gate_items() -> Set[str]:
+    out: Set[str] = set()
+    for _req in EDGE_REQS.values():
+        for _term in _req:
+            if isinstance(_term, (list, tuple)):
+                out.update(_term)
+            else:
+                out.add(_term)
+    return out
+
+
+GATE_ITEMS: Set[str] = _collect_gate_items()
 
 # Vanilla item per location (canonical = first granted item), and the item
 # universe (every item that can be created: vanilla + filler + goal).
@@ -202,7 +233,7 @@ item_name_to_id: Dict[str, int] = {
 
 
 def item_classification(name: str) -> str:
-    if name == GOAL_ITEM:
+    if name == GOAL_ITEM or name in GATE_ITEMS:
         return "progression"
     return _item_class.get(name, "filler")
 
@@ -232,7 +263,13 @@ def _region_of_location(l: dict) -> str:
     * floor checks ("Reach NF", no scene) -> the representative scene of that
       (zone, floor) so they inherit the room logic on the way up;
     * blessings / anything with no tower scene -> Menu (always reachable).
+
+    A `locations` override in room_logic.json wins over the scene-derived region
+    (for chests/drops reached from a different room than their script scene).
     """
+    override = _loc_region_override.get(l["name"])
+    if override:
+        return _src_region(override)
     scene = _scene_of(l)
     if scene and scene in SCENE_ROOM:
         return scene_region(scene)

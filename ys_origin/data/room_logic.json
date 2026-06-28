@@ -1,31 +1,54 @@
 {
   "_doc": [
-    "Per-room (per-SCENE) access logic for the Ys Origin apworld.",
+    "Per-room (per-SCENE) access logic. A scene under `scenes` is AUTHORED: it",
+    "gets EXACTLY its `from` edges and its default (zone-gated) edge is dropped.",
+    "Author zone-by-zone; every location-bearing scene in a zone must be",
+    "reachable through authored edges before that zone is considered done.",
+    "`from`: list of [source, requirement]. source = scene id (S_xxxx) or a zone",
+    "name (zone-region entry). requirement = list ANDed; a nested list = OR-group;",
+    "names match items.json. Items named here are auto-promoted to progression.",
+    "`locations`: per-location region override (location name -> scene/zone) for",
+    "chests/drops physically reached from a different room than their script",
+    "scene. See data/room_graph_notes.md for the mapping rationale.",
     "",
-    "Region identity is the SCENE id (e.g. S_1004), because scene->room and",
-    "scene->zone are clean functions while room NAMES repeat across zones",
-    "(Boss Room / Save Point / Staircase). current_scene (+0x36C100, g_flags",
-    "[0x1F9]) is what the game exposes live, so scene is also the detection key.",
-    "",
-    "A scene listed under `scenes` is AUTHORED: it gets EXACTLY the incoming",
-    "edges in its `from` list and its default (permissive, zone-gated) edge is",
-    "suppressed. A scene NOT listed stays on the default edge: reachable as soon",
-    "as its zone is (the coarse boss-medallion backstop), so un-authored zones",
-    "remain beatable. Author zone-by-zone (Wailing Blue first); every",
-    "location-bearing scene in a zone must be reachable through authored edges",
-    "before that zone is considered authored.",
-    "",
-    "`from` is a list of [source, requirement] edges. `source` is another scene",
-    "id (S_xxxx) OR a zone name (the zone-region entry, e.g. 'Wailing Blue').",
-    "`requirement` is a list treated as AND of terms; a term that is itself a",
-    "list is an OR-group. Item/skill names must match items.json (e.g. the wind",
-    "skill is 'Ventus Bracelet'). Examples:",
-    "  []                                  -> no requirement (free traversal)",
-    "  ['Ventus Bracelet']                 -> needs the wind skill",
-    "  ['Bronze Key', ['Ventus Bracelet','Dash']] -> Bronze Key AND (wind OR dash)",
-    "",
-    "Part-3 tooling (tools/scenelog.py during a vanilla run) auto-builds the",
-    "adjacency + the obtained-before-each-room inventory to seed this file."
+    "STATUS: Wailing Blue authored (full vanilla map, Hugo). Other zones still on",
+    "the coarse zone-medallion default until mapped."
   ],
-  "scenes": {}
+  "scenes": {
+    "S_1000": { "from": [["Wailing Blue", []]] },
+    "S_1001": { "from": [["S_1000", []], ["S_1080", []]] },
+    "S_1004": { "from": [["S_1001", []]] },
+    "S_1005": { "from": [["S_1004", ["Ventus Bracelet"]]] },
+    "S_1013": { "from": [["S_1005", []]] },
+    "S_1006": { "from": [["S_1005", ["Bronze Key"]]] },
+    "S_1009": { "from": [["S_1013", []]] },
+    "S_1010": { "from": [["S_1013", ["Bronze Key", "Mask of Eyes"]]] },
+    "S_1002": { "from": [["S_1009", []]] },
+    "S_1080": { "from": [["S_1009", ["Blue Moon Crest"]]] },
+    "S_1003": { "from": [["S_1002", []]] },
+    "S_1007": { "from": [["S_1003", []]] },
+    "S_1101": { "from": [["S_1007", []]] },
+    "S_1014": { "from": [["S_1101", []]] },
+    "S_1012": { "from": [["S_1006", ["Mask of Eyes"]]] },
+    "S_1008": { "from": [["S_1010", []]] },
+    "S_1015": { "from": [["S_1008", []]] },
+    "S_1100": { "from": [["S_1008", []]] },
+    "S_1102": { "from": [["S_1100", []]] },
+    "S_1011": { "from": [["S_1102", []]] },
+    "S_1099": { "from": [["S_1011", ["Beast Medallion"]]] },
+    "S_1097": { "from": [["S_1099", []]] }
+  },
+  "locations": {
+    "Wailing Blue: 2F Path 1 #2": "S_1080",
+    "Wailing Blue: 2F Path 1 #3": "S_1080"
+  },
+  "zone_exits": {
+    "Wailing Blue": "S_1097"
+  },
+  "_interim_notes": [
+    "S_1010 gate is [Bronze Key, Mask of Eyes] = the prerequisites to reach the",
+    "S_1012 Gemma Room cutscene that grants the (currently NON-randomized) Blue",
+    "Necklace. When the Blue Necklace is added to the pool (its missing event",
+    "location), change this gate to [\"Blue Necklace\"]. See room_graph_notes.md."
+  ]
 }
