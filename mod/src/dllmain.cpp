@@ -16,8 +16,7 @@ static DWORD WINAPI init_thread(LPVOID) {
     bridge_install();      // localhost socket bridge (legacy / fallback)
     ap_install();          // self-contained Archipelago client (apclientpp)
     hook_vm_install();     // event-VM grant interception (suppress/detect/give)
-    // watch_install();    // DR write-watchpoint diagnostic (used to find the
-                           //   real writer @0x567D17; re-enable if needed)
+    // watch_install();    // DR write-watchpoint diagnostic (re-enable if needed)
     return 0;
 }
 

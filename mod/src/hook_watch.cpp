@@ -18,8 +18,10 @@
 
 void mod_log(const char* fmt, ...);
 
-static const DWORD kWatch0 = 0x0076BA80;  // g_flags[0x59]  Panacea item
-static const DWORD kWatch1 = 0x0076BDD4;  // g_flags[0x12E] box-open flag
+// Hunting the skill-equip writer: the runtime skill objects (from the earlier
+// diff session) live here; the event that equips the wind skill writes them.
+static const DWORD kWatch0 = 0x0076DD78;  // skill object 1 (tag + heap ptrs)
+static const DWORD kWatch1 = 0x0076EE98;  // skill object 2
 
 static LONG CALLBACK WatchVeh(EXCEPTION_POINTERS* ep) {
     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP) {
