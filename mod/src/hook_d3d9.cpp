@@ -16,19 +16,23 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 // --- diagnostics: append-only log at %TEMP%\yso_ap_mod.log -------------------
+// The file handle is kept open: the VM grant hook is a hot path, so a
+// fopen/fclose per line would lag the game. Single-threaded callers (the VM and
+// render both run on the game's main thread), so no locking needed.
 static char g_logpath[MAX_PATH] = "";
+static FILE* g_logf = nullptr;
 void mod_log(const char* fmt, ...) {
-    if (!g_logpath[0]) {
+    if (!g_logf) {
         DWORD n = GetTempPathA(MAX_PATH, g_logpath);
         lstrcpyA(g_logpath + n, "yso_ap_mod.log");
+        g_logf = fopen(g_logpath, "a");
+        if (!g_logf) return;
     }
-    FILE* f = fopen(g_logpath, "a");
-    if (!f) return;
     va_list ap; va_start(ap, fmt);
-    vfprintf(f, fmt, ap);
+    vfprintf(g_logf, fmt, ap);
     va_end(ap);
-    fputc('\n', f);
-    fclose(f);
+    fputc('\n', g_logf);
+    fflush(g_logf);
 }
 
 namespace overlay { void draw(); }

@@ -54,6 +54,7 @@ add_library(dinput8 SHARED
     src/dllmain.cpp
     src/proxy_dinput8.cpp
     src/hook_d3d9.cpp
+    src/hook_vm.cpp
     src/overlay.cpp
     src/exports.def
     ${IMGUI_DIR}/imgui.cpp

@@ -4,11 +4,13 @@
 
 void proxy_load_real();
 void hook_d3d9_install();
+void hook_vm_install();
 void mod_log(const char* fmt, ...);
 
 static DWORD WINAPI init_thread(LPVOID) {
-    mod_log("init_thread: started, installing hook");
-    hook_d3d9_install();
+    mod_log("init_thread: started, installing hooks");
+    hook_d3d9_install();   // overlay
+    hook_vm_install();     // event-VM grant interception (detect-only)
     return 0;
 }
 
