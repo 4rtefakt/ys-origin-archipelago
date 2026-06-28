@@ -212,17 +212,19 @@ class Builder:
             })
 
     def blessings(self) -> None:
-        """SP-bought Divine Blessings: one check per purchasable GROW option,
-        detected by its blessing-array level field flipping 0->>=1. Index<->name
-        alignment is provisional (names are in-game images; the live --bless pass
-        refines them), so these stay EXCLUDED (filler-only) for now."""
-        for i in range(BLESSING_COUNT):
-            off = BLESSING_BASE + i * BLESSING_STRIDE
+        """SP-bought Divine Blessings as progressive checks. Live RE showed each
+        purchase (simple or level-up) sets one bit in the bitfield at 0x36BC80
+        (scattered bits) and the armor blessing sets array slot 0x36A684. So the
+        client counts `popcount(0x36BC80) + (armor!=0)` and fires "Purchase #N"
+        when that total reaches N — no per-blessing bit mapping needed.
+        EXCLUDED (filler-only): the exact max purchase count isn't pinned, so a
+        high-N check might never fire; filler keeps seeds beatable."""
+        for n in range(1, BLESSING_COUNT + 1):
             self.locs.append({
-                "id": f"blessing/{i}", "type": "blessing", "zone": "Blessings",
+                "id": f"blessing/{n}", "type": "blessing", "zone": "Blessings",
                 "floor": "", "room": "Goddess Statue",
-                "name": self._name(f"Divine Blessing #{i}"),
-                "detect": {"method": "flag", "offset": f"0x{off:X}"},
+                "name": self._name(f"Divine Blessing Purchase #{n}"),
+                "detect": {"method": "blessing_count", "n": n},
                 "items": [],
             })
 

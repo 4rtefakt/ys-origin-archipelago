@@ -1881,28 +1881,15 @@
   "items": []
  },
  {
-  "id": "blessing/0",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing #0",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36A634"
-  },
-  "items": []
- },
- {
   "id": "blessing/1",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #1",
+  "name": "Divine Blessing Purchase #1",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A63C"
+   "method": "blessing_count",
+   "n": 1
   },
   "items": []
  },
@@ -1912,10 +1899,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #2",
+  "name": "Divine Blessing Purchase #2",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A644"
+   "method": "blessing_count",
+   "n": 2
   },
   "items": []
  },
@@ -1925,10 +1912,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #3",
+  "name": "Divine Blessing Purchase #3",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A64C"
+   "method": "blessing_count",
+   "n": 3
   },
   "items": []
  },
@@ -1938,10 +1925,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #4",
+  "name": "Divine Blessing Purchase #4",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A654"
+   "method": "blessing_count",
+   "n": 4
   },
   "items": []
  },
@@ -1951,10 +1938,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #5",
+  "name": "Divine Blessing Purchase #5",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A65C"
+   "method": "blessing_count",
+   "n": 5
   },
   "items": []
  },
@@ -1964,10 +1951,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #6",
+  "name": "Divine Blessing Purchase #6",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A664"
+   "method": "blessing_count",
+   "n": 6
   },
   "items": []
  },
@@ -1977,10 +1964,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #7",
+  "name": "Divine Blessing Purchase #7",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A66C"
+   "method": "blessing_count",
+   "n": 7
   },
   "items": []
  },
@@ -1990,10 +1977,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #8",
+  "name": "Divine Blessing Purchase #8",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A674"
+   "method": "blessing_count",
+   "n": 8
   },
   "items": []
  },
@@ -2003,10 +1990,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #9",
+  "name": "Divine Blessing Purchase #9",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A67C"
+   "method": "blessing_count",
+   "n": 9
   },
   "items": []
  },
@@ -2016,10 +2003,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #10",
+  "name": "Divine Blessing Purchase #10",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A684"
+   "method": "blessing_count",
+   "n": 10
   },
   "items": []
  },
@@ -2029,10 +2016,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #11",
+  "name": "Divine Blessing Purchase #11",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A68C"
+   "method": "blessing_count",
+   "n": 11
   },
   "items": []
  },
@@ -2042,10 +2029,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #12",
+  "name": "Divine Blessing Purchase #12",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A694"
+   "method": "blessing_count",
+   "n": 12
   },
   "items": []
  },
@@ -2055,10 +2042,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #13",
+  "name": "Divine Blessing Purchase #13",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A69C"
+   "method": "blessing_count",
+   "n": 13
   },
   "items": []
  },
@@ -2068,10 +2055,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #14",
+  "name": "Divine Blessing Purchase #14",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6A4"
+   "method": "blessing_count",
+   "n": 14
   },
   "items": []
  },
@@ -2081,10 +2068,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #15",
+  "name": "Divine Blessing Purchase #15",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6AC"
+   "method": "blessing_count",
+   "n": 15
   },
   "items": []
  },
@@ -2094,10 +2081,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #16",
+  "name": "Divine Blessing Purchase #16",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6B4"
+   "method": "blessing_count",
+   "n": 16
   },
   "items": []
  },
@@ -2107,10 +2094,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #17",
+  "name": "Divine Blessing Purchase #17",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6BC"
+   "method": "blessing_count",
+   "n": 17
   },
   "items": []
  },
@@ -2120,10 +2107,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #18",
+  "name": "Divine Blessing Purchase #18",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6C4"
+   "method": "blessing_count",
+   "n": 18
   },
   "items": []
  },
@@ -2133,10 +2120,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #19",
+  "name": "Divine Blessing Purchase #19",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6CC"
+   "method": "blessing_count",
+   "n": 19
   },
   "items": []
  },
@@ -2146,10 +2133,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #20",
+  "name": "Divine Blessing Purchase #20",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6D4"
+   "method": "blessing_count",
+   "n": 20
   },
   "items": []
  },
@@ -2159,10 +2146,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #21",
+  "name": "Divine Blessing Purchase #21",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6DC"
+   "method": "blessing_count",
+   "n": 21
   },
   "items": []
  },
@@ -2172,10 +2159,10 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #22",
+  "name": "Divine Blessing Purchase #22",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6E4"
+   "method": "blessing_count",
+   "n": 22
   },
   "items": []
  },
@@ -2185,10 +2172,23 @@
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing #23",
+  "name": "Divine Blessing Purchase #23",
   "detect": {
-   "method": "flag",
-   "offset": "0x36A6EC"
+   "method": "blessing_count",
+   "n": 23
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/24",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing Purchase #24",
+  "detect": {
+   "method": "blessing_count",
+   "n": 24
   },
   "items": []
  },

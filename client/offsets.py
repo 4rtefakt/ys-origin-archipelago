@@ -257,6 +257,13 @@ CURRENT_FLOOR_OFFSET = 0x36BC58
 # current floor reaches it). Separate from the flag-watch model.
 FLOOR_CHECKS: dict[str, int] = {}
 
+# Divine Blessings (live RE): every purchase sets one (scattered) bit in the
+# bitfield below; the armor blessing instead sets an array slot. Total purchases
+# = popcount(bitfield) + (armor != 0). "Purchase #N" fires when total >= N.
+BLESSING_BITFIELD_OFFSET = 0x36BC80
+BLESSING_ARMOR_OFFSET = 0x36A684
+BLESSING_COUNT_CHECKS: dict[str, int] = {}   # name -> N (threshold)
+
 
 def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> None:
     """Rebuild the live detect/grant registries from AP slot_data, so the client
@@ -271,6 +278,7 @@ def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> No
     """
     LOCATION_FLAG_OFFSETS.clear()
     FLOOR_CHECKS.clear()
+    BLESSING_COUNT_CHECKS.clear()
     for name, d in (location_detect or {}).items():
         if not isinstance(d, dict):
             continue
@@ -283,6 +291,11 @@ def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> No
         elif method == "floor" and "floor" in d:
             try:
                 FLOOR_CHECKS[name] = int(d["floor"])
+            except (ValueError, TypeError):
+                pass
+        elif method == "blessing_count" and "n" in d:
+            try:
+                BLESSING_COUNT_CHECKS[name] = int(d["n"])
             except (ValueError, TypeError):
                 pass
     ITEM_OFFSETS.clear()

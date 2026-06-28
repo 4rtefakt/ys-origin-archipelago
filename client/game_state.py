@@ -25,6 +25,9 @@ if TYPE_CHECKING:  # avoid an import cycle (suppression imports this module)
 
 from .memory import ProcessMemory, MemoryError_
 from .offsets import (
+    BLESSING_ARMOR_OFFSET,
+    BLESSING_BITFIELD_OFFSET,
+    BLESSING_COUNT_CHECKS,
     CURRENT_FLOOR_OFFSET,
     FLOOR_CHECKS,
     GRANT_SAFE_MIN,
@@ -53,6 +56,7 @@ class GameState:
     valid: bool = False  # False if the process was unreadable this tick
 
     current_floor: Optional[int] = None
+    blessing_total: Optional[int] = None   # popcount(bitfield) + (armor != 0)
 
     # progression flags
     double_jump: Optional[int] = None
@@ -144,6 +148,15 @@ def poll(memory: ProcessMemory, offsets: Offsets = OFFSETS) -> GameState:
         except MemoryError_ as e:
             log.debug("read current_floor failed: %s", e)
 
+    # Blessing purchases (progressive checks): popcount(bitfield) + (armor != 0).
+    if BLESSING_COUNT_CHECKS:
+        try:
+            bits = memory.read_offset_int32(BLESSING_BITFIELD_OFFSET) & 0xFFFFFFFF
+            armor = memory.read_offset_int32(BLESSING_ARMOR_OFFSET)
+            state.blessing_total = bin(bits).count("1") + (1 if armor else 0)
+        except MemoryError_ as e:
+            log.debug("read blessing total failed: %s", e)
+
     if offsets.key_items_base is not None:
         base = offsets.key_items_base
         stride = offsets.key_items_stride
@@ -224,6 +237,13 @@ def detect_checks(prev: GameState, curr: GameState) -> List[str]:
         pf = prev.current_floor if prev.current_floor is not None else 0
         for name, fl in FLOOR_CHECKS.items():
             if curr.current_floor >= fl > pf:
+                checks.append(name)
+
+    # Blessing checks: fire "Purchase #N" when the running total first reaches N.
+    if curr.blessing_total is not None and BLESSING_COUNT_CHECKS:
+        pb = prev.blessing_total if prev.blessing_total is not None else 0
+        for name, n in BLESSING_COUNT_CHECKS.items():
+            if curr.blessing_total >= n > pb:
                 checks.append(name)
 
     # newly-obtained items/skills (entry goes from <1 to >=1).
