@@ -177,12 +177,14 @@ OFFSETS = build_offsets()
 # Item/skill array entries. Granting = write 1; consumable COUNTS may be written
 # to any positive value. Add entries here as they're mapped.
 #
-# !!! SAFETY (verified by testing): writing a value < 1 (e.g. -1 "un-obtain") is
-# SAFE for items / key-items / consumables (they cleanly disappear) but FREEZES
-# the game for SKILL entries (a skill spawns a live runtime object; clearing it
-# dangles a pointer). So ONLY entries in SKILL_ITEMS must never go below 1.
-# apply_item only ever grants (>=1), so it's safe; the freeze risk is for the
-# future suppression/revert path, which must skip SKILL_ITEMS. !!!
+# !!! SAFETY (verified by testing): the -1 WRITE itself is safe for ALL entries
+# (items, key-items, consumables, AND skills — the entry cleanly disappears, no
+# freeze). The freeze only happens when the game later CASTS a skill whose entry
+# was set to -1 (dangling runtime-object deref). So for SKILL_ITEMS, reverting is
+# only safe if you ALSO unequip the skill (clear the equipped-skill slot) so it
+# can't be cast. apply_item only grants (>=1) so it's always safe; the revert/
+# suppression path may revert anything, but for SKILL_ITEMS must unequip first
+# (or just leave them obtained/cosmetic — simplest). !!!
 # NOTE: the item array and the location-flag array are the SAME unified
 # `g_flags[]` array: base +0x36B91C, 512 int32 entries (index = (off-0x36B91C)/4).
 # Items at low indices, location/event flags at high indices. A chest grants via
