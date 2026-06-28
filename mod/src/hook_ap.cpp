@@ -33,6 +33,10 @@
 #include <vector>
 
 void mod_log(const char* fmt, ...);
+namespace overlay {
+void push_item(const std::string& text);
+void set_status(const std::string& text);
+}
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
@@ -99,6 +103,10 @@ static std::mutex g_check_mtx;
 static std::vector<int64_t> g_checks;
 // highest received-item index already granted (dedupe replays this session).
 static int g_applied_through = -1;
+// AP location id -> "what's here" display string (from LocationScouts), so when
+// a chest is opened we can show the real item + owning world (incl. other games).
+static std::mutex g_scout_mtx;
+static std::map<int64_t, std::string> g_loc_found;
 
 // Grant an item in g_flags (give semantics: -1 -> 1, else +count). Atomic int32.
 static void ap_give(int idx, int count) {
@@ -111,13 +119,36 @@ static void ap_give(int idx, int count) {
 }
 
 // Called by the VM grant hook (game main thread) when a watched location flag
-// fires. Queue its AP location id; the poll loop sends the LocationCheck.
+// fires. Queue its AP location id; the poll loop sends the LocationCheck. Also
+// show what was here (item + owning world), from the scout map.
 void ap_on_check(int flag_idx) {
     if (flag_idx < 0 || flag_idx >= 0x200) return;
     int64_t loc = g_flag_to_loc[flag_idx];
     if (loc < 0) return;
-    std::lock_guard<std::mutex> lk(g_check_mtx);
-    g_checks.push_back(loc);
+    {
+        std::lock_guard<std::mutex> lk(g_check_mtx);
+        g_checks.push_back(loc);
+    }
+    std::string found;
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto it = g_loc_found.find(loc);
+        if (it != g_loc_found.end()) found = it->second;
+    }
+    if (!found.empty()) overlay::push_item("Found: " + found);
+}
+
+// Reply to LocationScouts: learn the item + recipient at each of our locations.
+static void on_location_info(const std::list<APClient::NetworkItem>& items) {
+    std::lock_guard<std::mutex> lk(g_scout_mtx);
+    for (const auto& it : items) {
+        std::string game = g_ap->get_player_game(it.player);
+        std::string item = g_ap->get_item_name(it.item, game);
+        std::string who = g_ap->get_player_alias(it.player);
+        g_loc_found[it.location] =
+            (who == g_slot) ? (item + "  (yours)") : (item + "  -> " + who);
+    }
+    mod_log("ap: scouted %d location(s)", (int)items.size());
 }
 
 static void on_slot_connected(const nlohmann::json& sd) {
@@ -134,6 +165,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
             if (i >= 0 && i < 0x200) { g_supp_item[i] = true; supp++; }
         }
     }
+    std::list<int64_t> scout;
     if (sd.contains("location_detect")) {
         const auto& sig = sd.contains("location_signals") ? sd["location_signals"]
                                                           : nlohmann::json::object();
@@ -145,25 +177,32 @@ static void on_slot_connected(const nlohmann::json& sd) {
             int idx = (off - kGFlagsRel) / 4;
             if (idx < 0 || idx >= 0x200) continue;
             if (!sig.contains(kv.key())) continue;
+            int64_t loc = sig[kv.key()].get<int64_t>();
             g_loc_flag[idx] = true;
-            g_flag_to_loc[idx] = sig[kv.key()].get<int64_t>();
+            g_flag_to_loc[idx] = loc;
+            scout.push_back(loc);
             locs++;
         }
     }
     mod_log("ap: slot_connected — %d items, %d suppress, %d location flags",
             names, supp, locs);
+    overlay::set_status(std::string("connected as ") + g_slot);
+    if (!scout.empty()) g_ap->LocationScouts(scout, 0);  // learn what's at each
 }
 
 static void on_items_received(const std::list<APClient::NetworkItem>& items) {
     for (const auto& it : items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
+        std::string from = g_ap->get_player_alias(it.player);
         auto f = g_name_to_idx.find(name);
         if (f != g_name_to_idx.end())
             ap_give(f->second, 1);
         else
             mod_log("ap: received '%s' (id %lld) — no g_flags index, skipped",
                     name.c_str(), (long long)it.item);
+        overlay::push_item(from.empty() || from == g_slot
+                               ? name : (name + "  <- " + from));
         g_applied_through = it.index;
     }
 }
@@ -198,14 +237,21 @@ void ap_install() {
     mod_log("ap: creating client (game=%s uri=%s)", AP_GAME, g_uri);
     g_ap = new APClient("YsOrigin-Mod", AP_GAME, g_uri);
 
-    g_ap->set_socket_connected_handler([]() { mod_log("ap: socket connected"); });
-    g_ap->set_socket_disconnected_handler([]() { mod_log("ap: socket disconnected"); });
+    g_ap->set_socket_connected_handler([]() {
+        mod_log("ap: socket connected");
+        overlay::set_status("connected; authenticating...");
+    });
+    g_ap->set_socket_disconnected_handler([]() {
+        mod_log("ap: socket disconnected");
+        overlay::set_status("disconnected - retrying...");
+    });
     g_ap->set_room_info_handler([]() {
         mod_log("ap: room_info -> ConnectSlot(%s)", g_slot);
         g_ap->ConnectSlot(g_slot, g_pass, 0b111);
     });
     g_ap->set_slot_connected_handler(on_slot_connected);
     g_ap->set_items_received_handler(on_items_received);
+    g_ap->set_location_info_handler(on_location_info);
 
     g_run.store(true);
     g_thread = std::thread(poll_loop);
