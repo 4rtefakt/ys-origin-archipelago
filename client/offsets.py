@@ -100,6 +100,13 @@ class Offsets:
     # -- progress / location signals --------------------------------------- #
     current_floor: Optional[int] = UNKNOWN  # which Darm Tower floor is active
 
+    # Current loaded scene/room as its decimal leaf number (S_1001 -> 1001).
+    # Lives inside g_flags at index 0x1F9 (+0x36B91C + 0x1F9*4). Stable while
+    # standing in a room, changes on room transition. Confirmed live: S_1000 1F
+    # Save -> 1000, S_1001 2F Path 1 -> 1001, S_1004 wind altar -> 1004. Enables
+    # per-room / boss / room-sanity detection (compare to the scene number).
+    current_scene: Optional[int] = UNKNOWN
+
     # Persistent item/skill array (~+0x36BAxx): int32 per entry, -1 = never
     # obtained, >=1 = obtained/count. Items, key items, AND the skills they grant
     # all live here. Base/indexing not fully mapped yet — use ITEM_OFFSETS below

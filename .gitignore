@@ -26,3 +26,6 @@ Thumbs.db
 
 # local Archipelago install, RE scratch, etc. live OUTSIDE this repo
 # (D:\Archipelago, D:\ghidra-work) — nothing to ignore here, noted for clarity
+
+# room-mapping scene transition log (regenerate locally)
+scenelog.jsonl

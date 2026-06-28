@@ -7,6 +7,7 @@
     "current_def": "0x36A740",
     "current_exp": "0x36A748",
     "current_level": "0x36A760",
+    "current_scene": "0x36C100",
     "current_sp": "0x36A75C",
     "item_array_base": "0x36B91C",
     "location_flags_base": "0x36B91C"
