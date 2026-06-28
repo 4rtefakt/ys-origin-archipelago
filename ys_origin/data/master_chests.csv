@@ -1,0 +1,63 @@
+id,zone,floor,room,box_flag,item_ids,item_names,item_classes,script
+S_1001/S_BOX01,Wailing Blue (2-5F),2F,2F Path 1,0x12E,0x59,Celcetan Panacea,filler,MAP/S_10/S_1001/S_BOX01.XSO
+S_1001/S_BOX02,Wailing Blue (2-5F),2F,2F Path 1,0x13A,0x63,Bronze Key,progression,MAP/S_10/S_1001/S_BOX02.XSO
+S_1001/S_BOX03,Wailing Blue (2-5F),2F,2F Path 1,0x1DE,0x36 0x3C,Mask of Eyes | Cleria Ring,useful useful,MAP/S_10/S_1001/S_BOX03.XSO
+S_1003/S_BOX01,Wailing Blue (2-5F),4F,4F Forward Passage 2,0x133,0x57,Roda Fruit,filler,MAP/S_10/S_1003/S_BOX01.XSO
+S_1007/S_BOX01,Wailing Blue (2-5F),4F,4F Forward Passage 3,0x1C7,0x80,0x80,filler,MAP/S_10/S_1007/S_BOX01.XSO
+S_1010/S_BOX01,Wailing Blue (2-5F),4F,4F Path 4,0x13D,0x1E 0x24 0x2A 0x30,Leather Boots | Leather Greaves | Riveted Boots | Wooden Shield,useful useful useful useful,MAP/S_10/S_1010/S_BOX01.XSO
+S_1014/S_BOX01,Wailing Blue (2-5F),4F,4F Forward Room,?,0x6F,Blue Moon Crest,progression,MAP/S_10/S_1014/S_BOX01.XSO
+S_1015/S_BOX01,Wailing Blue (2-5F),4F,4F Lower (Medal),0x13E,0x4E,Beast Medallion,progression,MAP/S_10/S_1015/S_BOX01.XSO
+S_1080/S_BOX01,Wailing Blue (2-5F),3F,3F Midboss,0x139,0x3C 0x36,Cleria Ring | Mask of Eyes,useful useful,MAP/S_10/S_1080/S_BOX01.XSO
+S_2002/S_BOX01,Flooded Prison (6-9F),6F,6F Small Room,0x146,0x5A,Silver Bracelet,filler,MAP/S_20/S_2002/S_BOX01.XSO
+S_2003/S_BOX01,Flooded Prison (6-9F),7F,7F Path 1,0x147,0x7 0xD 0x13 0x19,Ring Mail | Ebony Robe | Black Chain | Chain Mail,useful useful useful useful,MAP/S_20/S_2003/S_BOX01.XSO
+S_2005/S_BOX01,Flooded Prison (6-9F),,Water Dragon Protect,0x14B,0x61,Water Dragon's Scales,filler,MAP/S_20/S_2005/S_BOX01.XSO
+S_2005/S_BOX02,Flooded Prison (6-9F),,Water Dragon Protect,0x14C,0x58,Cleria Ore,filler,MAP/S_20/S_2005/S_BOX02.XSO
+S_2005/S_BOX03,Flooded Prison (6-9F),,Water Dragon Protect,0x14B,0x61,Water Dragon's Scales,filler,MAP/S_20/S_2005/S_BOX03.XSO
+S_2006/S_BOX01,Flooded Prison (6-9F),,Waterfall Stopper,0x148,0x80,0x80,filler,MAP/S_20/S_2006/S_BOX01.XSO
+S_2008/S_BOX01,Flooded Prison (6-9F),8F,8F Waterway 1,0x1C6,0x4F,Arthropod Medallion,progression,MAP/S_20/S_2008/S_BOX01.XSO
+S_2010/S_BOX01,Flooded Prison (6-9F),8F,8F Waterway 2,0x152,0x59,Celcetan Panacea,filler,MAP/S_20/S_2010/S_BOX01.XSO
+S_2014/S_BOX01,Flooded Prison (6-9F),,Horiz. Scroll Passage,0x14E,0x1F 0x25 0x2B 0x31,Hard Leggings | Ebony Shoes | Black Leggings | Small Shield,useful useful useful useful,MAP/S_20/S_2014/S_BOX01.XSO
+S_2014/S_BOX02,Flooded Prison (6-9F),,Horiz. Scroll Passage,0x1D5,0x57,Roda Fruit,filler,MAP/S_20/S_2014/S_BOX02.XSO
+S_3002/S_BOX01,Flames of Guilt (10-13F),,Mark Treasure,0x159,0x5C,Red Moon Crest,progression,MAP/S_30/S_3002/S_BOX01.XSO
+S_3003/S_BOX01,Flames of Guilt (10-13F),10F,10F Path 2,0x160,0x57,Roda Fruit,filler,MAP/S_30/S_3003/S_BOX01.XSO
+S_3003/S_BOX02,Flames of Guilt (10-13F),10F,10F Path 2,0x1D6,0x7C,100G,filler,MAP/S_30/S_3003/S_BOX02.XSO
+S_3004/S_BOX01,Flames of Guilt (10-13F),11F,11F Path 1,0x15B,0x8 0xE 0x14 0x1A,Half Plate | Chain Cloak | Banded Mail | Plate Mail,useful useful useful useful,MAP/S_30/S_3004/S_BOX01.XSO
+S_3004/S_BOX02,Flames of Guilt (10-13F),11F,11F Path 1,0x164,0x81,0x81,filler,MAP/S_30/S_3004/S_BOX02.XSO
+S_3008/S_BOX01,Flames of Guilt (10-13F),,Lava Rods,0x166,0x82,0x82,filler,MAP/S_30/S_3008/S_BOX01.XSO
+S_3010/S_BOX01,Flames of Guilt (10-13F),,Jump Room,0x16F,0x20 0x26 0x2C 0x32,Leg Guards | Shell Greaves | Banded Boots | Large Shield,useful useful useful useful,MAP/S_30/S_3010/S_BOX01.XSO
+S_3010/S_BOX02,Flames of Guilt (10-13F),,Jump Room,0x170,0x3A,Spirit Cape,useful,MAP/S_30/S_3010/S_BOX02.XSO
+S_3011/S_BOX01,Flames of Guilt (10-13F),,Bridge Room 1,0x1D4,0x59,Celcetan Panacea,filler,MAP/S_30/S_3011/S_BOX01.XSO
+S_3012/S_BOX01,Flames of Guilt (10-13F),,Bridge Room 2,0x175,0x50,Construct Medallion,progression,MAP/S_30/S_3012/S_BOX01.XSO
+S_3102/S_BOX01,,,Silver Ore,0x16E,0x58,Cleria Ore,filler,MAP/S_31/S_3102/S_BOX01.XSO
+S_4001/S_BOX01,Silent Sands (14-17F),14F,14F Room,0x183,0x59,Celcetan Panacea,filler,MAP/S_40/S_4001/S_BOX01.XSO
+S_4002/S_BOX01,Silent Sands (14-17F),,Double Jump,0x181,0x5B,Gold Bracelet,filler,MAP/S_40/S_4002/S_BOX01.XSO
+S_4002/S_BOX02,Silent Sands (14-17F),,Double Jump,0x182,0x82,0x82,filler,MAP/S_40/S_4002/S_BOX02.XSO
+S_4003/S_BOX01,Silent Sands (14-17F),,Mask of Eyes Path,0x17A,0x5E,Evil Ring,filler,MAP/S_40/S_4003/S_BOX01.XSO
+S_4003/S_BOX02,Silent Sands (14-17F),,Mask of Eyes Path,0x17D,0x57,Roda Fruit,filler,MAP/S_40/S_4003/S_BOX02.XSO
+S_4003/S_BOX03,Silent Sands (14-17F),,Mask of Eyes Path,0x17B,0x64,Marble Key,progression,MAP/S_40/S_4003/S_BOX03.XSO
+S_4003/S_BOX04,Silent Sands (14-17F),,Mask of Eyes Path,0x17C,0x7C,100G,filler,MAP/S_40/S_4003/S_BOX04.XSO
+S_4006/S_BOX01,Silent Sands (14-17F),,Slippery Fork Path,0x18C,0x9 0xF 0x15 0x1B,Reflex | Elder Robe | Gothic Suit | Banded Mail,useful useful useful useful,MAP/S_40/S_4006/S_BOX01.XSO
+S_4006/S_BOX02,Silent Sands (14-17F),,Slippery Fork Path,0x190,0x80,0x80,filler,MAP/S_40/S_4006/S_BOX02.XSO
+S_4006/S_BOX03,Silent Sands (14-17F),,Slippery Fork Path,0x191,0x58,Cleria Ore,filler,MAP/S_40/S_4006/S_BOX03.XSO
+S_4010/S_BOX01,Silent Sands (14-17F),,Boss Room Key,0x18F,0x51,Creeper Medallion,progression,MAP/S_40/S_4010/S_BOX01.XSO
+S_4012/S_BOX01,Silent Sands (14-17F),,Non-Slip Boots,0x192,0x39,Earth Dragon's Claws,useful,MAP/S_40/S_4012/S_BOX01.XSO
+S_4015/S_BOX01,Silent Sands (14-17F),15F,15F Room,0x187,0x7C,100G,filler,MAP/S_40/S_4015/S_BOX01.XSO
+S_4015/S_BOX02,Silent Sands (14-17F),15F,15F Room,0x188,0x59,Celcetan Panacea,filler,MAP/S_40/S_4015/S_BOX02.XSO
+S_4017/S_BOX01,Silent Sands (14-17F),,Rado Inside 4 (Feena),0x18B,0x65,Amber Key,progression,MAP/S_40/S_4017/S_BOX01.XSO
+S_5002/S_BOX01,Corrupted Blood (18-21F),,Toal's Room,0x1BF,0x7D,500G,filler,MAP/S_50/S_5002/S_BOX01.XSO
+S_5004/S_BOX01,Corrupted Blood (18-21F),,Chest (Drop-Off),0x19D,0x57,Roda Fruit,filler,MAP/S_50/S_5004/S_BOX01.XSO
+S_5006/S_BOX01,Corrupted Blood (18-21F),19F,19F Drop-Off,0x1A1,0x81,0x81,filler,MAP/S_50/S_5006/S_BOX01.XSO
+S_5007/S_BOX01,Corrupted Blood (18-21F),,Vault,0x1A0,0x66,Crimson Key,progression,MAP/S_50/S_5007/S_BOX01.XSO
+S_5011/S_BOX01,Corrupted Blood (18-21F),20F,20F Small Room,0x1A4,0x58,Cleria Ore,filler,MAP/S_50/S_5011/S_BOX01.XSO
+S_5012/S_BOX01,Corrupted Blood (18-21F),20F,20F Path 1,0x1A9,0x22 0x28 0x2E 0x34,Battle Guards | Moon Greaves | Phantom Boots | Battle Shield,useful useful useful useful,MAP/S_50/S_5012/S_BOX01.XSO
+S_5015/S_BOX01,Corrupted Blood (18-21F),20F,20F Path 3,0x1C8,0x82,0x82,filler,MAP/S_50/S_5015/S_BOX01.XSO
+S_5080/S_BOX01,Corrupted Blood (18-21F),,Boss Room,0x1A8,0x67,Dragonbone Key,progression,MAP/S_50/S_5080/S_BOX01.XSO
+S_6002/S_BOX01,Demonic Core (22-25F),22F,22F Path 2,0x1AF,0x57,Roda Fruit,filler,MAP/S_60/S_6002/S_BOX01.XSO
+S_6004/S_BOX01,Demonic Core (22-25F),24F,24F Path 3,0x1D0,0x53,Devil Medallion,progression,MAP/S_60/S_6004/S_BOX01.XSO
+S_6004/S_BOX02,Demonic Core (22-25F),24F,24F Path 3,0x1D1,0x59,Celcetan Panacea,filler,MAP/S_60/S_6004/S_BOX02.XSO
+S_6014/S_BOX01,Demonic Core (22-25F),23F,23F Mirror Room,0x1CD,0x7D,500G,filler,MAP/S_60/S_6014/S_BOX01.XSO
+S_6014/S_BOX02,Demonic Core (22-25F),23F,23F Mirror Room,0x1CE,0x59,Celcetan Panacea,filler,MAP/S_60/S_6014/S_BOX02.XSO
+S_6014/S_BOX03,Demonic Core (22-25F),23F,23F Mirror Room,0x1EA,0x58,Cleria Ore,filler,MAP/S_60/S_6014/S_BOX03.XSO
+S_6015/S_BOX01,Demonic Core (22-25F),22F,22F Path 3,0x1B3,0xB 0x11 0x17 0x1D,Silver Dress | Cleria Garb | Brave Armor | Raval Armor,useful useful useful useful,MAP/S_60/S_6015/S_BOX01.XSO
+S_6015/S_BOX02,Demonic Core (22-25F),22F,22F Path 3,0x1C9,0x6E,Obsidian Key,progression,MAP/S_60/S_6015/S_BOX02.XSO
+S_6051/S_BOX01,Demonic Core (22-25F),24F,24F Path 2,0x1CF,0x23 0x29 0x2F 0x35,Silver Leggings | Dark Falcon | Brave Guards | Raval Shield,useful useful useful useful,MAP/S_60/S_6051/S_BOX01.XSO

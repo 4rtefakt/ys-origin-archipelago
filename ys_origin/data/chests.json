@@ -1,0 +1,1139 @@
+[
+  {
+    "id": "S_1001/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "2F",
+    "room": "2F Path 1",
+    "box_flag": "0x12E",
+    "script": "MAP/S_10/S_1001/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_1001/S_BOX02",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "2F",
+    "room": "2F Path 1",
+    "box_flag": "0x13A",
+    "script": "MAP/S_10/S_1001/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x63",
+        "name": "Bronze Key",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_1001/S_BOX03",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "2F",
+    "room": "2F Path 1",
+    "box_flag": "0x1DE",
+    "script": "MAP/S_10/S_1001/S_BOX03.XSO",
+    "items": [
+      {
+        "id": "0x36",
+        "name": "Mask of Eyes",
+        "class": "useful"
+      },
+      {
+        "id": "0x3C",
+        "name": "Cleria Ring",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_1003/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "4F",
+    "room": "4F Forward Passage 2",
+    "box_flag": "0x133",
+    "script": "MAP/S_10/S_1003/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x57",
+        "name": "Roda Fruit",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_1007/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "4F",
+    "room": "4F Forward Passage 3",
+    "box_flag": "0x1C7",
+    "script": "MAP/S_10/S_1007/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x80",
+        "name": "0x80",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_1010/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "4F",
+    "room": "4F Path 4",
+    "box_flag": "0x13D",
+    "script": "MAP/S_10/S_1010/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x1E",
+        "name": "Leather Boots",
+        "class": "useful"
+      },
+      {
+        "id": "0x24",
+        "name": "Leather Greaves",
+        "class": "useful"
+      },
+      {
+        "id": "0x2A",
+        "name": "Riveted Boots",
+        "class": "useful"
+      },
+      {
+        "id": "0x30",
+        "name": "Wooden Shield",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_1014/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "4F",
+    "room": "4F Forward Room",
+    "box_flag": null,
+    "script": "MAP/S_10/S_1014/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x6F",
+        "name": "Blue Moon Crest",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_1015/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "4F",
+    "room": "4F Lower (Medal)",
+    "box_flag": "0x13E",
+    "script": "MAP/S_10/S_1015/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x4E",
+        "name": "Beast Medallion",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_1080/S_BOX01",
+    "scene": "S_10",
+    "zone": "Wailing Blue (2-5F)",
+    "floor": "3F",
+    "room": "3F Midboss",
+    "box_flag": "0x139",
+    "script": "MAP/S_10/S_1080/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x3C",
+        "name": "Cleria Ring",
+        "class": "useful"
+      },
+      {
+        "id": "0x36",
+        "name": "Mask of Eyes",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_2002/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "6F",
+    "room": "6F Small Room",
+    "box_flag": "0x146",
+    "script": "MAP/S_20/S_2002/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x5A",
+        "name": "Silver Bracelet",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_2003/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "7F",
+    "room": "7F Path 1",
+    "box_flag": "0x147",
+    "script": "MAP/S_20/S_2003/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x7",
+        "name": "Ring Mail",
+        "class": "useful"
+      },
+      {
+        "id": "0xD",
+        "name": "Ebony Robe",
+        "class": "useful"
+      },
+      {
+        "id": "0x13",
+        "name": "Black Chain",
+        "class": "useful"
+      },
+      {
+        "id": "0x19",
+        "name": "Chain Mail",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_2005/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "",
+    "room": "Water Dragon Protect",
+    "box_flag": "0x14B",
+    "script": "MAP/S_20/S_2005/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x61",
+        "name": "Water Dragon's Scales",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_2005/S_BOX02",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "",
+    "room": "Water Dragon Protect",
+    "box_flag": "0x14C",
+    "script": "MAP/S_20/S_2005/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x58",
+        "name": "Cleria Ore",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_2005/S_BOX03",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "",
+    "room": "Water Dragon Protect",
+    "box_flag": "0x14B",
+    "script": "MAP/S_20/S_2005/S_BOX03.XSO",
+    "items": [
+      {
+        "id": "0x61",
+        "name": "Water Dragon's Scales",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_2006/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "",
+    "room": "Waterfall Stopper",
+    "box_flag": "0x148",
+    "script": "MAP/S_20/S_2006/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x80",
+        "name": "0x80",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_2008/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "8F",
+    "room": "8F Waterway 1",
+    "box_flag": "0x1C6",
+    "script": "MAP/S_20/S_2008/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x4F",
+        "name": "Arthropod Medallion",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_2010/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "8F",
+    "room": "8F Waterway 2",
+    "box_flag": "0x152",
+    "script": "MAP/S_20/S_2010/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_2014/S_BOX01",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "",
+    "room": "Horiz. Scroll Passage",
+    "box_flag": "0x14E",
+    "script": "MAP/S_20/S_2014/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x1F",
+        "name": "Hard Leggings",
+        "class": "useful"
+      },
+      {
+        "id": "0x25",
+        "name": "Ebony Shoes",
+        "class": "useful"
+      },
+      {
+        "id": "0x2B",
+        "name": "Black Leggings",
+        "class": "useful"
+      },
+      {
+        "id": "0x31",
+        "name": "Small Shield",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_2014/S_BOX02",
+    "scene": "S_20",
+    "zone": "Flooded Prison (6-9F)",
+    "floor": "",
+    "room": "Horiz. Scroll Passage",
+    "box_flag": "0x1D5",
+    "script": "MAP/S_20/S_2014/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x57",
+        "name": "Roda Fruit",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_3002/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "",
+    "room": "Mark Treasure",
+    "box_flag": "0x159",
+    "script": "MAP/S_30/S_3002/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x5C",
+        "name": "Red Moon Crest",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_3003/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "10F",
+    "room": "10F Path 2",
+    "box_flag": "0x160",
+    "script": "MAP/S_30/S_3003/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x57",
+        "name": "Roda Fruit",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_3003/S_BOX02",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "10F",
+    "room": "10F Path 2",
+    "box_flag": "0x1D6",
+    "script": "MAP/S_30/S_3003/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x7C",
+        "name": "100G",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_3004/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "11F",
+    "room": "11F Path 1",
+    "box_flag": "0x15B",
+    "script": "MAP/S_30/S_3004/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x8",
+        "name": "Half Plate",
+        "class": "useful"
+      },
+      {
+        "id": "0xE",
+        "name": "Chain Cloak",
+        "class": "useful"
+      },
+      {
+        "id": "0x14",
+        "name": "Banded Mail",
+        "class": "useful"
+      },
+      {
+        "id": "0x1A",
+        "name": "Plate Mail",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_3004/S_BOX02",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "11F",
+    "room": "11F Path 1",
+    "box_flag": "0x164",
+    "script": "MAP/S_30/S_3004/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x81",
+        "name": "0x81",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_3008/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "",
+    "room": "Lava Rods",
+    "box_flag": "0x166",
+    "script": "MAP/S_30/S_3008/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x82",
+        "name": "0x82",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_3010/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "",
+    "room": "Jump Room",
+    "box_flag": "0x16F",
+    "script": "MAP/S_30/S_3010/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x20",
+        "name": "Leg Guards",
+        "class": "useful"
+      },
+      {
+        "id": "0x26",
+        "name": "Shell Greaves",
+        "class": "useful"
+      },
+      {
+        "id": "0x2C",
+        "name": "Banded Boots",
+        "class": "useful"
+      },
+      {
+        "id": "0x32",
+        "name": "Large Shield",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_3010/S_BOX02",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "",
+    "room": "Jump Room",
+    "box_flag": "0x170",
+    "script": "MAP/S_30/S_3010/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x3A",
+        "name": "Spirit Cape",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_3011/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "",
+    "room": "Bridge Room 1",
+    "box_flag": "0x1D4",
+    "script": "MAP/S_30/S_3011/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_3012/S_BOX01",
+    "scene": "S_30",
+    "zone": "Flames of Guilt (10-13F)",
+    "floor": "",
+    "room": "Bridge Room 2",
+    "box_flag": "0x175",
+    "script": "MAP/S_30/S_3012/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x50",
+        "name": "Construct Medallion",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_3102/S_BOX01",
+    "scene": "S_31",
+    "zone": "",
+    "floor": "",
+    "room": "Silver Ore",
+    "box_flag": "0x16E",
+    "script": "MAP/S_31/S_3102/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x58",
+        "name": "Cleria Ore",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4001/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "14F",
+    "room": "14F Room",
+    "box_flag": "0x183",
+    "script": "MAP/S_40/S_4001/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4002/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Double Jump",
+    "box_flag": "0x181",
+    "script": "MAP/S_40/S_4002/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x5B",
+        "name": "Gold Bracelet",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4002/S_BOX02",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Double Jump",
+    "box_flag": "0x182",
+    "script": "MAP/S_40/S_4002/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x82",
+        "name": "0x82",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4003/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Mask of Eyes Path",
+    "box_flag": "0x17A",
+    "script": "MAP/S_40/S_4003/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x5E",
+        "name": "Evil Ring",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4003/S_BOX02",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Mask of Eyes Path",
+    "box_flag": "0x17D",
+    "script": "MAP/S_40/S_4003/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x57",
+        "name": "Roda Fruit",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4003/S_BOX03",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Mask of Eyes Path",
+    "box_flag": "0x17B",
+    "script": "MAP/S_40/S_4003/S_BOX03.XSO",
+    "items": [
+      {
+        "id": "0x64",
+        "name": "Marble Key",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_4003/S_BOX04",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Mask of Eyes Path",
+    "box_flag": "0x17C",
+    "script": "MAP/S_40/S_4003/S_BOX04.XSO",
+    "items": [
+      {
+        "id": "0x7C",
+        "name": "100G",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4006/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Slippery Fork Path",
+    "box_flag": "0x18C",
+    "script": "MAP/S_40/S_4006/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x9",
+        "name": "Reflex",
+        "class": "useful"
+      },
+      {
+        "id": "0xF",
+        "name": "Elder Robe",
+        "class": "useful"
+      },
+      {
+        "id": "0x15",
+        "name": "Gothic Suit",
+        "class": "useful"
+      },
+      {
+        "id": "0x1B",
+        "name": "Banded Mail",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_4006/S_BOX02",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Slippery Fork Path",
+    "box_flag": "0x190",
+    "script": "MAP/S_40/S_4006/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x80",
+        "name": "0x80",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4006/S_BOX03",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Slippery Fork Path",
+    "box_flag": "0x191",
+    "script": "MAP/S_40/S_4006/S_BOX03.XSO",
+    "items": [
+      {
+        "id": "0x58",
+        "name": "Cleria Ore",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4010/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Boss Room Key",
+    "box_flag": "0x18F",
+    "script": "MAP/S_40/S_4010/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x51",
+        "name": "Creeper Medallion",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_4012/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Non-Slip Boots",
+    "box_flag": "0x192",
+    "script": "MAP/S_40/S_4012/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x39",
+        "name": "Earth Dragon's Claws",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_4015/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "15F",
+    "room": "15F Room",
+    "box_flag": "0x187",
+    "script": "MAP/S_40/S_4015/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x7C",
+        "name": "100G",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4015/S_BOX02",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "15F",
+    "room": "15F Room",
+    "box_flag": "0x188",
+    "script": "MAP/S_40/S_4015/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_4017/S_BOX01",
+    "scene": "S_40",
+    "zone": "Silent Sands (14-17F)",
+    "floor": "",
+    "room": "Rado Inside 4 (Feena)",
+    "box_flag": "0x18B",
+    "script": "MAP/S_40/S_4017/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x65",
+        "name": "Amber Key",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_5002/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "",
+    "room": "Toal's Room",
+    "box_flag": "0x1BF",
+    "script": "MAP/S_50/S_5002/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x7D",
+        "name": "500G",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_5004/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "",
+    "room": "Chest (Drop-Off)",
+    "box_flag": "0x19D",
+    "script": "MAP/S_50/S_5004/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x57",
+        "name": "Roda Fruit",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_5006/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "19F",
+    "room": "19F Drop-Off",
+    "box_flag": "0x1A1",
+    "script": "MAP/S_50/S_5006/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x81",
+        "name": "0x81",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_5007/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "",
+    "room": "Vault",
+    "box_flag": "0x1A0",
+    "script": "MAP/S_50/S_5007/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x66",
+        "name": "Crimson Key",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_5011/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "20F",
+    "room": "20F Small Room",
+    "box_flag": "0x1A4",
+    "script": "MAP/S_50/S_5011/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x58",
+        "name": "Cleria Ore",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_5012/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "20F",
+    "room": "20F Path 1",
+    "box_flag": "0x1A9",
+    "script": "MAP/S_50/S_5012/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x22",
+        "name": "Battle Guards",
+        "class": "useful"
+      },
+      {
+        "id": "0x28",
+        "name": "Moon Greaves",
+        "class": "useful"
+      },
+      {
+        "id": "0x2E",
+        "name": "Phantom Boots",
+        "class": "useful"
+      },
+      {
+        "id": "0x34",
+        "name": "Battle Shield",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_5015/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "20F",
+    "room": "20F Path 3",
+    "box_flag": "0x1C8",
+    "script": "MAP/S_50/S_5015/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x82",
+        "name": "0x82",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_5080/S_BOX01",
+    "scene": "S_50",
+    "zone": "Corrupted Blood (18-21F)",
+    "floor": "",
+    "room": "Boss Room",
+    "box_flag": "0x1A8",
+    "script": "MAP/S_50/S_5080/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x67",
+        "name": "Dragonbone Key",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_6002/S_BOX01",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "22F",
+    "room": "22F Path 2",
+    "box_flag": "0x1AF",
+    "script": "MAP/S_60/S_6002/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x57",
+        "name": "Roda Fruit",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_6004/S_BOX01",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "24F",
+    "room": "24F Path 3",
+    "box_flag": "0x1D0",
+    "script": "MAP/S_60/S_6004/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x53",
+        "name": "Devil Medallion",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_6004/S_BOX02",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "24F",
+    "room": "24F Path 3",
+    "box_flag": "0x1D1",
+    "script": "MAP/S_60/S_6004/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_6014/S_BOX01",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "23F",
+    "room": "23F Mirror Room",
+    "box_flag": "0x1CD",
+    "script": "MAP/S_60/S_6014/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x7D",
+        "name": "500G",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_6014/S_BOX02",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "23F",
+    "room": "23F Mirror Room",
+    "box_flag": "0x1CE",
+    "script": "MAP/S_60/S_6014/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x59",
+        "name": "Celcetan Panacea",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_6014/S_BOX03",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "23F",
+    "room": "23F Mirror Room",
+    "box_flag": "0x1EA",
+    "script": "MAP/S_60/S_6014/S_BOX03.XSO",
+    "items": [
+      {
+        "id": "0x58",
+        "name": "Cleria Ore",
+        "class": "filler"
+      }
+    ]
+  },
+  {
+    "id": "S_6015/S_BOX01",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "22F",
+    "room": "22F Path 3",
+    "box_flag": "0x1B3",
+    "script": "MAP/S_60/S_6015/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0xB",
+        "name": "Silver Dress",
+        "class": "useful"
+      },
+      {
+        "id": "0x11",
+        "name": "Cleria Garb",
+        "class": "useful"
+      },
+      {
+        "id": "0x17",
+        "name": "Brave Armor",
+        "class": "useful"
+      },
+      {
+        "id": "0x1D",
+        "name": "Raval Armor",
+        "class": "useful"
+      }
+    ]
+  },
+  {
+    "id": "S_6015/S_BOX02",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "22F",
+    "room": "22F Path 3",
+    "box_flag": "0x1C9",
+    "script": "MAP/S_60/S_6015/S_BOX02.XSO",
+    "items": [
+      {
+        "id": "0x6E",
+        "name": "Obsidian Key",
+        "class": "progression"
+      }
+    ]
+  },
+  {
+    "id": "S_6051/S_BOX01",
+    "scene": "S_60",
+    "zone": "Demonic Core (22-25F)",
+    "floor": "24F",
+    "room": "24F Path 2",
+    "box_flag": "0x1CF",
+    "script": "MAP/S_60/S_6051/S_BOX01.XSO",
+    "items": [
+      {
+        "id": "0x23",
+        "name": "Silver Leggings",
+        "class": "useful"
+      },
+      {
+        "id": "0x29",
+        "name": "Dark Falcon",
+        "class": "useful"
+      },
+      {
+        "id": "0x2F",
+        "name": "Brave Guards",
+        "class": "useful"
+      },
+      {
+        "id": "0x35",
+        "name": "Raval Shield",
+        "class": "useful"
+      }
+    ]
+  }
+]
