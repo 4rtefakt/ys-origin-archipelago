@@ -153,6 +153,15 @@ class XSO:
 # --------------------------------------------------------------------------- #
 
 
+def _xso_files(root: Path) -> List[Path]:
+    """All .xso files under root, deduped (Windows globbing is case-insensitive)."""
+    seen: dict[str, Path] = {}
+    for p in root.rglob("*"):
+        if p.is_file() and p.suffix.lower() == ".xso":
+            seen[str(p).lower()] = p
+    return sorted(seen.values())
+
+
 def _annot(idx: int) -> str:
     nm = IDX_NAMES.get(idx)
     return f"  [{nm}]" if nm else ""
@@ -177,7 +186,7 @@ def cmd_disasm(path: Path) -> int:
 
 def cmd_grants(root: Path, out_csv: Optional[Path]) -> int:
     import csv
-    files = sorted(root.rglob("*.XSO")) + sorted(root.rglob("*.xso"))
+    files = _xso_files(root)
     rows = []
     errors = 0
     for f in files:
