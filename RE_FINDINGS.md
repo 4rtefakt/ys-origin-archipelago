@@ -194,8 +194,35 @@ box-flag, item ids) + `gives.csv`. Result: **65 chests** across the 7 tower
 zones (box-flag auto-resolved for 63), plus 47 cutscenes and 15 item-use
 scripts. Multi-item chests = parallel grants across difficulty/character
 variants (confirm which fires in-game). Item *names* aren't in the scripts (only
-ids); attach them by triggering in-game (`tools/flaglog.py`) or from the runtime
-item-name table (not yet extracted).
+ids) — get them from `MISC/INVINFO.DAT` (below).
+
+**5. Item id → name (`MISC/INVINFO.DAT`).** Extract from the **English** archive
+(`data_us.ni`, `--filter INVINFO`). Decompresses to a 16-byte header
+(`hash, hash, u32 record_size=0xB8, u32 count=0x80`) + **128 × 184-byte records;
+the record index IS the item id** (= give-item operand = g_flags item index).
+Each record starts with the NUL-terminated English name, with the JP name and a
+longer English description later in the record. `tools/invinfo.py <INVINFO.DAT>
+[--desc]` dumps the table; `tools/xso_catalog.py … --names <INVINFO.DAT>` folds
+names into the chest catalog. Verified: 0x57 Roda Fruit, 0x59 Celcetan Panacea,
+0x6B Cerulean Flabellum, 0x6F Blue Moon Crest. Map of the id space:
+
+| ids | category |
+|---|---|
+| 0x00–0x05 | weapons (per character) |
+| 0x06–0x29 | body armor (4 parallel lines = per-character) |
+| 0x1E–0x35 | boots / leggings + shields (per character) |
+| 0x36–0x41 | accessories (Mask of Eyes, rings, capes…) |
+| 0x42–0x4D | stat drops (Recovery/Strength/Defense/MP) |
+| 0x4E–0x53 | **boss Medallions** (Beast/Arthropod/Construct/Creeper/Mantid/Devil) |
+| 0x57–0x6F | consumables + **key items** (Roda, Panacea, crests, keys, Flabellum…) |
+| 0x74–0x76 | **Ventus / Terra / Ignis Bracelets** = wind/earth/fire elemental powers |
+| 0x78–0x7F | gold amounts (1G…5000G) |
+
+> **Correction:** the client registry labels g_flags idx `0x74` "Protective
+> Bubble" — per INVINFO that id is the **Ventus Bracelet** (the bubble is the
+> *ability* it grants). The freeze-on-cast safety rule is unchanged; only the
+> name is off. (ids ≥ 0x80 seen in a few give calls are outside the 128-record
+> table — unresolved; likely a different reward variant.)
 
 ## Ghidra (set up for future deep dives)
 
