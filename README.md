@@ -22,14 +22,19 @@ memory access via the Win32 API.
 > **Confirmed:** item-grant array (`+0x36BAxx`), event/location-flag array
 > (`+0x36BDxx`, bidirectional), SP/level, equipment reads.
 >
-> **Full tower extracted offline + seeds generate.** The game archives are
-> unpacked (`tools/ni_unpack.py`), the event-script bytecode disassembled
-> (`tools/xso_dis.py`), and chests/items/scene-names/logic mined into
-> `ys_origin/data/chests.json` (`tools/build_dataset.py`): **62 chests across all
-> 7 zones, every item named** (`MISC/INVINFO.DAT`), with key→door/medallion gates
-> (`tools/xso_logic.py`). The apworld now spans the whole tower and **generates a
-> valid, beatable seed** (verified on Archipelago 0.6.8: 62 locations, multi-
-> sphere medallion-gated logic). See [RE_FINDINGS.md](RE_FINDINGS.md).
+> **Full tower extracted offline, seeds generate, client synced.** The game
+> archives are unpacked (`tools/ni_unpack.py`), event-script bytecode
+> disassembled (`tools/xso_dis.py`), and chests/items/names/scenes/logic/
+> blessings mined into `ys_origin/data/` (`tools/build_locations.py`):
+> **300 locations across 7 categories** (chests, altar/key-item events, goddess
+> statues, blessings, bosses, floors, rooms), every item named
+> (`MISC/INVINFO.DAT`), with medallion gates (`tools/xso_logic.py`). The apworld
+> spans the whole tower and **generates valid, beatable seeds** (Archipelago
+> 0.6.8). The client builds its detect/grant maps from `slot_data`, so **every
+> flag-based check (~122: chests/events/statues/blessings) works live end-to-end**
+> — detect → check → item granted → vanilla suppressed → in-game overlay.
+> Boss/floor/room checks generate but stay dormant (filler-only) until one
+> memory offset (current scene) is mapped. See [RE_FINDINGS.md](RE_FINDINGS.md).
 >
 > **Content replacement implemented.** The loop is no longer additive: the
 > client now neutralizes the vanilla item a chest grants so the AP item
