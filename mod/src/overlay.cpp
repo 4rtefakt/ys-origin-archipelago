@@ -8,6 +8,8 @@
 #include <mutex>
 #include <string>
 
+extern ImFont* g_overlay_big_font;  // large item-name font (hook_d3d9.cpp)
+
 namespace overlay {
 
 static std::mutex g_mtx;
@@ -29,45 +31,53 @@ void set_status(const std::string& text) {
 
 // -- drawn from the render thread ------------------------------------------ #
 
+// Draw one right-aligned line as floating HUD text at a given font/size: a black
+// outline (4-way) for readability over any background, then the colored text.
+static void hud_line(ImDrawList* dl, ImFont* font, float size, float right_x,
+                     float y, ImU32 col, const char* text) {
+    ImVec2 sz = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
+    ImVec2 p(right_x - sz.x, y);
+    const ImU32 shadow = IM_COL32(0, 0, 0, 220);
+    const float o = (size > 24.0f) ? 2.0f : 1.0f;  // thicker outline for big text
+    dl->AddText(font, size, ImVec2(p.x - o, p.y), shadow, text);
+    dl->AddText(font, size, ImVec2(p.x + o, p.y), shadow, text);
+    dl->AddText(font, size, ImVec2(p.x, p.y - o), shadow, text);
+    dl->AddText(font, size, ImVec2(p.x, p.y + o), shadow, text);
+    dl->AddText(font, size, p, col, text);
+}
+
+// Render the AP status + recent-items feed as part of the game's HUD: no window,
+// no chrome — just outlined text floating top-right, drawn straight onto the
+// frame via the foreground draw list. Item names use the large (~5x) font.
+// (INSERT still toggles it; the toggle gates this call in the D3D9 hook.)
 void draw() {
-    // Top-RIGHT corner: the top-left overlaps the game's "New Area" titles.
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
     const ImGuiIO& io = ImGui::GetIO();
-    const float w = 380.0f, h = 320.0f, margin = 20.0f;
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - w - margin, margin),
-                            ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Archipelago");
+    const float right = io.DisplaySize.x - 18.0f;
 
-    ImGui::TextColored(ImVec4(0.88f, 0.64f, 0.34f, 1.0f),
-                       "Ys Origin  -  Archipelago");
-    {
-        std::lock_guard<std::mutex> lk(g_mtx);
-        ImGui::TextDisabled("%s", g_status.c_str());
-    }
-    ImGui::TextDisabled("INSERT toggles this overlay.");
-    ImGui::Spacing();
+    ImFont* small = ImGui::GetFont();         // default UI font
+    const float ssz = ImGui::GetFontSize();
+    const float slh = ImGui::GetTextLineHeightWithSpacing();
+    ImFont* big = g_overlay_big_font ? g_overlay_big_font : small;
+    const float bsz = 38.0f;                  // ~3x the default ~13px
+    const float blh = bsz * 1.1f;
 
-    ImGui::SeparatorText("Recent items");
-    {
-        std::lock_guard<std::mutex> lk(g_mtx);
-        if (g_items.empty()) {
-            ImGui::TextDisabled("(none yet)");
-        } else {
-            // newest first
-            for (auto it = g_items.rbegin(); it != g_items.rend(); ++it)
-                ImGui::BulletText("%s", it->c_str());
-        }
-    }
+    const ImU32 gold = IM_COL32(228, 196, 112, 255);  // Ys UI gold
+    const ImU32 white = IM_COL32(245, 245, 245, 255);
+    const ImU32 dim = IM_COL32(170, 170, 170, 255);
 
-    ImGui::SeparatorText("Terminal");
-    static char cmd[256] = "";
-    ImGui::SetNextItemWidth(-1);
-    if (ImGui::InputText("##cmd", cmd, sizeof(cmd),
-                         ImGuiInputTextFlags_EnterReturnsTrue)) {
-        // milestone 3: forward `cmd` to the AP client (Say / !commands).
-        cmd[0] = '\0';
+    std::lock_guard<std::mutex> lk(g_mtx);
+    float y = 16.0f;
+    hud_line(dl, small, ssz, right, y, gold, "Archipelago");
+    y += slh;
+    hud_line(dl, small, ssz, right, y, dim, g_status.c_str());
+    y += slh * 1.4f;
+
+    int n = 0;
+    for (auto it = g_items.rbegin(); it != g_items.rend() && n < 5; ++it, ++n) {
+        hud_line(dl, big, bsz, right, y, white, it->c_str());
+        y += blh;
     }
-    ImGui::End();
 }
 
 }  // namespace overlay

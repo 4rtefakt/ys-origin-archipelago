@@ -8,6 +8,7 @@
 #include <d3d9.h>
 #include <cstdio>
 #include <cstdarg>
+#include <cstring>
 #include "MinHook.h"
 #include "imgui.h"
 #include "imgui_impl_dx9.h"
@@ -37,6 +38,10 @@ void mod_log(const char* fmt, ...) {
 
 namespace overlay { void draw(); }
 
+// Large font for the overlay's item names (~5x the default), built crisp at its
+// native pixel size. Read by overlay.cpp.
+ImFont* g_overlay_big_font = nullptr;
+
 using EndScene_t = HRESULT(WINAPI*)(IDirect3DDevice9*);
 using Reset_t = HRESULT(WINAPI*)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
 
@@ -64,7 +69,27 @@ static void imgui_init(IDirect3DDevice9* dev) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
-    ImGui::GetIO().IniFilename = nullptr;  // don't write imgui.ini next to game
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;  // don't write imgui.ini next to game
+    io.Fonts->AddFontDefault();  // font[0]: small UI text (header/status)
+    // font[1]: large item-name font (~5x). Prefer the GAME's own font
+    // (release\yso_ins04.dat — a real TTF with glyf outlines, the one used in the
+    // "Acquired" boxes), derived from the game exe's folder; fall back to system
+    // fonts. ASCII range only (default) so the CJK atlas stays small.
+    char gamefont[MAX_PATH] = "";
+    if (GetModuleFileNameA(nullptr, gamefont, MAX_PATH)) {
+        char* slash = strrchr(gamefont, '\\');
+        if (slash) lstrcpyA(slash + 1, "release\\yso_ins04.dat");
+    }
+    const char* fonts[] = {gamefont,
+                           "C:\\Windows\\Fonts\\segoeui.ttf",
+                           "C:\\Windows\\Fonts\\arial.ttf"};
+    for (const char* f : fonts) {
+        if (!f[0]) continue;
+        g_overlay_big_font = io.Fonts->AddFontFromFileTTF(f, 38.0f);
+        if (g_overlay_big_font) { mod_log("imgui_init: big font %s", f); break; }
+    }
+    if (!g_overlay_big_font) g_overlay_big_font = io.Fonts->AddFontDefault();
     ImGui_ImplWin32_Init(g_hwnd);
     ImGui_ImplDX9_Init(dev);
     o_WndProc = (WNDPROC)SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)hk_WndProc);
