@@ -2076,6 +2076,20 @@
   "items": []
  },
  {
+  "id": "blessing/bit14",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Hasten Skill recovery LV3",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 14
+  },
+  "items": []
+ },
+ {
   "id": "blessing/bit15",
   "type": "blessing",
   "zone": "Blessings",
@@ -2086,6 +2100,20 @@
    "method": "bit",
    "offset": "0x36BC80",
    "bit": 15
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/bit16",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Increase Boost recovery LV3",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 16
   },
   "items": []
  },
@@ -2114,6 +2142,20 @@
    "method": "bit",
    "offset": "0x36BC80",
    "bit": 18
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/bit19",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Reduce MP usage LV3",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 19
   },
   "items": []
  },

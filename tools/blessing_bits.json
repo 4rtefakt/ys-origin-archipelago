@@ -1,6 +1,6 @@
 {
  "_storage": "armor -> array slot +0x36A684; every other blessing/level -> one bit in the bitfield at +0x36BC80 (g_flags 0xD9).",
- "_status": "20 bits clear-test verified (incl. all LV2). Still undiscovered: LV3 of Boost recovery / Hasten skill / Reduce MP (3 more bits).",
+ "_status": "COMPLETE: all 23 blessing bits clear-test verified (bit7 unused). + armor (array 0x36A684). Blessing menu fully mapped.",
  "armor_array_+0x36A684": "Strengthen current armor",
  "known_bits": [
   0,
@@ -16,9 +16,12 @@
   11,
   12,
   13,
+  14,
   15,
+  16,
   17,
   18,
+  19,
   20,
   21,
   22,
@@ -44,6 +47,9 @@
   "15": "Increase Boost recovery LV2",
   "18": "Reduce MP usage LV2",
   "22": "Bolster bad status resists LV2",
-  "23": "Extend drop item effects LV2"
+  "23": "Extend drop item effects LV2",
+  "14": "Hasten Skill recovery LV3",
+  "16": "Increase Boost recovery LV3",
+  "19": "Reduce MP usage LV3"
  }
 }
