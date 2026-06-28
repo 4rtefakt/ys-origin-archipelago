@@ -9,6 +9,51 @@ Legend: `A -> B [req]` = you can go from room A to room B, gated by `req`
 (empty = free). `[wind]` = Ventus Bracelet. `???` = destination/requirement not
 yet explored.
 
+## All-zones gate dependency (pre-map from the Hugo walkthrough)
+
+Reliable backbone for authoring each zone (the *ordered abilities/keys/medallion*
+the walkthrough requires; exact per-room adjacency still needs a mapping pass).
+Source: the bundled `Ys-Origin-Guide.md` Hugo route. Traversal-ability items
+(all in the pool, auto-promoted to progression once used as a gate):
+
+- **Ventus Bracelet** (0x74) — wind / Force Shield: hover-jumps. (Wailing Blue)
+- **Silver Bracelet** (0x5A) — DASH. (Flooded Prison 6F) -> **Gold Bracelet**
+  (0x5B) upgrade later (Silent Sands 14F).
+- **Water Dragon's Scales** (0x61) — long underwater / deep-water rooms.
+  (Flooded Prison 7F, after the Vagullion boss)
+- **Levinstrike Warhammer** (0x6C) — Thunder / Trap Mine: breaks weak walls,
+  hard-shell enemies. (Flooded Prison 8F)
+- **Crimson Lotusblade** (0x60?) / **Fire Wheel** — fire skill. (Guilty Fire 11F)
+- **Spirit Cape** — (Devil's Corridor 13F; likely a float/extra-jump — confirm)
+- **Earth Dragon's Claws** (0x??) — climb walls. (Silent Sands 16F)
+- **Moon Greaves** (0x28, NOT in pool — equipment variant) / others — confirm if
+  any gate traversal.
+
+Per-zone gates (medallion = the gate INTO the next zone; keys/abilities gate
+intra-zone rooms):
+
+- **Wailing Blue (2F-5F)** [AUTHORED]: wind, Bronze Key, Mask of Eyes, Blue
+  Necklace -> **Beast Medallion**.
+- **Flooded Prison (6F-9F)**: Silver Bracelet (Dash) -> Water Dragon's Scales ->
+  Levinstrike Warhammer (Thunder, breaks the wall hiding the medallion) ->
+  **Arthropod Medallion**.
+- **Guilty Fire (10F-12F)**: Red Moon Crest, Crimson Lotusblade/Fire Wheel ->
+  (Devil's Corridor 12F-13F: Spirit Cape, Shell Greaves) -> **Construct Medallion**.
+- **Silent Sands (14F-17F)** + **Rado's Annex** (side, entered 16F): Evil Ring,
+  Marble Key, Gold Bracelet, Silver Chimes, Amber Key, Earth Dragon's Claws
+  (climb) -> **Creeper Medallion**.
+- **Blighted Blood / Corrupted Blood (18F-21F)**: Crimson Key, Dragonbone Key,
+  Moon Greaves, Black Pearl -> **Mantid Medallion** (note: also the S_5102
+  event). 
+- **Demonic Core (22F-25F)**: Obsidian Key, Rod, Dark Falcon -> **Devil
+  Medallion** (GOAL, 25F Devil's Throne).
+
+Notes / data gaps to watch (same pattern as Blue Necklace): event-granted
+artifacts may lack a location (not randomized) — verify each is in the pool when
+authoring its zone. Daybreak Talisman (Mantid Chamber 21F) is NOT in the pool
+(likely a missing event location). Per-character: these are Hugo's; Yunica/Toal
+differ (options.character exists for future per-char routing).
+
 ## Wailing Blue (S_10xx)
 
 Scenes (scenelist names):
