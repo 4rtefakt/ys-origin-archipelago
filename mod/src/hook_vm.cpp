@@ -23,6 +23,7 @@
 
 void mod_log(const char* fmt, ...);
 void bridge_emit(const char* line);
+void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
 
@@ -53,7 +54,8 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
 
     if (g_loc_flag[idx]) {  // a randomized location's flag is firing — a check
         snprintf(buf, sizeof(buf), "C %X", idx);
-        bridge_emit(buf);
+        bridge_emit(buf);     // legacy bridge (no-op if no socket client)
+        ap_on_check((int)idx); // embedded AP client -> LocationChecks
         return addr;  // let the flag set; the chest/event plays normally
     }
     if (g_supp_item[idx] && val >= 1)  // vanilla content of a randomized loc

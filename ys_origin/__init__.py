@@ -148,4 +148,13 @@ class YsOriginWorld(World):
             },
             # item name -> g_flags item index, so the client can grant anything.
             "item_index": dt.item_index,
+            # g_flags indices of the vanilla content of active chest/event
+            # locations — the in-game mod suppresses these (player gets the AP
+            # item over the network instead).
+            "suppress_items": sorted({
+                dt.item_index[dt.location_vanilla_item[n]]
+                for n in active
+                if dt.location_vanilla_item.get(n)
+                and dt.location_vanilla_item[n] in dt.item_index
+            }),
         }
