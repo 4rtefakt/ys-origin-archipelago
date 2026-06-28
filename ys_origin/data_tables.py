@@ -49,13 +49,18 @@ ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 # their live detection / mapping is pinned.
 EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36BC58)
 
-# Varied filler for sanity locations (real INVINFO names; counts not gated).
-# NOTE: the "X Drop N" items (Strength/Defense/MP/Recovery Drop) are transient
-# enemy combat orbs, not held inventory — they make no sense as check rewards, so
-# they are intentionally EXCLUDED from filler (enemies still drop them in-game).
+# Filler for sanity locations. ONLY items that are safe to grant in unbounded
+# quantity may go here:
+#   * the "X Drop N" items (Strength/Defense/MP/Recovery Drop) are transient enemy
+#     combat orbs, not held inventory — excluded (enemies still drop them).
+#   * Roda Fruit and Cleria Ore are count-capped in vanilla; granting extra copies
+#     bugs out / overpowers the player — excluded (they still appear at their
+#     vanilla locations at the correct count).
+#   * Celcetan Panacea and Gold are safe to give in any quantity. (SP would be a
+#     nice filler too but it's a stat, not an item — needs a custom grant path.)
 FILLER_POOL: List[str] = [
-    "Roda Fruit", "Celcetan Panacea", "Cleria Ore",
-    "100G", "500G", "1000G", "50G",
+    "Celcetan Panacea",
+    "50G", "100G", "500G", "1000G",
 ]
 
 
