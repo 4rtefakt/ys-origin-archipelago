@@ -8,8 +8,10 @@ venv/
 # apworld build artifact (zip ys_origin/ to produce this)
 *.apworld
 
-# discovery output from tools/flaglog.py
+# discovery output / RE scratch captures
 flaglog*.csv
+bless_*.csv
+bless_*.txt
 
 # overlay icons are extracted from the user's own game copy (game art) —
 # generate locally with tools/extract_icons.py, don't commit
