@@ -20,8 +20,16 @@ memory access via the Win32 API.
 > [RE_FINDINGS.md](RE_FINDINGS.md) for the confirmed memory map.
 >
 > **Confirmed:** item-grant array (`+0x36BAxx`), event/location-flag array
-> (`+0x36BDxx`, bidirectional), SP/level, equipment reads. 5 Hugo locations + 4
-> items/skills mapped and wired in.
+> (`+0x36BDxx`, bidirectional), SP/level, equipment reads.
+>
+> **Full tower extracted offline + seeds generate.** The game archives are
+> unpacked (`tools/ni_unpack.py`), the event-script bytecode disassembled
+> (`tools/xso_dis.py`), and chests/items/scene-names/logic mined into
+> `ys_origin/data/chests.json` (`tools/build_dataset.py`): **62 chests across all
+> 7 zones, every item named** (`MISC/INVINFO.DAT`), with key→door/medallion gates
+> (`tools/xso_logic.py`). The apworld now spans the whole tower and **generates a
+> valid, beatable seed** (verified on Archipelago 0.6.8: 62 locations, multi-
+> sphere medallion-gated logic). See [RE_FINDINGS.md](RE_FINDINGS.md).
 >
 > **Content replacement implemented.** The loop is no longer additive: the
 > client now neutralizes the vanilla item a chest grants so the AP item
