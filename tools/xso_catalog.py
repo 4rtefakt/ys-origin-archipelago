@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from client.offsets import ITEM_OFFSETS, LOCATION_FLAG_OFFSETS  # noqa: E402
 from tools.xso_dis import XSO  # noqa: E402
+from tools import invinfo  # noqa: E402
 
 GFLAGS_OFFSET = 0x36B91C
 
@@ -69,8 +70,9 @@ def _idx_to_flag_name() -> Dict[int, str]:
             for nm, off in LOCATION_FLAG_OFFSETS.items()}
 
 
-IDX_ITEM = _idx_to_item_name()
+IDX_ITEM = _idx_to_item_name()        # sparse: only the client's confirmed items
 IDX_FLAG = _idx_to_flag_name()
+ITEM_NAME: Dict[int, str] = dict(IDX_ITEM)  # full table loaded from INVINFO if given
 
 
 def classify(rel: str) -> str:
@@ -149,7 +151,7 @@ def walk(root: Path) -> List[ScriptInfo]:
 
 def _items_str(ids: List[int]) -> str:
     return " ".join(
-        f"0x{i:X}({IDX_ITEM[i]})" if i in IDX_ITEM else f"0x{i:X}"
+        f"0x{i:X}({ITEM_NAME[i]})" if i in ITEM_NAME else f"0x{i:X}"
         for i in ids
     )
 
@@ -198,7 +200,7 @@ def report(infos: List[ScriptInfo], csv_dir: Optional[Path]) -> None:
                     " ".join(f"0x{b:X}" for b in i.box_flags),
                     " ".join(IDX_FLAG.get(b, "") for b in i.box_flags).strip(),
                     " ".join(f"0x{g:X}" for g in i.gives),
-                    " ".join(IDX_ITEM.get(g, "") for g in i.gives).strip(),
+                    " | ".join(ITEM_NAME.get(g, "?") for g in i.gives),
                     " ".join(f"0x{s:X}" for s in i.set_flags),
                 ])
         # 2) all give-item calls (any script type)
@@ -208,7 +210,7 @@ def report(infos: List[ScriptInfo], csv_dir: Optional[Path]) -> None:
             for i in infos:
                 for g in i.gives:
                     w.writerow([i.scene, i.kind, i.rel, f"0x{g:X}",
-                                IDX_ITEM.get(g, "")])
+                                ITEM_NAME.get(g, "")])
         print(f"\n  wrote chests.csv + gives.csv to {csv_dir}")
 
 
@@ -218,6 +220,10 @@ def main(argv: List[str]) -> int:
         return 2
     root = Path(argv[1])
     csv_dir = Path(argv[argv.index("--csv") + 1]) if "--csv" in argv else None
+    if "--names" in argv:
+        tbl = invinfo.names(Path(argv[argv.index("--names") + 1]))
+        ITEM_NAME.update(tbl)
+        print(f"  loaded {len(tbl)} item names from INVINFO.DAT")
     infos = walk(root)
     report(infos, csv_dir)
     return 0
