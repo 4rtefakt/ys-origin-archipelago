@@ -27,6 +27,7 @@ from .memory import ProcessMemory, MemoryError_
 from .offsets import (
     BLESSING_ARMOR_OFFSET,
     BLESSING_BITFIELD_OFFSET,
+    BLESSING_BIT_CHECKS,
     BLESSING_COUNT_CHECKS,
     CURRENT_FLOOR_OFFSET,
     FLOOR_CHECKS,
@@ -57,6 +58,7 @@ class GameState:
 
     current_floor: Optional[int] = None
     blessing_total: Optional[int] = None   # popcount(bitfield) + (armor != 0)
+    blessing_bits: Optional[int] = None    # raw bitfield for per-bit checks
 
     # progression flags
     double_jump: Optional[int] = None
@@ -148,14 +150,16 @@ def poll(memory: ProcessMemory, offsets: Offsets = OFFSETS) -> GameState:
         except MemoryError_ as e:
             log.debug("read current_floor failed: %s", e)
 
-    # Blessing purchases (progressive checks): popcount(bitfield) + (armor != 0).
-    if BLESSING_COUNT_CHECKS:
+    # Blessings: read the bitfield once; serve both per-bit checks (named) and
+    # the legacy progressive count.
+    if BLESSING_BIT_CHECKS or BLESSING_COUNT_CHECKS:
         try:
             bits = memory.read_offset_int32(BLESSING_BITFIELD_OFFSET) & 0xFFFFFFFF
             armor = memory.read_offset_int32(BLESSING_ARMOR_OFFSET)
+            state.blessing_bits = bits
             state.blessing_total = bin(bits).count("1") + (1 if armor else 0)
         except MemoryError_ as e:
-            log.debug("read blessing total failed: %s", e)
+            log.debug("read blessings failed: %s", e)
 
     if offsets.key_items_base is not None:
         base = offsets.key_items_base
@@ -239,7 +243,14 @@ def detect_checks(prev: GameState, curr: GameState) -> List[str]:
             if curr.current_floor >= fl > pf:
                 checks.append(name)
 
-    # Blessing checks: fire "Purchase #N" when the running total first reaches N.
+    # Named blessing checks: fire when that blessing's bit flips 0 -> 1.
+    if curr.blessing_bits is not None and BLESSING_BIT_CHECKS:
+        pbits = prev.blessing_bits if prev.blessing_bits is not None else 0
+        for name, bit in BLESSING_BIT_CHECKS.items():
+            if (curr.blessing_bits >> bit) & 1 and not (pbits >> bit) & 1:
+                checks.append(name)
+
+    # Legacy progressive blessing checks (if a seed still uses them).
     if curr.blessing_total is not None and BLESSING_COUNT_CHECKS:
         pb = prev.blessing_total if prev.blessing_total is not None else 0
         for name, n in BLESSING_COUNT_CHECKS.items():

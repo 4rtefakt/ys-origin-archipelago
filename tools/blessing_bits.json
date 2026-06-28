@@ -1,24 +1,22 @@
 {
- "_storage": "bitfield +0x36BC80 (one bit per purchase); armor -> array +0x36A684",
- "armor_array_0x36A684": "Strengthen current armor",
+ "_storage": "Divine Blessings: armor -> array slot +0x36A684; every other blessing (each level) -> one bit in the bitfield at +0x36BC80 (g_flags 0xD9). total purchased = popcount(0x36BC80)+(armor!=0).",
+ "armor_array_+0x36A684": "Strengthen current armor",
  "bit": {
   "0": "Increase stationary heal rate",
   "1": "Reduce damage from terrain",
+  "2": "Reduce bad status duration LV1",
+  "3": "Increase item drop rate",
+  "4": "Increase Boost recovery LV1",
+  "5": "Hasten Skill recovery LV1",
   "6": "Reduce MP usage LV1",
+  "8": "Increase SP gain",
+  "9": "Extend drop item effects LV1",
+  "10": "Reduce bad status duration LV2",
   "12": "Increase effect of herbs LV1",
   "13": "Increase movement speed",
-  "17": "Increase effect of herbs LV2"
+  "17": "Increase effect of herbs LV2",
+  "20": "Bolster bad status resists LV1",
+  "21": "Strengthen Eyes of Fact"
  },
- "ambiguous_bits_3_8_21": [
-  "Strengthen Eyes of Fact",
-  "Increase SP gain",
-  "Increase item drop rate"
- ],
- "unmapped_unbought": [
-  "Reduce bad status duration LV1",
-  "Bolster bad status resists LV1",
-  "Extend drop item effects LV1",
-  "Increase Boost recovery LV1",
-  "Hasten Skill recovery LV1"
- ]
+ "_unmapped_LV2_bits": "LV2 of Bolster resists / Extend drop / Boost recovery / Hasten skill / Reduce MP not yet bought (each will be one more bit)."
 }

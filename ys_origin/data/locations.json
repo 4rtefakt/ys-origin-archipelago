@@ -1881,314 +1881,225 @@
   "items": []
  },
  {
-  "id": "blessing/1",
+  "id": "blessing/armor",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #1",
+  "name": "Divine Blessing: Strengthen current armor",
   "detect": {
-   "method": "blessing_count",
-   "n": 1
+   "method": "flag",
+   "offset": "0x36A684"
   },
   "items": []
  },
  {
-  "id": "blessing/2",
+  "id": "blessing/bit0",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #2",
+  "name": "Divine Blessing: Increase stationary heal rate",
   "detect": {
-   "method": "blessing_count",
-   "n": 2
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 0
   },
   "items": []
  },
  {
-  "id": "blessing/3",
+  "id": "blessing/bit1",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #3",
+  "name": "Divine Blessing: Reduce damage from terrain",
   "detect": {
-   "method": "blessing_count",
-   "n": 3
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 1
   },
   "items": []
  },
  {
-  "id": "blessing/4",
+  "id": "blessing/bit2",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #4",
+  "name": "Divine Blessing: Reduce bad status duration LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 4
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 2
   },
   "items": []
  },
  {
-  "id": "blessing/5",
+  "id": "blessing/bit3",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #5",
+  "name": "Divine Blessing: Increase item drop rate",
   "detect": {
-   "method": "blessing_count",
-   "n": 5
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 3
   },
   "items": []
  },
  {
-  "id": "blessing/6",
+  "id": "blessing/bit4",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #6",
+  "name": "Divine Blessing: Increase Boost recovery LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 6
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 4
   },
   "items": []
  },
  {
-  "id": "blessing/7",
+  "id": "blessing/bit5",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #7",
+  "name": "Divine Blessing: Hasten Skill recovery LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 7
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 5
   },
   "items": []
  },
  {
-  "id": "blessing/8",
+  "id": "blessing/bit6",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #8",
+  "name": "Divine Blessing: Reduce MP usage LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 8
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 6
   },
   "items": []
  },
  {
-  "id": "blessing/9",
+  "id": "blessing/bit8",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #9",
+  "name": "Divine Blessing: Increase SP gain",
   "detect": {
-   "method": "blessing_count",
-   "n": 9
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 8
   },
   "items": []
  },
  {
-  "id": "blessing/10",
+  "id": "blessing/bit9",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #10",
+  "name": "Divine Blessing: Extend drop item effects LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 10
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 9
   },
   "items": []
  },
  {
-  "id": "blessing/11",
+  "id": "blessing/bit10",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #11",
+  "name": "Divine Blessing: Reduce bad status duration LV2",
   "detect": {
-   "method": "blessing_count",
-   "n": 11
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 10
   },
   "items": []
  },
  {
-  "id": "blessing/12",
+  "id": "blessing/bit12",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #12",
+  "name": "Divine Blessing: Increase effect of herbs LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 12
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 12
   },
   "items": []
  },
  {
-  "id": "blessing/13",
+  "id": "blessing/bit13",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #13",
+  "name": "Divine Blessing: Increase movement speed",
   "detect": {
-   "method": "blessing_count",
-   "n": 13
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 13
   },
   "items": []
  },
  {
-  "id": "blessing/14",
+  "id": "blessing/bit17",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #14",
+  "name": "Divine Blessing: Increase effect of herbs LV2",
   "detect": {
-   "method": "blessing_count",
-   "n": 14
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 17
   },
   "items": []
  },
  {
-  "id": "blessing/15",
+  "id": "blessing/bit20",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #15",
+  "name": "Divine Blessing: Bolster bad status resists LV1",
   "detect": {
-   "method": "blessing_count",
-   "n": 15
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 20
   },
   "items": []
  },
  {
-  "id": "blessing/16",
+  "id": "blessing/bit21",
   "type": "blessing",
   "zone": "Blessings",
   "floor": "",
   "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #16",
+  "name": "Divine Blessing: Strengthen Eyes of Fact",
   "detect": {
-   "method": "blessing_count",
-   "n": 16
-  },
-  "items": []
- },
- {
-  "id": "blessing/17",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #17",
-  "detect": {
-   "method": "blessing_count",
-   "n": 17
-  },
-  "items": []
- },
- {
-  "id": "blessing/18",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #18",
-  "detect": {
-   "method": "blessing_count",
-   "n": 18
-  },
-  "items": []
- },
- {
-  "id": "blessing/19",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #19",
-  "detect": {
-   "method": "blessing_count",
-   "n": 19
-  },
-  "items": []
- },
- {
-  "id": "blessing/20",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #20",
-  "detect": {
-   "method": "blessing_count",
-   "n": 20
-  },
-  "items": []
- },
- {
-  "id": "blessing/21",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #21",
-  "detect": {
-   "method": "blessing_count",
-   "n": 21
-  },
-  "items": []
- },
- {
-  "id": "blessing/22",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #22",
-  "detect": {
-   "method": "blessing_count",
-   "n": 22
-  },
-  "items": []
- },
- {
-  "id": "blessing/23",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #23",
-  "detect": {
-   "method": "blessing_count",
-   "n": 23
-  },
-  "items": []
- },
- {
-  "id": "blessing/24",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing Purchase #24",
-  "detect": {
-   "method": "blessing_count",
-   "n": 24
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 21
   },
   "items": []
  },

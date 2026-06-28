@@ -262,7 +262,8 @@ FLOOR_CHECKS: dict[str, int] = {}
 # = popcount(bitfield) + (armor != 0). "Purchase #N" fires when total >= N.
 BLESSING_BITFIELD_OFFSET = 0x36BC80
 BLESSING_ARMOR_OFFSET = 0x36A684
-BLESSING_COUNT_CHECKS: dict[str, int] = {}   # name -> N (threshold)
+BLESSING_COUNT_CHECKS: dict[str, int] = {}   # name -> N (legacy progressive)
+BLESSING_BIT_CHECKS: dict[str, int] = {}     # name -> bit index in the bitfield
 
 
 def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> None:
@@ -279,6 +280,7 @@ def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> No
     LOCATION_FLAG_OFFSETS.clear()
     FLOOR_CHECKS.clear()
     BLESSING_COUNT_CHECKS.clear()
+    BLESSING_BIT_CHECKS.clear()
     for name, d in (location_detect or {}).items():
         if not isinstance(d, dict):
             continue
@@ -296,6 +298,11 @@ def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> No
         elif method == "blessing_count" and "n" in d:
             try:
                 BLESSING_COUNT_CHECKS[name] = int(d["n"])
+            except (ValueError, TypeError):
+                pass
+        elif method == "bit" and "bit" in d:
+            try:
+                BLESSING_BIT_CHECKS[name] = int(d["bit"])
             except (ValueError, TypeError):
                 pass
     ITEM_OFFSETS.clear()

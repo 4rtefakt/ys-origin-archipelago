@@ -50,9 +50,8 @@ ZONE_BY_DECADE = {
 # Module-relative bases for the unified "watch an int32 for <1 -> >=1" detection.
 GFLAGS_BASE = 0x36B91C        # g_flags[] (items + event/location flags)
 FLOOR_OFFSET = 0x36BC58       # current floor (1..26); live-confirmed
-BLESSING_BASE = 0x36A634      # blessing state array, stride 8, level field at +0
-BLESSING_STRIDE = 8
-BLESSING_COUNT = 24           # purchasable GROW options (provisional; live-refine)
+BLESSING_BITFIELD = 0x36BC80  # one bit per blessing/level purchased (live-confirmed)
+BLESSING_ARMOR_OFFSET = 0x36A684  # armor blessing (array slot, not a bit)
 
 
 def _gflag_detect(idx: int) -> dict:
@@ -212,19 +211,28 @@ class Builder:
             })
 
     def blessings(self) -> None:
-        """SP-bought Divine Blessings as progressive checks. Live RE showed each
-        purchase (simple or level-up) sets one bit in the bitfield at 0x36BC80
-        (scattered bits) and the armor blessing sets array slot 0x36A684. So the
-        client counts `popcount(0x36BC80) + (armor!=0)` and fires "Purchase #N"
-        when that total reaches N — no per-blessing bit mapping needed.
-        EXCLUDED (filler-only): the exact max purchase count isn't pinned, so a
-        high-N check might never fire; filler keeps seeds beatable."""
-        for n in range(1, BLESSING_COUNT + 1):
+        """SP-bought Divine Blessings, named from the live-captured bit map
+        (tools/blessing_bits.json): armor sets array slot 0x36A684; every other
+        blessing/level sets one scattered bit in the bitfield 0x36BC80. One named
+        check per known bit (+ armor). EXCLUDED (filler-only) so the expensive
+        ones don't force SP grinds for progression."""
+        mp = json.loads((Path(__file__).parent / "blessing_bits.json").read_text())
+        armor = mp.get("armor_array_+0x36A684")
+        if armor:
             self.locs.append({
-                "id": f"blessing/{n}", "type": "blessing", "zone": "Blessings",
+                "id": "blessing/armor", "type": "blessing", "zone": "Blessings",
                 "floor": "", "room": "Goddess Statue",
-                "name": self._name(f"Divine Blessing Purchase #{n}"),
-                "detect": {"method": "blessing_count", "n": n},
+                "name": self._name(f"Divine Blessing: {armor}"),
+                "detect": {"method": "flag", "offset": f"0x{BLESSING_ARMOR_OFFSET:X}"},
+                "items": [],
+            })
+        for bit, name in sorted(mp.get("bit", {}).items(), key=lambda x: int(x[0])):
+            self.locs.append({
+                "id": f"blessing/bit{bit}", "type": "blessing", "zone": "Blessings",
+                "floor": "", "room": "Goddess Statue",
+                "name": self._name(f"Divine Blessing: {name}"),
+                "detect": {"method": "bit", "offset": f"0x{BLESSING_BITFIELD:X}",
+                           "bit": int(bit)},
                 "items": [],
             })
 
