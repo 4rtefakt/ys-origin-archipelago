@@ -15,6 +15,7 @@ namespace overlay {
 static std::mutex g_mtx;
 static std::deque<std::string> g_items;   // most-recent appended at the back
 static std::string g_status = "connecting...";
+static std::string g_room;                // current room (scene), from hook_ap
 
 // -- called from the AP client thread -------------------------------------- #
 
@@ -27,6 +28,11 @@ void push_item(const std::string& text) {
 void set_status(const std::string& text) {
     std::lock_guard<std::mutex> lk(g_mtx);
     g_status = text;
+}
+
+void set_room(const std::string& text) {
+    std::lock_guard<std::mutex> lk(g_mtx);
+    g_room = text;
 }
 
 // -- drawn from the render thread ------------------------------------------ #
@@ -71,7 +77,12 @@ void draw() {
     hud_line(dl, small, ssz, right, y, gold, "Archipelago");
     y += slh;
     hud_line(dl, small, ssz, right, y, dim, g_status.c_str());
-    y += slh * 1.4f;
+    y += slh;
+    if (!g_room.empty()) {
+        hud_line(dl, small, ssz, right, y, dim, g_room.c_str());
+        y += slh;
+    }
+    y += slh * 0.4f;
 
     int n = 0;
     for (auto it = g_items.rbegin(); it != g_items.rend() && n < 5; ++it, ++n) {

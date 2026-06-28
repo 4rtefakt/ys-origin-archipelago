@@ -28,6 +28,7 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -37,6 +38,7 @@ extern "C" void set_pending_box(int art_id, const char* name);  // relabel box (
 namespace overlay {
 void push_item(const std::string& text);
 void set_status(const std::string& text);
+void set_room(const std::string& text);
 }
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
@@ -90,6 +92,13 @@ static void load_config() {
 
 static const uintptr_t kGFlagsAbs = 0x0076B91C;  // runtime g_flags base
 static const int kGFlagsRel = 0x0036B91C;        // module-relative (slot_data offsets)
+// Current loaded scene = g_flags[0x1F9] (abs 0x0076C100), as a decimal leaf
+// number (S_1004 -> 1004). Stable per room, changes on transition. Drives
+// scene-method check detection (boss / room locations) + the overlay room line.
+static const int kSceneIdx = 0x1F9;
+static inline int read_current_scene() {
+    return *(volatile int*)(kGFlagsAbs + kSceneIdx * 4);
+}
 
 static APClient* g_ap = nullptr;
 static std::thread g_thread;
@@ -97,6 +106,12 @@ static std::atomic<bool> g_run{false};
 
 // flag index -> AP location id (set in slot_connected, read in ap_on_check).
 static int64_t g_flag_to_loc[0x200];
+// scene-method detection: scene number -> AP location ids fired on entering it
+// (boss arenas, room-sanity checks); scene number -> room name for the overlay.
+static std::map<int, std::vector<int64_t>> g_scene_locs;
+static std::map<int, std::string> g_scene_name;
+static std::set<int64_t> g_scene_fired;   // dedupe (each scene loc fires once)
+static int g_last_scene = -1;
 // AP item name -> g_flags index (from slot_data item_index).
 static std::map<std::string, int> g_name_to_idx;
 // queued AP location ids to check (VM hook thread -> poll thread).
@@ -195,26 +210,40 @@ static void on_slot_connected(const nlohmann::json& sd) {
         }
     }
     std::list<int64_t> scout;
+    int scenes = 0;
     if (sd.contains("location_detect")) {
         const auto& sig = sd.contains("location_signals") ? sd["location_signals"]
                                                           : nlohmann::json::object();
         for (auto& kv : sd["location_detect"].items()) {
             const auto& d = kv.value();
-            if (d.value("method", std::string()) != "flag" || !d.contains("offset"))
-                continue;
-            int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
-            int idx = (off - kGFlagsRel) / 4;
-            if (idx < 0 || idx >= 0x200) continue;
             if (!sig.contains(kv.key())) continue;
             int64_t loc = sig[kv.key()].get<int64_t>();
-            g_loc_flag[idx] = true;
-            g_flag_to_loc[idx] = loc;
-            scout.push_back(loc);
-            locs++;
+            const std::string method = d.value("method", std::string());
+            if (method == "flag" && d.contains("offset")) {
+                int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                int idx = (off - kGFlagsRel) / 4;
+                if (idx < 0 || idx >= 0x200) continue;
+                g_loc_flag[idx] = true;
+                g_flag_to_loc[idx] = loc;
+                scout.push_back(loc);
+                locs++;
+            } else if (method == "scene" && d.contains("scene")) {
+                // "S_1004" / "S_1014/S_BOX01" -> leading integer 1004 / 1014.
+                const std::string s = d["scene"].get<std::string>();
+                int num = atoi(s.c_str() + (s.size() > 2 && s[0] == 'S' ? 2 : 0));
+                if (num <= 0) continue;
+                g_scene_locs[num].push_back(loc);
+                scout.push_back(loc);
+                scenes++;
+            }
         }
     }
-    mod_log("ap: slot_connected — %d items, %d suppress, %d location flags",
-            names, supp, locs);
+    if (sd.contains("scene_names")) {
+        for (auto& kv : sd["scene_names"].items())
+            g_scene_name[atoi(kv.key().c_str())] = kv.value().get<std::string>();
+    }
+    mod_log("ap: slot_connected — %d items, %d suppress, %d location flags, "
+            "%d scene checks", names, supp, locs, scenes);
     overlay::set_status(std::string("connected as ") + g_slot);
     if (!scout.empty()) g_ap->LocationScouts(scout, 0);  // learn what's at each
 }
@@ -236,10 +265,48 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
     }
 }
 
+// Read current_scene each tick; on a room change, update the overlay room line
+// and fire any scene-method checks (boss arenas / room-sanity) for the new
+// scene, deduped so each fires once per session. Runs on the poll thread; the
+// scene cell is a plain process-memory int, safe to read from here.
+static void poll_scene() {
+    int scene = read_current_scene();
+    if (scene == g_last_scene) return;
+    g_last_scene = scene;
+
+    auto it = g_scene_name.find(scene);
+    char room[160];
+    if (it != g_scene_name.end())
+        snprintf(room, sizeof(room), "Room: %s", it->second.c_str());
+    else if (scene > 0)
+        snprintf(room, sizeof(room), "Room: S_%d", scene);
+    else
+        room[0] = '\0';
+    overlay::set_room(room);
+
+    auto locs = g_scene_locs.find(scene);
+    if (locs == g_scene_locs.end()) return;
+    std::vector<int64_t> fire;
+    for (int64_t loc : locs->second) {
+        if (g_scene_fired.insert(loc).second) fire.push_back(loc);
+    }
+    if (fire.empty()) return;
+    {
+        std::lock_guard<std::mutex> lk(g_check_mtx);
+        g_checks.insert(g_checks.end(), fire.begin(), fire.end());
+    }
+    for (int64_t loc : fire) {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f != g_loc_found.end()) overlay::push_item("Found: " + f->second);
+    }
+}
+
 static void poll_loop() {
     while (g_run.load()) {
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
+            poll_scene();
             // drain queued checks
             std::vector<int64_t> pending;
             {

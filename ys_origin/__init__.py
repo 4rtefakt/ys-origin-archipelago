@@ -148,6 +148,9 @@ class YsOriginWorld(World):
             },
             # item name -> g_flags item index, so the client can grant anything.
             "item_index": dt.item_index,
+            # scene leaf number -> room name, for the in-game overlay's current
+            # room line (and scene-method check display).
+            "scene_names": dt.scene_names(),
             # g_flags indices of the vanilla content of active chest/event
             # locations — the in-game mod suppresses these (player gets the AP
             # item over the network instead).

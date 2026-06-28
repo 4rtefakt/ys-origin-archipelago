@@ -127,6 +127,13 @@ def scene_region(scene: str) -> str:
     return f"{scene}: {room}"
 
 
+def scene_names() -> Dict[str, str]:
+    """Scene leaf number (as a string, e.g. '1004') -> room name, published in
+    slot_data so the in-game overlay can show the current room from
+    g_flags[0x1F9] (the mod has no scene table of its own)."""
+    return {str(int(s[2:])): SCENE_ROOM[s] for s in SCENE_ROOM}
+
+
 # representative scene per (zone, floor): the lowest-numbered scene on that
 # floor — reaching it == reaching the floor, so "Reach NF" attaches there.
 _floor_rep: Dict[Tuple[str, str], str] = {}
