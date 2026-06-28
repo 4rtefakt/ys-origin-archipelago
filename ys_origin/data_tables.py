@@ -50,9 +50,11 @@ ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36BC58)
 
 # Varied filler for sanity locations (real INVINFO names; counts not gated).
+# NOTE: the "X Drop N" items (Strength/Defense/MP/Recovery Drop) are transient
+# enemy combat orbs, not held inventory — they make no sense as check rewards, so
+# they are intentionally EXCLUDED from filler (enemies still drop them in-game).
 FILLER_POOL: List[str] = [
-    "Roda Fruit", "Celcetan Panacea", "Recovery Drop 1", "Recovery Drop 2",
-    "Strength Drop 1", "Defense Drop 1", "MP Drop 1", "Cleria Ore",
+    "Roda Fruit", "Celcetan Panacea", "Cleria Ore",
     "100G", "500G", "1000G", "50G",
 ]
 

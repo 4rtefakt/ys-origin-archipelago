@@ -62,16 +62,16 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         ap_on_check((int)idx); // embedded AP client -> LocationChecks
         return addr;  // let the flag set; the chest/event plays normally
     }
-    // SKILL items (bracelets 0x74/0x75/0x76): do NOT suppress for now. Suppressing
-    // them leaves the event's auto-equipped skill object dangling (g_flags=-1) ->
-    // freeze/crash. Until the equipped-skill slot is mapped (to un-equip safely),
-    // skills stay vanilla (granted+equipped consistently, fully usable). They are
-    // not randomized yet; everything else is.
-    if (idx == 0x74 || idx == 0x75 || idx == 0x76)
-        return addr;
-
-    if (g_supp_item[idx] && val >= 1)    // vanilla content of a randomized loc
-        return &g_sink;                  // suppress (player gets the AP item)
+    if (g_supp_item[idx] && val >= 1) {    // vanilla content of a randomized loc
+        // Skill items (bracelets): open a window so the event's skill-equip ops
+        // are ALL no-op'd (Hook_Equip12C + the action-fn hooks below) -> the
+        // vanilla skill is neither granted nor equipped -> no dangling/null
+        // object -> no freeze/crash on LB. The received skill is equipped from
+        // the menu later (g_flags=1, consistent), outside this window.
+        if (idx == 0x74 || idx == 0x75 || idx == 0x76)
+            g_skill_suppress_until = GetTickCount() + 600;
+        return &g_sink;                    // suppress (player gets the AP item)
+    }
 
     return addr;  // pass through unchanged
 }
@@ -135,30 +135,63 @@ __declspec(naked) static void Hook_GiveItemFn() {
     }
 }
 
-// --- suppress the vanilla event's skill-object init (no dangling -> no freeze) #
-// FUN_004448F0(ecx=skill_index) inits a skill object/state at 0x76e438+idx*16 and
-// returns &that. During the suppress window we skip the init and just return the
-// state pointer (caller stores it, but with no dangling heap object behind it).
-static const uintptr_t kSkillInitFn = 0x004448F0;
-static void* g_orig_skillinit = nullptr;
+// --- ABORT the whole vanilla skill event (no-op the altar pickup) ----------- #
+//
+// Chasing the individual skill-equip ops never converged (g_flags -> visual
+// objects 0x12C -> equipped slot -> ...), so instead we end the ENTIRE event
+// script the moment we know it's a skill pickup, keeping only the early part
+// that already ran (crucially the location-check flag at script offset 26).
+//
+// The event-VM loop (top @0x5663E0) is:
+//     edi = [ctx+0x1e4]            ; PC = program counter (script word index)
+//     cmp edi, [descriptor+0xc]    ; PC vs script length
+//     jae 0x56df7c                 ; PC >= length  -> script ends (natural exit)
+// So pushing the PC ([ctx+0x1e4]) past the length makes the VM end the script on
+// its next iteration via its OWN completion path — clean, no forced return.
+//
+// We trigger this at the first skill op, sub-op 0x12C @ script offset 40 (the
+// 3 visual spawns), which runs right after the gives+check (offsets 14..26). Its
+// handler is @0x56B8F3; we splice at 0x56B983 (after operand fetch, ctx still in
+// edi). During the skill-suppress window we abort; otherwise pass through.
+// Result: walk up to the altar, press A -> check fires (AP grants the item) ->
+// event vanishes. No bubbles, no tutorials, no pickup dialog, no skill equip.
+static const uintptr_t kEquip12C = 0x0056B983;
+static void* g_orig_12c = nullptr;
+static int g_skip12c = 0;
 
-static int __cdecl skill_init_skip() {
+static int __cdecl skill_supp_active() {
     return (GetTickCount() < g_skill_suppress_until) ? 1 : 0;
 }
 
-__declspec(naked) static void Hook_SkillInit() {
+// ctx = VM script context (edi in the loop). End the script + restore the event
+// state flag the (now-skipped) tail would have set, so no cutscene lock lingers.
+static void __cdecl abort_skill_event(void* ctx) {
+    *(volatile unsigned long*)((unsigned char*)ctx + 0x1e4) = 0x7FFFFFFFul;
+    *(volatile int*)(kGFlagsBase + 0xB9 * 4) = 1;  // event-state: mark finished
+    mod_log("skill event: aborted (PC->end), check already fired");
+}
+
+__declspec(naked) static void Hook_Equip12C() {
     __asm {
-        push ecx                          // save skill_index (thiscall this)
-        call skill_init_skip
-        pop  ecx
-        test eax, eax
-        jnz  do_skip
-        jmp  dword ptr [g_orig_skillinit] // run the real init
-    do_skip:
-        mov  eax, ecx                     // return &skill_state[skill_index]
-        shl  eax, 4                       //   = 0x76e438 + skill_index*16
-        add  eax, 0x76E438
-        ret
+        pushad
+        pushfd
+        call skill_supp_active
+        mov  g_skip12c, eax        // stash result (popad would clobber eax)
+        popfd
+        popad
+        cmp  dword ptr g_skip12c, 0
+        je   normal
+        // ctx is [ebp-0x14] (edi was clobbered by the op's operand fetch). End the
+        // script, then re-enter the loop tail with edi=ctx so 0x5664C9 sets
+        // eax=ctx and edx=descriptor; the bounds check then ends the script.
+        push dword ptr [ebp - 0x14]   // ctx
+        call abort_skill_event
+        add  esp, 4
+        mov  edi, dword ptr [ebp - 0x14]   // restore edi = ctx for the loop tail
+        mov  ecx, 0x005664C9               // loop tail: sets edx, eax=edi(ctx)
+        jmp  ecx
+    normal:
+        jmp  dword ptr [g_orig_12c]   // relocated bytes -> resume event normally
     }
 }
 
@@ -170,9 +203,8 @@ void hook_vm_install() {
     MH_STATUS cg = MH_CreateHook((void*)kGiveItemFn, (void*)&Hook_GiveItemFn,
                                  &g_orig_give);
     MH_STATUS eg = MH_EnableHook((void*)kGiveItemFn);
-    // NOTE: skill-init suppression hook (kSkillInitFn / Hook_SkillInit) is NOT
-    // installed — skipping FUN_004448F0 crashes (the caller needs the object it
-    // allocates). Kept for reference; skills are left vanilla for now.
-    (void)&Hook_SkillInit; (void)kSkillInitFn; (void)&skill_init_skip;
-    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d", (int)c, (int)e, (int)cg, (int)eg);
+    MH_STATUS cs = MH_CreateHook((void*)kEquip12C, (void*)&Hook_Equip12C, &g_orig_12c);
+    MH_STATUS es = MH_EnableHook((void*)kEquip12C);
+    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d",
+            (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es);
 }
