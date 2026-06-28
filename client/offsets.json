@@ -7,7 +7,6 @@
     "current_level": "0x36A760",
     "current_sp": "0x36A75C",
     "item_array_base": "0x36B91C",
-    "location_flags_base": "0x36B91C",
-    "weapon_level": "0x367B8C"
+    "location_flags_base": "0x36B91C"
   }
 }

@@ -174,12 +174,15 @@ OFFSETS = build_offsets()
 # These are module-relative offsets of *individual* entries in the two arrays
 # above, confirmed against the running game. Resolve with mem.resolve(offset).
 
-# Item/skill array entries. Granting = write 1 (see GRANT_SAFE_MIN). Consumable
-# COUNTS may be written to any positive value. Add entries here as they're mapped.
+# Item/skill array entries. Granting = write 1; consumable COUNTS may be written
+# to any positive value. Add entries here as they're mapped.
 #
-# !!! SAFETY: NEVER write a value < 1 (e.g. -1 to "un-obtain") to a key-item or
-# skill entry while the game is running — it leaves a dangling skill-object
-# pointer and FREEZES the game. apply_item enforces this. !!!
+# !!! SAFETY (verified by testing): writing a value < 1 (e.g. -1 "un-obtain") is
+# SAFE for items / key-items / consumables (they cleanly disappear) but FREEZES
+# the game for SKILL entries (a skill spawns a live runtime object; clearing it
+# dangles a pointer). So ONLY entries in SKILL_ITEMS must never go below 1.
+# apply_item only ever grants (>=1), so it's safe; the freeze risk is for the
+# future suppression/revert path, which must skip SKILL_ITEMS. !!!
 # NOTE: the item array and the location-flag array are the SAME unified
 # `g_flags[]` array: base +0x36B91C, 512 int32 entries (index = (off-0x36B91C)/4).
 # Items at low indices, location/event flags at high indices. A chest grants via
@@ -205,7 +208,12 @@ LOCATION_FLAG_OFFSETS: dict[str, int] = {
     "Chest 3 - Blue Moon Crest": 0x36BCFC,
 }
 
-# Minimum value apply_item is allowed to write to an ITEM_OFFSETS entry. Writing
-# below this (clearing a key item/skill) can freeze the game — hard floor.
+# Entries that spawn a live runtime object — clearing them (value < 1) FREEZES
+# the game. The suppression/revert path must NEVER lower these; everything else
+# is freely revertible.
+SKILL_ITEMS: frozenset[str] = frozenset({"Protective Bubble"})
+
+# Minimum value apply_item writes to an ITEM_OFFSETS entry (it only grants, so
+# this is just a floor; the real freeze risk is only for SKILL_ITEMS above).
 GRANT_SAFE_MIN = 1
 
