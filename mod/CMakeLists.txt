@@ -12,7 +12,7 @@
 # Visual Studio IDE pick the **x86** configuration.
 
 cmake_minimum_required(VERSION 3.20)
-project(yso_ap_mod CXX)
+project(yso_ap_mod C CXX)   # C too: MinHook's sources are C
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,10 +24,21 @@ endif()
 include(FetchContent)
 
 # --- MinHook (function detours) ------------------------------------------- #
+# The v1.3.3 tag predates MinHook's CMake support, so just fetch the source and
+# compile its C files straight into our DLL (robust, no extra target).
 FetchContent_Declare(minhook
     GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
     GIT_TAG        v1.3.3)
-FetchContent_MakeAvailable(minhook)
+FetchContent_GetProperties(minhook)
+if(NOT minhook_POPULATED)
+    FetchContent_Populate(minhook)
+endif()
+set(MINHOOK_SRC
+    ${minhook_SOURCE_DIR}/src/buffer.c
+    ${minhook_SOURCE_DIR}/src/hook.c
+    ${minhook_SOURCE_DIR}/src/trampoline.c
+    ${minhook_SOURCE_DIR}/src/hde/hde32.c
+    ${minhook_SOURCE_DIR}/src/hde/hde64.c)
 
 # --- Dear ImGui (no upstream CMakeLists -> populate, then compile sources) -- #
 FetchContent_Declare(imgui
@@ -51,10 +62,11 @@ add_library(dinput8 SHARED
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/backends/imgui_impl_dx9.cpp
     ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
+    ${MINHOOK_SRC}
 )
 target_include_directories(dinput8 PRIVATE
-    src ${IMGUI_DIR} ${IMGUI_DIR}/backends)
-target_link_libraries(dinput8 PRIVATE minhook d3d9 dxguid)
+    src ${IMGUI_DIR} ${IMGUI_DIR}/backends ${minhook_SOURCE_DIR}/include)
+target_link_libraries(dinput8 PRIVATE d3d9 dxguid)
 
 # Name the artifact exactly dinput8.dll (no "lib" prefix on MinGW).
 set_target_properties(dinput8 PROPERTIES PREFIX "" OUTPUT_NAME "dinput8")

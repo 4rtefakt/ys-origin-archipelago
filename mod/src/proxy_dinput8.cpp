@@ -4,6 +4,7 @@
 // Params are kept ABI-compatible but header-free (REFIID/REFCLSID are pointers,
 // LPVOID* is void**), so we don't need the DirectInput SDK headers here.
 #include <windows.h>
+#include <objbase.h>   // REFCLSID / REFIID for the COM-shaped exports
 
 static HMODULE g_real = nullptr;
 
@@ -35,8 +36,8 @@ HRESULT WINAPI DllCanUnloadNow() {
     return p ? p() : S_FALSE;
 }
 
-HRESULT WINAPI DllGetClassObject(const void* rclsid, const void* riid, void** out) {
-    typedef HRESULT(WINAPI* fn)(const void*, const void*, void**);
+HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* out) {
+    typedef HRESULT(WINAPI* fn)(REFCLSID, REFIID, LPVOID*);
     static fn p = (fn)real("DllGetClassObject");
     return p ? p(rclsid, riid, out) : E_FAIL;
 }
