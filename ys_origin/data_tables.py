@@ -13,12 +13,14 @@ those fixed) plus helpers that select the active subset for a given option set.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 _DATA_PATH = Path(__file__).parent / "data" / "locations.json"
 _ITEMS_PATH = Path(__file__).parent / "data" / "items.json"
+_ROOM_LOGIC_PATH = Path(__file__).parent / "data" / "room_logic.json"
 
 LOC_BASE_ID = 0x59_6000
 ITEM_BASE_ID = 0x59_5000
@@ -77,11 +79,103 @@ location_name_to_id: Dict[str, int] = {
     name: LOC_BASE_ID + i for i, name in enumerate(sorted(LOC_META))
 }
 
-# Region chain over the zones that actually appear.
-_present = [z for z in ZONE_ORDER if any(l["zone"] == z for l in _LOCS)]
-ALL_REGIONS: List[str] = [MENU] + _present
-CONNECTIONS: List[tuple] = [(MENU, _present[0])] + list(zip(_present, _present[1:])) \
-    if _present else []
+# --------------------------------------------------------------------------- #
+# Scene (room) graph.
+#
+# Region identity is the SCENE id: scene -> room and scene -> zone are clean
+# functions, while room NAMES repeat across zones. current_scene (+0x36C100)
+# exposes the scene live, so it is also the detection key.
+#
+# Two tiers of regions:
+#   * the 6 tower ZONE regions + Menu — a linear, boss-medallion-gated backbone
+#     (the coarse beatability backstop, unchanged from the old design);
+#   * one region per SCENE. By default every scene connects from its zone region
+#     (free) -> reachable as soon as the zone is. `room_logic.json` can AUTHOR a
+#     scene to instead require an explicit adjacency + per-edge items/skills.
+# --------------------------------------------------------------------------- #
+
+def _scene_of(loc: dict) -> str:
+    """Canonical scene id for a location ('S_1004'), or '' if it has none
+    (blessings; floor checks are mapped to a representative scene separately)."""
+    s = loc.get("detect", {}).get("scene")
+    if s:
+        return s.split("/")[0]
+    m = re.match(r"(S_\d+)", loc.get("id", ""))
+    return m.group(1) if m else ""
+
+
+# scene -> room name / zone / floor (functions over the dataset).
+SCENE_ROOM: Dict[str, str] = {}
+SCENE_ZONE: Dict[str, str] = {}
+SCENE_FLOOR: Dict[str, str] = {}
+for _l in _LOCS:
+    _sc = _scene_of(_l)
+    if not _sc:
+        continue
+    SCENE_ROOM.setdefault(_sc, _l.get("room", "") or _sc)
+    SCENE_ZONE.setdefault(_sc, _l.get("zone", ""))
+    if _l.get("floor"):
+        SCENE_FLOOR.setdefault(_sc, _l["floor"])
+
+# zones that actually appear, in tower order.
+_present = [z for z in ZONE_ORDER if any(z == SCENE_ZONE.get(s) for s in SCENE_ROOM)]
+
+
+def scene_region(scene: str) -> str:
+    """Region name for a scene, e.g. 'S_1004: 2F Path 2 (Wind Skill)'."""
+    room = SCENE_ROOM.get(scene, scene)
+    return f"{scene}: {room}"
+
+
+# representative scene per (zone, floor): the lowest-numbered scene on that
+# floor — reaching it == reaching the floor, so "Reach NF" attaches there.
+_floor_rep: Dict[Tuple[str, str], str] = {}
+for _sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
+    _key = (SCENE_ZONE.get(_sc, ""), SCENE_FLOOR.get(_sc, ""))
+    _floor_rep.setdefault(_key, _sc)
+
+# Authored per-scene room logic. A scene present here is "authored": it gets
+# only its listed incoming edges (default zone edge suppressed).
+_room_logic: dict = json.loads(_ROOM_LOGIC_PATH.read_text("utf-8")).get("scenes", {})
+
+
+def _src_region(src: str) -> str:
+    """An edge source is either a scene id (-> its region) or a zone name."""
+    return scene_region(src) if re.match(r"S_\d+$", src) else src
+
+
+# Build the region list, the connection edges, and per-edge requirements.
+# Requirement expr: list of terms (AND); a term that is a list is an OR-group.
+ALL_REGIONS: List[str] = [MENU] + _present + [scene_region(s) for s in sorted(SCENE_ROOM)]
+CONNECTIONS: List[Tuple[str, str]] = []
+EDGE_REQS: Dict[Tuple[str, str], list] = {}
+
+
+def _add_edge(src: str, dst: str, req: Optional[list] = None) -> None:
+    CONNECTIONS.append((src, dst))
+    if req:
+        EDGE_REQS[(src, dst)] = req
+
+
+# Zone backbone (Menu -> z0 -> z1 -> ...). Boss-medallion gates on the zone->zone
+# entrances are applied in rules.py via active_gates() (which also checks the
+# medallion is actually in the pool); EDGE_REQS carries only room-logic reqs.
+if _present:
+    _add_edge(MENU, _present[0])
+    for _a, _b in zip(_present, _present[1:]):
+        _add_edge(_a, _b)
+
+# Scene edges: authored -> explicit; otherwise default from the zone region.
+for _sc in sorted(SCENE_ROOM):
+    _dst = scene_region(_sc)
+    _spec = _room_logic.get(_sc)
+    if _spec and _spec.get("from"):
+        for _edge in _spec["from"]:
+            _src, _req = (_edge[0], _edge[1] if len(_edge) > 1 else [])
+            _add_edge(_src_region(_src), _dst, _req)
+    else:
+        _zone = SCENE_ZONE.get(_sc)
+        _add_edge(_zone if _zone in _present else MENU, _dst)
 
 # Vanilla item per location (canonical = first granted item), and the item
 # universe (every item that can be created: vanilla + filler + goal).
@@ -124,15 +218,31 @@ def enabled_categories(opts) -> Set[str]:
     return on
 
 
+def _region_of_location(l: dict) -> str:
+    """The scene-region a location lives in.
+
+    * scene-bearing (chest/event/statue/boss/room) -> its scene region;
+    * floor checks ("Reach NF", no scene) -> the representative scene of that
+      (zone, floor) so they inherit the room logic on the way up;
+    * blessings / anything with no tower scene -> Menu (always reachable).
+    """
+    scene = _scene_of(l)
+    if scene and scene in SCENE_ROOM:
+        return scene_region(scene)
+    if l.get("type") == "floor":
+        rep = _floor_rep.get((l.get("zone", ""), l.get("floor", "")))
+        if rep:
+            return scene_region(rep)
+    zone = l.get("zone", "")
+    return zone if zone in _present else MENU
+
+
 def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = defaultdict(list)
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
-        # tower-zone locations go in their zone; the rest (e.g. blessings, bought
-        # anywhere) attach to Menu, which is always reachable.
-        region = l["zone"] if l["zone"] in _present else MENU
-        out[region].append(l["name"])
+        out[_region_of_location(l)].append(l["name"])
     return dict(out)
 
 
@@ -173,3 +283,23 @@ def vanilla_items(enabled: Set[str]) -> List[str]:
 def active_gates() -> Dict[str, str]:
     return {z: i for z, i in ZONE_GATE.items()
             if i in item_name_to_id and z in ALL_REGIONS}
+
+
+def req_satisfied(req: list, state, player) -> bool:
+    """Evaluate a room-logic requirement expr against an AP CollectionState.
+
+    ``req`` is a list of terms ANDed together; a term that is itself a list is
+    an OR-group (any one suffices). Unknown item names are treated as
+    unobtainable (so a typo fails closed rather than silently passing)."""
+    for term in req:
+        if isinstance(term, (list, tuple)):
+            if not any(state.has(x, player) for x in term):
+                return False
+        elif not state.has(term, player):
+            return False
+    return True
+
+
+def edge_requirements() -> Dict[Tuple[str, str], list]:
+    """(src_region, dst_region) -> requirement expr, for every authored edge."""
+    return dict(EDGE_REQS)

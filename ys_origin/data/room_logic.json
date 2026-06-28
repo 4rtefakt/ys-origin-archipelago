@@ -1,0 +1,31 @@
+{
+  "_doc": [
+    "Per-room (per-SCENE) access logic for the Ys Origin apworld.",
+    "",
+    "Region identity is the SCENE id (e.g. S_1004), because scene->room and",
+    "scene->zone are clean functions while room NAMES repeat across zones",
+    "(Boss Room / Save Point / Staircase). current_scene (+0x36C100, g_flags",
+    "[0x1F9]) is what the game exposes live, so scene is also the detection key.",
+    "",
+    "A scene listed under `scenes` is AUTHORED: it gets EXACTLY the incoming",
+    "edges in its `from` list and its default (permissive, zone-gated) edge is",
+    "suppressed. A scene NOT listed stays on the default edge: reachable as soon",
+    "as its zone is (the coarse boss-medallion backstop), so un-authored zones",
+    "remain beatable. Author zone-by-zone (Wailing Blue first); every",
+    "location-bearing scene in a zone must be reachable through authored edges",
+    "before that zone is considered authored.",
+    "",
+    "`from` is a list of [source, requirement] edges. `source` is another scene",
+    "id (S_xxxx) OR a zone name (the zone-region entry, e.g. 'Wailing Blue').",
+    "`requirement` is a list treated as AND of terms; a term that is itself a",
+    "list is an OR-group. Item/skill names must match items.json (e.g. the wind",
+    "skill is 'Ventus Bracelet'). Examples:",
+    "  []                                  -> no requirement (free traversal)",
+    "  ['Ventus Bracelet']                 -> needs the wind skill",
+    "  ['Bronze Key', ['Ventus Bracelet','Dash']] -> Bronze Key AND (wind OR dash)",
+    "",
+    "Part-3 tooling (tools/scenelog.py during a vanilla run) auto-builds the",
+    "adjacency + the obtained-before-each-room inventory to seed this file."
+  ],
+  "scenes": {}
+}
