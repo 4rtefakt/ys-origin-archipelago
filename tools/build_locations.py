@@ -41,6 +41,12 @@ FLOOR_RE = re.compile(r"\b(\d{1,2}F|B\d)\b")
 KEYISH = (set(range(0x4E, 0x54)) | {0x5C, 0x6F, 0x6B}
           | set(range(0x63, 0x71)) | {0x72, 0x73, 0x74, 0x75, 0x76})
 
+# Flag-ish set values (excludes scene-state counters set to 2,3,...).
+_FLAG_VALUES = frozenset({-1, 0, 1})
+# Reject a flag as an event-detect signal if more than this many tower scripts
+# set it — those are shared story-progress flags, not per-event "done" flags.
+_EVENT_FLAG_MAX_FREQ = 16
+
 ZONE_BY_DECADE = {
     "1": "Wailing Blue", "2": "Flooded Prison", "3": "Flames of Guilt",
     "4": "Silent Sands", "5": "Corrupted Blood", "6": "Demonic Core",
@@ -95,7 +101,48 @@ class Builder:
                 "items": c["items"],
             })
 
+    def _scan_flag_freq(self) -> Counter:
+        """Global set-frequency of every high (>0x7F) flag across all tower
+        scripts. A flag set by many scripts is a shared story-progress flag
+        (a bad detect signal); one set by a single script is unique to its
+        event. Cached on ``self`` for the event selection below."""
+        freq: Counter = Counter()
+        seen = set()
+        for f in self.root.rglob("*"):
+            if not (f.is_file() and f.suffix.lower() == ".xso"):
+                continue
+            k = str(f).lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            parts = str(f.relative_to(self.root)).replace("\\", "/").split("/")
+            if len(parts) < 2 or not TOWER_ZONE.match(parts[1].upper()):
+                continue
+            try:
+                xso = XSO(f.read_bytes(), parts[-1])
+            except Exception:  # noqa: BLE001
+                continue
+            high: set[int] = set()
+            for ins in xso.disasm():
+                if (ins.cls == 2 and ins.sub == 0x64 and len(ins.operands) >= 2
+                        and ins.operands[0] > 0x7F
+                        and ins.operands[1] in _FLAG_VALUES):
+                    high.add(ins.operands[0])
+            for i in high:
+                freq[i] += 1
+        return freq
+
     def events(self) -> None:
+        # The event grant sets BOTH the item index (low) and a higher event/
+        # "done" flag. Detecting via the *item* index is wrong: receiving that
+        # same item from AP writes the cell and false-fires the location (a
+        # cascade). So detect via a dedicated high flag instead — unique per
+        # event, never written by an item grant.
+        freq = self._scan_flag_freq()
+
+        # Collect qualifying scripts, grouped into logical events by
+        # (scene, granted key items) so per-character variants share one flag.
+        groups: Dict[tuple, dict] = {}
         seen = set()
         for f in self.root.rglob("*"):
             if not (f.is_file() and f.suffix.lower() == ".xso"):
@@ -117,7 +164,7 @@ class Builder:
                 xso = XSO(f.read_bytes(), base)
             except Exception:  # noqa: BLE001
                 continue
-            gives, guard = set(), False
+            gives, compared, set_vals = set(), set(), {}
             for ins in xso.disasm():
                 if ins.cls != 2 or not ins.operands:
                     continue
@@ -128,23 +175,74 @@ class Builder:
                       and len(ins.operands) > 1 and ins.operands[1] >= 1):
                     gives.add(idx)
                 elif ins.sub == 0x5F:
-                    guard = True
-            keyish = sorted(gives & KEYISH)
-            if not (keyish and guard):
+                    compared.add(idx)
+                if ins.sub == 0x64 and len(ins.operands) >= 2:
+                    set_vals.setdefault(idx, set()).add(ins.operands[1])
+            keyish = tuple(sorted(gives & KEYISH))
+            if not (keyish and compared):
                 continue
+            # high flags this script SETS to flag-ish values (detect candidates)
+            set_high = {i for i in set_vals
+                        if i > 0x7F and i not in gives
+                        and set_vals[i] <= _FLAG_VALUES}
+            tested_high = set_high & compared
+            g = groups.setdefault((sub, keyish), {
+                "scripts": [], "set_high": [], "tested": set()})
+            g["scripts"].append((sub, base, keyish))
+            g["set_high"].append(set_high)
+            g["tested"] |= tested_high
+
+        # Per logical event: candidate flags = intersection of all variants'
+        # set-flags (the common "done" flag), fallback to their union.
+        for key, g in groups.items():
+            inter = set.intersection(*g["set_high"]) if g["set_high"] else set()
+            g["cands"] = inter or set().union(*g["set_high"])
+
+        # Assign a unique high flag to each logical event. Prefer a tested
+        # guard, break ties by lowest global frequency; reject broadly-shared
+        # story flags (freq above threshold) and anything already taken.
+        taken: set[int] = set()
+
+        def pick(g) -> int | None:
+            tested = [i for i in g["cands"] if i in g["tested"]]
+            pool = sorted(tested or g["cands"], key=lambda i: (freq.get(i, 0), i))
+            for i in pool:
+                if i not in taken and freq.get(i, 0) <= _EVENT_FLAG_MAX_FREQ:
+                    return i
+            return None
+
+        # Order so events with a tested guard claim their flag first.
+        order = sorted(groups.values(),
+                       key=lambda g: (0 if (set(g["cands"]) & g["tested"]) else 1,
+                                      min((freq.get(i, 0) for i in g["cands"]),
+                                          default=9999)))
+        for g in order:
+            flag = pick(g)
+            if flag is not None:
+                taken.add(flag)
+            g["flag"] = flag
+
+        # Emit one location per granted key item per script (per-character
+        # variants stay distinct via name dedup), all sharing the event flag.
+        for (sub, keyish), g in groups.items():
+            flag = g["flag"]
             room = self.scenes.get(sub, sub)
             z = zone_of(sub)
-            # one location per granted key item (so each stays in the pool).
-            for i in keyish:
-                nm = self.names.get(i, f"0x{i:X}")
-                self.locs.append({
-                    "id": f"{sub}/{Path(base).stem}/0x{i:X}", "type": "event",
-                    "zone": z, "floor": _floor(room), "room": room,
-                    "name": self._name(f"{z}: {room} — {nm}"),
-                    "detect": _gflag_detect(i),
-                    "items": [{"id": f"0x{i:X}", "name": nm,
-                               "class": build_dataset.classify_item(i)}],
-                })
+            for sub2, base, kk in g["scripts"]:
+                for i in kk:
+                    nm = self.names.get(i, f"0x{i:X}")
+                    self.locs.append({
+                        "id": f"{sub2}/{Path(base).stem}/0x{i:X}",
+                        "type": "event", "zone": z, "floor": _floor(room),
+                        "room": room,
+                        "name": self._name(f"{z}: {room} — {nm}"),
+                        # dedicated high flag if we found one; else scene-method
+                        # (deferred — cascade-free, just not live-detectable yet).
+                        "detect": (_gflag_detect(flag) if flag is not None
+                                   else {"method": "scene", "scene": sub2}),
+                        "items": [{"id": f"0x{i:X}", "name": nm,
+                                   "class": build_dataset.classify_item(i)}],
+                    })
 
     def scene_based(self) -> None:
         tower = {k: v for k, v in self.scenes.items() if TOWER_SCENE.match(k)}

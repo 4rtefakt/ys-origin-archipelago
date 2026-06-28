@@ -129,10 +129,27 @@ def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
     return dict(out)
 
 
+# Detection methods the live client can actually observe today. A location whose
+# method isn't one of these can't be checked in-game yet, so it must stay
+# filler-only regardless of its category (e.g. an event that fell back to
+# scene-method because it had no unique non-item flag).
+LIVE_DETECT_METHODS: Set[str] = {"flag", "floor", "bit"}
+
+
 def is_excluded(loc_name: str) -> bool:
-    """True if AP should keep this location FILLER-only (provisional checks)."""
+    """True if AP should keep this location FILLER-only.
+
+    Either its category is provisional (``EXCLUDED_TYPES``) or its detection is
+    not yet live (scene-method). Placing progression where we can't detect the
+    check live would soft-lock the seed; the location still contributes its
+    vanilla item to the pool, it just won't *hold* progression.
+    """
     meta = LOC_META.get(loc_name)
-    return bool(meta and meta["type"] in EXCLUDED_TYPES)
+    if not meta:
+        return False
+    if meta["type"] in EXCLUDED_TYPES:
+        return True
+    return meta.get("detect", {}).get("method") not in LIVE_DETECT_METHODS
 
 
 # item name -> g_flags item index (== INVINFO id); the client grants by writing

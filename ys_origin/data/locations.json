@@ -1330,8 +1330,8 @@
   "room": "Outer Corridor 3",
   "name": "Corrupted Blood: Outer Corridor 3 — Mantid Medallion",
   "detect": {
-   "method": "flag",
-   "offset": "0x36BA64"
+   "method": "scene",
+   "scene": "S_5102"
   },
   "items": [
    {
@@ -1350,7 +1350,7 @@
   "name": "Corrupted Blood: Outer Corridor 3 — Black Pearl",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAC4"
+   "offset": "0x36BD50"
   },
   "items": [
    {
@@ -1369,7 +1369,7 @@
   "name": "Silent Sands: Rado Inside 4 (Feena) — Dreaming Idol",
   "detect": {
    "method": "flag",
-   "offset": "0x36BABC"
+   "offset": "0x36BD54"
   },
   "items": [
    {
@@ -1388,7 +1388,7 @@
   "name": "Flames of Guilt: Mark Treasure — Red Moon Crest",
   "detect": {
    "method": "flag",
-   "offset": "0x36BA8C"
+   "offset": "0x36BE7C"
   },
   "items": [
    {
@@ -1407,7 +1407,7 @@
   "name": "Flames of Guilt: Mark Treasure — Red Moon Crest #2",
   "detect": {
    "method": "flag",
-   "offset": "0x36BA8C"
+   "offset": "0x36BE7C"
   },
   "items": [
    {
@@ -1426,7 +1426,7 @@
   "name": "Flames of Guilt: Mark Treasure — Red Moon Crest #3",
   "detect": {
    "method": "flag",
-   "offset": "0x36BA8C"
+   "offset": "0x36BE7C"
   },
   "items": [
    {
@@ -1445,7 +1445,7 @@
   "name": "Flames of Guilt: Fire Altar — Crimson Lotusblade",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAD0"
+   "offset": "0x36BBFC"
   },
   "items": [
    {
@@ -1464,7 +1464,7 @@
   "name": "Flames of Guilt: Fire Altar — Ignis Bracelet",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAF4"
+   "offset": "0x36BBFC"
   },
   "items": [
    {
@@ -1483,7 +1483,7 @@
   "name": "Flames of Guilt: Fire Altar — Crimson Lotusblade #2",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAD0"
+   "offset": "0x36BBFC"
   },
   "items": [
    {
@@ -1502,7 +1502,7 @@
   "name": "Flames of Guilt: Fire Altar — Ignis Bracelet #2",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAF4"
+   "offset": "0x36BBFC"
   },
   "items": [
    {
@@ -1521,7 +1521,7 @@
   "name": "Flooded Prison: Skill Room — Levinstrike Warhammer",
   "detect": {
    "method": "flag",
-   "offset": "0x36BACC"
+   "offset": "0x36BE58"
   },
   "items": [
    {
@@ -1540,7 +1540,7 @@
   "name": "Flooded Prison: Skill Room — Terra Bracelet",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAF0"
+   "offset": "0x36BE58"
   },
   "items": [
    {
@@ -1559,7 +1559,7 @@
   "name": "Wailing Blue: 1F Save — Dreaming Idol",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAC0"
+   "offset": "0x36BD90"
   },
   "items": [
    {
@@ -1578,7 +1578,7 @@
   "name": "Wailing Blue: 2F Path 2 (Wind Skill) — Cerulean Flabellum",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAC8"
+   "offset": "0x36BDDC"
   },
   "items": [
    {
@@ -1597,7 +1597,7 @@
   "name": "Wailing Blue: 2F Path 2 (Wind Skill) — Ventus Bracelet",
   "detect": {
    "method": "flag",
-   "offset": "0x36BAEC"
+   "offset": "0x36BDDC"
   },
   "items": [
    {
