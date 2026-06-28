@@ -8,6 +8,9 @@ venv/
 # apworld build artifact (zip ys_origin/ to produce this)
 *.apworld
 
+# discovery output from tools/flaglog.py
+flaglog*.csv
+
 # OS / editor
 Thumbs.db
 .DS_Store

@@ -80,6 +80,8 @@ client/
 tools/
   scan.py              # interactive value scanner (when you know the value)
   snapdiff.py          # snapshot-diff scanner (when you don't — flags, equipment)
+  flaglog.py           # passive g_flags change-logger — play normally, it maps
+                       #   every location flag + paired chest item to a CSV
 requirements.txt
 pyproject.toml
 README.md
