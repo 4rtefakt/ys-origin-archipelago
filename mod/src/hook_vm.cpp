@@ -7,19 +7,24 @@
 //     0x567D19: jmp 0x5664c9
 // where eax = &g_flags[idx]. We splice 0x567D17 *before* the write, let a C
 // decision function inspect (idx, val), and have it return the address to write
-// to. Returning the same address = pass through; returning a *different*
-// g_flags cell = swap the granted item; returning a scratch sink = suppress.
+// to. Returning the same address = pass through; returning a scratch sink =
+// suppress (the vanilla item is never written — zero flash, unlike the external
+// client's after-the-fact revert).
 //
-// This is the in-process, zero-flash content replacement the external client
-// can only approximate after the fact. PROOF-OF-CONCEPT mapping for now: swap
-// the first-2F-chest Panacea (0x59) for a Roda Fruit (0x57). The real
-// per-location map will be fed in from the AP client (socket bridge) later.
+// Which items to suppress / which flags are checks is registered at runtime by
+// the Python AP client over the socket bridge (hook_bridge.cpp). This is the
+// in-process core of the randomizer: suppress vanilla, detect checks, and grant
+// the player's real (networked) items via the bridge 'V' command.
 //
 // No ASLR (image base 0x400000) so the absolute address is valid at runtime.
 #include <windows.h>
+#include <cstdio>
 #include "MinHook.h"
 
 void mod_log(const char* fmt, ...);
+void bridge_emit(const char* line);
+extern bool g_loc_flag[0x200];   // registered randomized-location flags
+extern bool g_supp_item[0x200];  // vanilla item indices to suppress
 
 static const uintptr_t kGrantStore = 0x00567D17;  // mov [eax], ecx
 static const uintptr_t kGFlagsBase = 0x0076B91C;
@@ -30,19 +35,30 @@ static int g_sink = 0;
 
 // Returns the address the grant should actually write to (eax for the store).
 // addr = &g_flags[idx] the VM intended; val = value about to be written.
+//
+// Bridge-driven: the Python AP client registers (via the socket bridge) which
+// vanilla item indices to suppress and which location flags to watch.
+//   * suppressed item -> redirect to a sink (vanilla never granted; the player
+//     receives the AP item over the network, applied via the bridge 'V' cmd).
+//   * registered location flag -> emit a check so the client sends a
+//     LocationCheck; the flag itself still sets (location registers, chest opens).
 extern "C" int* __cdecl DecideStore(int* addr, int val) {
     unsigned idx = (unsigned)(((uintptr_t)addr - kGFlagsBase) / 4);
     if (idx >= 0x200)
         return addr;  // script-local, not a g_flags grant — leave alone
 
-    // --- PROOF-OF-CONCEPT replacement map (hardcoded; bridge-fed later) ----- #
-    if (idx == 0x59) {  // chest's Celcetan Panacea -> grant a Roda Fruit instead
-        mod_log("REPLACE g_flags[0x59]=%d -> grant Roda Fruit (0x57) instead", val);
-        return (int*)(kGFlagsBase + 0x57 * 4);
-    }
-    // ----------------------------------------------------------------------- #
+    char buf[48];
+    snprintf(buf, sizeof(buf), "G %X %d", idx, val);
+    bridge_emit(buf);
 
-    mod_log("GRANT g_flags[0x%X] = %d", idx, val);
+    if (g_loc_flag[idx]) {  // a randomized location's flag is firing — a check
+        snprintf(buf, sizeof(buf), "C %X", idx);
+        bridge_emit(buf);
+        return addr;  // let the flag set; the chest/event plays normally
+    }
+    if (g_supp_item[idx] && val >= 1)  // vanilla content of a randomized loc
+        return &g_sink;                // suppress (player gets the AP item)
+
     return addr;  // pass through unchanged
 }
 

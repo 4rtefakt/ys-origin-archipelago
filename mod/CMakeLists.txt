@@ -55,6 +55,7 @@ add_library(dinput8 SHARED
     src/proxy_dinput8.cpp
     src/hook_d3d9.cpp
     src/hook_vm.cpp
+    src/hook_bridge.cpp
     src/hook_watch.cpp
     src/overlay.cpp
     src/exports.def
