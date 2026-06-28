@@ -1,0 +1,24 @@
+{
+ "_storage": "bitfield +0x36BC80 (one bit per purchase); armor -> array +0x36A684",
+ "armor_array_0x36A684": "Strengthen current armor",
+ "bit": {
+  "0": "Increase stationary heal rate",
+  "1": "Reduce damage from terrain",
+  "6": "Reduce MP usage LV1",
+  "12": "Increase effect of herbs LV1",
+  "13": "Increase movement speed",
+  "17": "Increase effect of herbs LV2"
+ },
+ "ambiguous_bits_3_8_21": [
+  "Strengthen Eyes of Fact",
+  "Increase SP gain",
+  "Increase item drop rate"
+ ],
+ "unmapped_unbought": [
+  "Reduce bad status duration LV1",
+  "Bolster bad status resists LV1",
+  "Extend drop item effects LV1",
+  "Increase Boost recovery LV1",
+  "Hasten Skill recovery LV1"
+ ]
+}
