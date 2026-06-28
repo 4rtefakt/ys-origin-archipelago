@@ -4549,5 +4549,24 @@
    "scene": "S_6151"
   },
   "items": []
+ },
+ {
+  "id": "S_1012/blue_necklace",
+  "type": "event",
+  "zone": "Wailing Blue",
+  "floor": "2F",
+  "room": "2F Gemma Room",
+  "name": "Wailing Blue: 2F Gemma Room — Blue Necklace",
+  "detect": {
+   "method": "scene",
+   "scene": "S_1012"
+  },
+  "items": [
+   {
+    "id": "0x37",
+    "name": "Blue Necklace",
+    "class": "progression"
+   }
+  ]
  }
 ]

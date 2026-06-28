@@ -22,7 +22,7 @@
     "S_1013": { "from": [["S_1005", []]] },
     "S_1006": { "from": [["S_1005", ["Bronze Key"]]] },
     "S_1009": { "from": [["S_1013", []]] },
-    "S_1010": { "from": [["S_1013", ["Bronze Key", "Mask of Eyes"]]] },
+    "S_1010": { "from": [["S_1013", ["Blue Necklace"]]] },
     "S_1002": { "from": [["S_1009", []]] },
     "S_1080": { "from": [["S_1009", ["Blue Moon Crest"]]] },
     "S_1003": { "from": [["S_1002", []]] },
@@ -46,9 +46,9 @@
     "Wailing Blue": "S_1097"
   },
   "_interim_notes": [
-    "S_1010 gate is [Bronze Key, Mask of Eyes] = the prerequisites to reach the",
-    "S_1012 Gemma Room cutscene that grants the (currently NON-randomized) Blue",
-    "Necklace. When the Blue Necklace is added to the pool (its missing event",
-    "location), change this gate to [\"Blue Necklace\"]. See room_graph_notes.md."
+    "S_1010 gate is now [\"Blue Necklace\"] (the necklace lets you resist the",
+    "S_1013 teleport). The Blue Necklace is randomized via a new event location",
+    "at S_1012 (scene-method detection); the mod suppresses the vanilla 0x37",
+    "grant. AP places the real necklace reachably before S_1010."
   ]
 }

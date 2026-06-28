@@ -184,8 +184,10 @@ Per-location overrides (reached from a different room than their scene):
 1. Flag **0x36C094** is labeled chest "Wailing Blue: 2F Path 1 #3" (Mask of
    Eyes / Cleria Ring) but is really the **EPONA midboss drop in S_1080**.
    Re-scene it to S_1080 / "3F Midboss".
-2. **Missing location:** the S_1012 Gemma Room cutscene grants the Blue Necklace
-   (0x37) but has no event location -> not randomized/suppressed. Add it.
+2. **[DONE]** Added the S_1012 Gemma Room event location (Blue Necklace 0x37,
+   scene-method) -> now randomized + suppressed; S_1010 gate switched to
+   ["Blue Necklace"]. (TODO: fold this into build_locations.py so a regen keeps
+   it — currently a manual entry in locations.json.)
 3. (watch for more mis-scened "chest" locations whose flag is really an
    event/boss drop — the script-scene heuristic can misplace them.)
 4. **Leather Greaves = item 0x80** (S_1010 chest) is OUTSIDE the 128-entry
