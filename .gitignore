@@ -11,6 +11,10 @@ venv/
 # discovery output from tools/flaglog.py
 flaglog*.csv
 
+# overlay icons are extracted from the user's own game copy (game art) —
+# generate locally with tools/extract_icons.py, don't commit
+client/icons/
+
 # OS / editor
 Thumbs.db
 .DS_Store

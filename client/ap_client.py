@@ -32,7 +32,18 @@ from .game_state import (
 )
 from .memory import ProcessMemory, MemoryError_
 from .offsets import MODULE_NAME, OffsetNotMapped
+from .overlay import Overlay
 from .suppression import Suppressor
+
+ICON_DIR = Path(__file__).parent / "icons"
+
+
+def _overlay_enabled() -> bool:
+    """Show the recent-items overlay window (default on). Disable with
+    ``YSO_OVERLAY=0`` for headless / CI runs."""
+    import os
+    return os.environ.get("YSO_OVERLAY", "1").strip().lower() \
+        not in ("0", "false", "no", "off")
 
 log = logging.getLogger("ys_origin.client")
 
@@ -103,6 +114,9 @@ def build_context_class():
             # Replaces vanilla chest contents with the AP item (content
             # replacement). Disable via YSO_SUPPRESS=0 for an additive loop.
             self.suppressor = Suppressor(enabled=_suppress_enabled())
+            # Always-on-top "recent items" overlay (YSO_OVERLAY=0 to disable).
+            self.overlay = Overlay(icon_dir=ICON_DIR, enabled=_overlay_enabled())
+            self.overlay.start()
             # signal-string -> AP location id; filled from slot data / datapackage
             self.location_signal_to_id: Dict[str, int] = {}
 
@@ -142,6 +156,12 @@ def build_context_class():
                                      suppressor=self.suppressor)
                     log.info("applied item #%d %r (write=%s)",
                              self.applied_item_index, item_name, did)
+                    src = ""
+                    try:
+                        src = self.player_names.get(net_item.player, "")
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self.overlay.push(item_name, source=src)
                 except OffsetNotMapped as e:
                     log.error("cannot apply %r yet: %s", item_name, e)
                     # Stop; retry once the offset is mapped & client restarted.
@@ -248,6 +268,8 @@ async def _amain(server: Optional[str], password: Optional[str],
         watcher.cancel()
         if ctx.mem is not None:
             ctx.mem.close()
+        if getattr(ctx, "overlay", None) is not None:
+            ctx.overlay.stop()
         await ctx.shutdown()
 
 

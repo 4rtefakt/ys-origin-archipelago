@@ -70,6 +70,23 @@ def names(path: Path) -> Dict[int, str]:
     return {i: nd[0] for i, nd in parse(path).items()}
 
 
+_ICON_TAG = re.compile(rb"[a-z]{2}_\d{2}")
+
+
+def icon_tags(path: Path) -> Dict[int, str]:
+    """``{item_id: icon_tag}`` (e.g. 0x57 -> 'tl_21'); maps to MENU/ICON/<TAG>.DDS
+    (weapons: MENU/ICON2/<TAG>V.DDS). Missing if the record has no icon ref."""
+    data = path.read_bytes()
+    _, _, rec_size, count = struct.unpack_from("<IIII", data, 0)
+    out: Dict[int, str] = {}
+    for i in range(count):
+        rec = data[HEADER + i * rec_size: HEADER + (i + 1) * rec_size]
+        m = _ICON_TAG.search(rec)
+        if m:
+            out[i] = m.group().decode("ascii")
+    return out
+
+
 def main(argv) -> int:
     if len(argv) < 2:
         print(__doc__)
