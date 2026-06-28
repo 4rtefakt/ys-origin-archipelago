@@ -6,12 +6,30 @@
 // game's window. Toggle the overlay with the INSERT key.
 #include <windows.h>
 #include <d3d9.h>
+#include <cstdio>
+#include <cstdarg>
 #include "MinHook.h"
 #include "imgui.h"
 #include "imgui_impl_dx9.h"
 #include "imgui_impl_win32.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
+
+// --- diagnostics: append-only log at %TEMP%\yso_ap_mod.log -------------------
+static char g_logpath[MAX_PATH] = "";
+void mod_log(const char* fmt, ...) {
+    if (!g_logpath[0]) {
+        DWORD n = GetTempPathA(MAX_PATH, g_logpath);
+        lstrcpyA(g_logpath + n, "yso_ap_mod.log");
+    }
+    FILE* f = fopen(g_logpath, "a");
+    if (!f) return;
+    va_list ap; va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
 
 namespace overlay { void draw(); }
 
@@ -34,9 +52,11 @@ static LRESULT CALLBACK hk_WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static void imgui_init(IDirect3DDevice9* dev) {
+    mod_log("imgui_init: begin (dev=%p)", (void*)dev);
     D3DDEVICE_CREATION_PARAMETERS cp{};
     dev->GetCreationParameters(&cp);
     g_hwnd = cp.hFocusWindow;
+    mod_log("imgui_init: hFocusWindow=%p", (void*)g_hwnd);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -45,9 +65,16 @@ static void imgui_init(IDirect3DDevice9* dev) {
     ImGui_ImplDX9_Init(dev);
     o_WndProc = (WNDPROC)SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)hk_WndProc);
     g_imgui_ready = true;
+    mod_log("imgui_init: done (WndProc subclassed, ready)");
 }
 
+static bool g_logged_first_endscene = false;
+
 static HRESULT WINAPI hk_EndScene(IDirect3DDevice9* dev) {
+    if (!g_logged_first_endscene) {
+        g_logged_first_endscene = true;
+        mod_log("hk_EndScene: first call (dev=%p)", (void*)dev);
+    }
     if (!g_imgui_ready)
         imgui_init(dev);
     if (g_show) {
@@ -74,6 +101,7 @@ static HRESULT WINAPI hk_Reset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp)
 // Read the device vtable by creating a temporary device.
 static bool get_device_vtable(void** vtable, size_t count) {
     IDirect3D9* d3d = Direct3DCreate9(D3D_SDK_VERSION);
+    mod_log("get_device_vtable: Direct3DCreate9 -> %p", (void*)d3d);
     if (!d3d) return false;
 
     WNDCLASSEXA wc{sizeof(wc)};
@@ -88,10 +116,24 @@ static bool get_device_vtable(void** vtable, size_t count) {
     pp.Windowed = TRUE;
     pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
     pp.hDeviceWindow = wnd;
+    // Explicit 1x1 backbuffer: the tiny probe window has ~0 client area, so
+    // letting D3D infer the size (0) yields D3DERR_INVALIDCALL. D3DFMT_UNKNOWN
+    // is valid for a windowed device (uses the desktop format).
+    pp.BackBufferWidth = 1;
+    pp.BackBufferHeight = 1;
+    pp.BackBufferFormat = D3DFMT_UNKNOWN;
+    pp.BackBufferCount = 1;
 
     IDirect3DDevice9* dev = nullptr;
+    // Try software then hardware vertex processing (some drivers reject one).
     HRESULT hr = d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, wnd,
                                    D3DCREATE_SOFTWARE_VERTEXPROCESSING, &pp, &dev);
+    if (FAILED(hr) || !dev) {
+        mod_log("get_device_vtable: SW-VP CreateDevice hr=0x%08lX; retrying HW-VP", hr);
+        hr = d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, wnd,
+                               D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &dev);
+    }
+    mod_log("get_device_vtable: CreateDevice hr=0x%08lX dev=%p", hr, (void*)dev);
     bool ok = false;
     if (SUCCEEDED(hr) && dev) {
         memcpy(vtable, *reinterpret_cast<void***>(dev), count * sizeof(void*));
@@ -105,11 +147,20 @@ static bool get_device_vtable(void** vtable, size_t count) {
 }
 
 void hook_d3d9_install() {
+    mod_log("hook_d3d9_install: begin");
     void* vt[119] = {};
-    if (!get_device_vtable(vt, 119)) return;
-    if (MH_Initialize() != MH_OK) return;
-
-    MH_CreateHook(vt[42], (void*)&hk_EndScene, (void**)&o_EndScene);  // EndScene
-    MH_CreateHook(vt[16], (void*)&hk_Reset, (void**)&o_Reset);        // Reset
-    MH_EnableHook(MH_ALL_HOOKS);
+    if (!get_device_vtable(vt, 119)) {
+        mod_log("hook_d3d9_install: get_device_vtable FAILED -> aborting");
+        return;
+    }
+    mod_log("hook_d3d9_install: vtable ok (EndScene=%p Reset=%p)", vt[42], vt[16]);
+    if (MH_Initialize() != MH_OK) {
+        mod_log("hook_d3d9_install: MH_Initialize FAILED");
+        return;
+    }
+    MH_STATUS s1 = MH_CreateHook(vt[42], (void*)&hk_EndScene, (void**)&o_EndScene);
+    MH_STATUS s2 = MH_CreateHook(vt[16], (void*)&hk_Reset, (void**)&o_Reset);
+    MH_STATUS s3 = MH_EnableHook(MH_ALL_HOOKS);
+    mod_log("hook_d3d9_install: CreateHook EndScene=%d Reset=%d Enable=%d (0=OK)",
+            (int)s1, (int)s2, (int)s3);
 }

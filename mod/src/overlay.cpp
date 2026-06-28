@@ -6,8 +6,12 @@
 namespace overlay {
 
 void draw() {
-    ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(380, 260), ImGuiCond_FirstUseEver);
+    // Top-RIGHT corner: the top-left overlaps the game's "New Area" titles.
+    const ImGuiIO& io = ImGui::GetIO();
+    const float w = 380.0f, h = 260.0f, margin = 20.0f;
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - w - margin, margin),
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_FirstUseEver);
     ImGui::Begin("Archipelago");
 
     ImGui::TextColored(ImVec4(0.88f, 0.64f, 0.34f, 1.0f),

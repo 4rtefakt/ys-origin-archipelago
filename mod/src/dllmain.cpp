@@ -4,8 +4,10 @@
 
 void proxy_load_real();
 void hook_d3d9_install();
+void mod_log(const char* fmt, ...);
 
 static DWORD WINAPI init_thread(LPVOID) {
+    mod_log("init_thread: started, installing hook");
     hook_d3d9_install();
     return 0;
 }
@@ -13,7 +15,9 @@ static DWORD WINAPI init_thread(LPVOID) {
 BOOL APIENTRY DllMain(HMODULE mod, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(mod);
+        mod_log("DllMain: DLL_PROCESS_ATTACH");
         proxy_load_real();
+        mod_log("DllMain: proxy_load_real done, spawning init thread");
         CreateThread(nullptr, 0, init_thread, nullptr, 0, nullptr);
     }
     return TRUE;
