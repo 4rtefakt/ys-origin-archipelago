@@ -13,7 +13,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from BaseClasses import Item, ItemClassification, Location, Region, Tutorial
+from BaseClasses import (
+    Item,
+    ItemClassification,
+    Location,
+    LocationProgressType,
+    Region,
+    Tutorial,
+)
 from worlds.AutoWorld import WebWorld, World
 
 from .items import ItemKind, item_name_groups, item_name_to_id, kind_of
@@ -104,12 +111,15 @@ class YsOriginWorld(World):
         for region_name, loc_names in self._active_locations().items():
             region = regions[region_name]
             for loc_name in loc_names:
-                region.locations.append(
-                    YsOriginLocation(
-                        self.player, loc_name,
-                        self.location_name_to_id[loc_name], region,
-                    )
+                loc = YsOriginLocation(
+                    self.player, loc_name,
+                    self.location_name_to_id[loc_name], region,
                 )
+                # Provisional checks (not yet confirmed live-detectable) hold
+                # filler only, so a played seed stays beatable via confirmed ones.
+                if dt.is_excluded(loc_name):
+                    loc.progress_type = LocationProgressType.EXCLUDED
+                region.locations.append(loc)
 
         for src, dst in CONNECTIONS:
             regions[src].connect(regions[dst], f"{src} -> {dst}")

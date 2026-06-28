@@ -39,8 +39,14 @@ ZONE_GATE: Dict[str, str] = {
 
 GOAL_ITEM = "Devil Medallion"
 
-CATEGORIES = ("chest", "event", "statue", "boss", "floor", "room")
+CATEGORIES = ("chest", "event", "statue", "blessing", "boss", "floor", "room")
 ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
+
+# Categories not yet confirmed live-detectable (scene offset unmapped) or whose
+# index<->name map is provisional (blessings). Marked EXCLUDED so AP only puts
+# FILLER there -> seeds stay beatable via the confirmed checks. Upgrade once
+# their live detection / mapping is pinned.
+EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "floor", "room"}
 
 # Varied filler for sanity locations (real INVINFO names; counts not gated).
 FILLER_POOL: List[str] = [
@@ -99,6 +105,8 @@ def enabled_categories(opts) -> Set[str]:
     on = set(ALWAYS_ON)
     if getattr(opts, "statue_checks", 1):
         on.add("statue")
+    if getattr(opts, "blessing_checks", 1):
+        on.add("blessing")
     if getattr(opts, "boss_checks", 1):
         on.add("boss")
     if getattr(opts, "floor_checks", 1):
@@ -111,9 +119,19 @@ def enabled_categories(opts) -> Set[str]:
 def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = defaultdict(list)
     for l in _LOCS:
-        if l["type"] in enabled and l["zone"] in _present:
-            out[l["zone"]].append(l["name"])
+        if l["type"] not in enabled:
+            continue
+        # tower-zone locations go in their zone; the rest (e.g. blessings, bought
+        # anywhere) attach to Menu, which is always reachable.
+        region = l["zone"] if l["zone"] in _present else MENU
+        out[region].append(l["name"])
     return dict(out)
+
+
+def is_excluded(loc_name: str) -> bool:
+    """True if AP should keep this location FILLER-only (provisional checks)."""
+    meta = LOC_META.get(loc_name)
+    return bool(meta and meta["type"] in EXCLUDED_TYPES)
 
 
 def vanilla_items(enabled: Set[str]) -> List[str]:

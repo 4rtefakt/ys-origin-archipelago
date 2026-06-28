@@ -47,6 +47,17 @@ ZONE_BY_DECADE = {
     "7": "Demonic Core",   # 26F roof / summit attaches to the top zone
 }
 
+# Module-relative bases for the unified "watch an int32 for <1 -> >=1" detection.
+GFLAGS_BASE = 0x36B91C        # g_flags[] (items + event/location flags)
+BLESSING_BASE = 0x36A634      # blessing state array, stride 8, level field at +0
+BLESSING_STRIDE = 8
+BLESSING_COUNT = 24           # purchasable GROW options (provisional; live-refine)
+
+
+def _gflag_detect(idx: int) -> dict:
+    """Unified detect: watch a module-relative int32 for a <1 -> >=1 flip."""
+    return {"method": "flag", "offset": f"0x{GFLAGS_BASE + idx * 4:X}"}
+
 
 def zone_of(scene_leaf: str) -> str:
     m = re.match(r"S_([1-6])", scene_leaf.upper())
@@ -79,7 +90,8 @@ class Builder:
                 "id": c["id"], "type": "chest", "zone": z,
                 "floor": c["floor"], "room": c["room"],
                 "name": self._name(f"{z}: {c['room']}"),
-                "detect": {"method": "box_flag", "flag": c["box_flag"]},
+                "detect": (_gflag_detect(int(c["box_flag"], 16))
+                           if c["box_flag"] else {"method": "scene", "scene": c["id"]}),
                 "items": c["items"],
             })
 
@@ -129,7 +141,7 @@ class Builder:
                     "id": f"{sub}/{Path(base).stem}/0x{i:X}", "type": "event",
                     "zone": z, "floor": _floor(room), "room": room,
                     "name": self._name(f"{z}: {room} — {nm}"),
-                    "detect": {"method": "item_flag", "item": f"0x{i:X}"},
+                    "detect": _gflag_detect(i),
                     "items": [{"id": f"0x{i:X}", "name": nm,
                                "class": build_dataset.classify_item(i)}],
                 })
@@ -191,7 +203,22 @@ class Builder:
                 "id": f"{sub}/statue", "type": "statue", "zone": z,
                 "floor": _floor(room), "room": room,
                 "name": self._name(f"Statue: {room} ({sub})"),
-                "detect": {"method": "box_flag", "flag": f"0x{flag:X}"},
+                "detect": _gflag_detect(flag),
+                "items": [],
+            })
+
+    def blessings(self) -> None:
+        """SP-bought Divine Blessings: one check per purchasable GROW option,
+        detected by its blessing-array level field flipping 0->>=1. Index<->name
+        alignment is provisional (names are in-game images; the live --bless pass
+        refines them), so these stay EXCLUDED (filler-only) for now."""
+        for i in range(BLESSING_COUNT):
+            off = BLESSING_BASE + i * BLESSING_STRIDE
+            self.locs.append({
+                "id": f"blessing/{i}", "type": "blessing", "zone": "Blessings",
+                "floor": "", "room": "Goddess Statue",
+                "name": self._name(f"Divine Blessing #{i}"),
+                "detect": {"method": "flag", "offset": f"0x{off:X}"},
                 "items": [],
             })
 
@@ -199,6 +226,7 @@ class Builder:
         self.chests()
         self.events()
         self.statues()
+        self.blessings()
         self.scene_based()
         return self.locs
 

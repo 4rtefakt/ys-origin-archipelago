@@ -37,6 +37,11 @@ class StatueChecks(DefaultOnToggle):
     display_name = "Statue checks"
 
 
+class BlessingChecks(DefaultOnToggle):
+    """Add a check for buying each Divine Blessing (~24, filler-only for now)."""
+    display_name = "Blessing checks"
+
+
 class BossChecks(DefaultOnToggle):
     """Add a check for defeating each boss / mid-boss (~12)."""
     display_name = "Boss checks"
@@ -57,6 +62,7 @@ class YsOriginOptions(PerGameCommonOptions):
     character: Character
     goal: Goal
     statue_checks: StatueChecks
+    blessing_checks: BlessingChecks
     boss_checks: BossChecks
     floor_checks: FloorChecks
     room_checks: RoomChecks
