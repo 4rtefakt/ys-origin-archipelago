@@ -25,6 +25,8 @@ if TYPE_CHECKING:  # avoid an import cycle (suppression imports this module)
 
 from .memory import ProcessMemory, MemoryError_
 from .offsets import (
+    CURRENT_FLOOR_OFFSET,
+    FLOOR_CHECKS,
     GRANT_SAFE_MIN,
     ITEM_OFFSETS,
     LOCATION_FLAG_OFFSETS,
@@ -135,6 +137,13 @@ def poll(memory: ProcessMemory, offsets: Offsets = OFFSETS) -> GameState:
         except MemoryError_ as e:
             log.debug("read location flag %s failed: %s", name, e)
 
+    # Current floor (for "Reach NF" checks), read from the live-confirmed global.
+    if FLOOR_CHECKS:
+        try:
+            state.current_floor = memory.read_offset_int32(CURRENT_FLOOR_OFFSET)
+        except MemoryError_ as e:
+            log.debug("read current_floor failed: %s", e)
+
     if offsets.key_items_base is not None:
         base = offsets.key_items_base
         stride = offsets.key_items_stride
@@ -209,6 +218,13 @@ def detect_checks(prev: GameState, curr: GameState) -> List[str]:
         # blessing flags -1/0 -> >=1. (prev has all keys after the first poll.)
         if val >= 1 and prev.location_flags.get(loc, 1) < 1:
             checks.append(loc)
+
+    # Floor checks: fire when the current floor first reaches the threshold.
+    if curr.current_floor is not None and FLOOR_CHECKS:
+        pf = prev.current_floor if prev.current_floor is not None else 0
+        for name, fl in FLOOR_CHECKS.items():
+            if curr.current_floor >= fl > pf:
+                checks.append(name)
 
     # newly-obtained items/skills (entry goes from <1 to >=1).
     for item, val in curr.items.items():

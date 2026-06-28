@@ -47,7 +47,7 @@ ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 # index<->name map is provisional (blessings). Marked EXCLUDED so AP only puts
 # FILLER there -> seeds stay beatable via the confirmed checks. Upgrade once
 # their live detection / mapping is pinned.
-EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "floor", "room"}
+EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36BC58)
 
 # Varied filler for sanity locations (real INVINFO names; counts not gated).
 FILLER_POOL: List[str] = [

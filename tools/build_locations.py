@@ -49,6 +49,7 @@ ZONE_BY_DECADE = {
 
 # Module-relative bases for the unified "watch an int32 for <1 -> >=1" detection.
 GFLAGS_BASE = 0x36B91C        # g_flags[] (items + event/location flags)
+FLOOR_OFFSET = 0x36BC58       # current floor (1..26); live-confirmed
 BLESSING_BASE = 0x36A634      # blessing state array, stride 8, level field at +0
 BLESSING_STRIDE = 8
 BLESSING_COUNT = 24           # purchasable GROW options (provisional; live-refine)
@@ -168,13 +169,16 @@ class Builder:
                     "room": room, "name": self._name(f"Boss: {room} ({leaf})"),
                     "detect": {"method": "scene", "scene": leaf}, "items": [],
                 })
-            # floor check (one per floor, first time we see it)
+            # floor check (one per floor, first time we see it). Detect via the
+            # current-floor global (+0x36BC58): fires when floor >= N.
             if fl and fl not in floors_done:
                 floors_done.add(fl)
+                fnum = int(re.sub(r"\D", "", fl) or 0)
                 self.locs.append({
                     "id": f"floor/{fl}", "type": "floor", "zone": z, "floor": fl,
                     "room": room, "name": self._name(f"Reach {fl}"),
-                    "detect": {"method": "scene_floor", "floor": fl}, "items": [],
+                    "detect": {"method": "floor", "offset": f"0x{FLOOR_OFFSET:X}",
+                               "floor": fnum}, "items": [],
                 })
 
     def statues(self) -> None:

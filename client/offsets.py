@@ -250,6 +250,13 @@ BLESSING_DIRTY_BIT = 0x10
 # flags at high indices). Used to turn an AP item index into a write offset.
 GFLAGS_BASE = 0x36B91C
 
+# Current floor (1..26), live-confirmed; drives "Reach NF" floor checks.
+CURRENT_FLOOR_OFFSET = 0x36BC58
+
+# Populated from slot_data: floor-check name -> floor number (fires when the
+# current floor reaches it). Separate from the flag-watch model.
+FLOOR_CHECKS: dict[str, int] = {}
+
 
 def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> None:
     """Rebuild the live detect/grant registries from AP slot_data, so the client
@@ -263,11 +270,20 @@ def apply_slot_data(location_detect: dict | None, item_index: dict | None) -> No
     imported them sees the update.
     """
     LOCATION_FLAG_OFFSETS.clear()
+    FLOOR_CHECKS.clear()
     for name, d in (location_detect or {}).items():
-        if isinstance(d, dict) and d.get("method") == "flag" and "offset" in d:
+        if not isinstance(d, dict):
+            continue
+        method = d.get("method")
+        if method == "flag" and "offset" in d:
             try:
                 LOCATION_FLAG_OFFSETS[name] = int(str(d["offset"]), 16)
             except ValueError:
+                pass
+        elif method == "floor" and "floor" in d:
+            try:
+                FLOOR_CHECKS[name] = int(d["floor"])
+            except (ValueError, TypeError):
                 pass
     ITEM_OFFSETS.clear()
     for name, idx in (item_index or {}).items():

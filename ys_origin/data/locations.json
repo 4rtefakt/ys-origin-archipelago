@@ -2213,8 +2213,9 @@
   "room": "1F Save",
   "name": "Reach 1F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "1F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 1
   },
   "items": []
  },
@@ -2239,8 +2240,9 @@
   "room": "2F Path 1",
   "name": "Reach 2F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "2F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 2
   },
   "items": []
  },
@@ -2265,8 +2267,9 @@
   "room": "4F Forward Passage 1",
   "name": "Reach 4F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "4F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 4
   },
   "items": []
  },
@@ -2395,8 +2398,9 @@
   "room": "5F Save",
   "name": "Reach 5F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "5F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 5
   },
   "items": []
  },
@@ -2434,8 +2438,9 @@
   "room": "3F Transfer Room",
   "name": "Reach 3F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "3F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 3
   },
   "items": []
  },
@@ -2590,8 +2595,9 @@
   "room": "6F Save",
   "name": "Reach 6F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "6F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 6
   },
   "items": []
  },
@@ -2642,8 +2648,9 @@
   "room": "7F Path 1",
   "name": "Reach 7F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "7F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 7
   },
   "items": []
  },
@@ -2720,8 +2727,9 @@
   "room": "8F Waterway 1",
   "name": "Reach 8F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "8F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 8
   },
   "items": []
  },
@@ -2967,8 +2975,9 @@
   "room": "10F Path 1 Furnace",
   "name": "Reach 10F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "10F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 10
   },
   "items": []
  },
@@ -3019,8 +3028,9 @@
   "room": "11F Path 1",
   "name": "Reach 11F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "11F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 11
   },
   "items": []
  },
@@ -3370,8 +3380,9 @@
   "room": "14F Room",
   "name": "Reach 14F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "14F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 14
   },
   "items": []
  },
@@ -3461,8 +3472,9 @@
   "room": "16F Path 1",
   "name": "Reach 16F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "16F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 16
   },
   "items": []
  },
@@ -3578,8 +3590,9 @@
   "room": "15F Room",
   "name": "Reach 15F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "15F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 15
   },
   "items": []
  },
@@ -3695,8 +3708,9 @@
   "room": "17F Room",
   "name": "Reach 17F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "17F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 17
   },
   "items": []
  },
@@ -3838,8 +3852,9 @@
   "room": "18F Path 1",
   "name": "Reach 18F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "18F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 18
   },
   "items": []
  },
@@ -3903,8 +3918,9 @@
   "room": "19F Path 1",
   "name": "Reach 19F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "19F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 19
   },
   "items": []
  },
@@ -3968,8 +3984,9 @@
   "room": "20F Drop-Off",
   "name": "Reach 20F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "20F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 20
   },
   "items": []
  },
@@ -4202,8 +4219,9 @@
   "room": "22F Save",
   "name": "Reach 22F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "22F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 22
   },
   "items": []
  },
@@ -4254,8 +4272,9 @@
   "room": "24F Path 3",
   "name": "Reach 24F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "24F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 24
   },
   "items": []
  },
@@ -4293,8 +4312,9 @@
   "room": "23F Save",
   "name": "Reach 23F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "23F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 23
   },
   "items": []
  },
@@ -4384,8 +4404,9 @@
   "room": "25F Save",
   "name": "Reach 25F",
   "detect": {
-   "method": "scene_floor",
-   "floor": "25F"
+   "method": "floor",
+   "offset": "0x36BC58",
+   "floor": 25
   },
   "items": []
  },
