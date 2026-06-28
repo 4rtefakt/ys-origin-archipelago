@@ -44,6 +44,7 @@ KEYISH = (set(range(0x4E, 0x54)) | {0x5C, 0x6F, 0x6B}
 ZONE_BY_DECADE = {
     "1": "Wailing Blue", "2": "Flooded Prison", "3": "Flames of Guilt",
     "4": "Silent Sands", "5": "Corrupted Blood", "6": "Demonic Core",
+    "7": "Demonic Core",   # 26F roof / summit attaches to the top zone
 }
 
 
@@ -164,9 +165,40 @@ class Builder:
                     "detect": {"method": "scene_floor", "floor": fl}, "items": [],
                 })
 
+    def statues(self) -> None:
+        """Goddess statues (save/warp points): S_SAVEOBJECTCHANGE checks a
+        per-statue state flag that flips when the statue is activated."""
+        seen = set()
+        for f in sorted(self.root.rglob("*.XSO")):
+            if f.name.upper() != "S_SAVEOBJECTCHANGE.XSO":
+                continue
+            parts = str(f.relative_to(self.root)).replace("\\", "/").split("/")
+            sub = parts[2].upper() if len(parts) > 2 else ""
+            if sub in seen:
+                continue
+            seen.add(sub)
+            try:
+                xso = XSO(f.read_bytes(), f.name)
+            except Exception:  # noqa: BLE001
+                continue
+            flag = next((ins.operands[0] for ins in xso.disasm()
+                         if ins.cls == 2 and ins.sub == 0x5F and ins.operands), None)
+            z = zone_of(sub)
+            if flag is None or not z:
+                continue
+            room = self.scenes.get(sub, sub)
+            self.locs.append({
+                "id": f"{sub}/statue", "type": "statue", "zone": z,
+                "floor": _floor(room), "room": room,
+                "name": self._name(f"Statue: {room} ({sub})"),
+                "detect": {"method": "box_flag", "flag": f"0x{flag:X}"},
+                "items": [],
+            })
+
     def build(self) -> List[dict]:
         self.chests()
         self.events()
+        self.statues()
         self.scene_based()
         return self.locs
 

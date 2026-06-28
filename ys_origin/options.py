@@ -32,6 +32,11 @@ class Goal(Choice):
     default = 0
 
 
+class StatueChecks(DefaultOnToggle):
+    """Add a check for activating each goddess statue / save point (~22)."""
+    display_name = "Statue checks"
+
+
 class BossChecks(DefaultOnToggle):
     """Add a check for defeating each boss / mid-boss (~12)."""
     display_name = "Boss checks"
@@ -51,6 +56,7 @@ class RoomChecks(Toggle):
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
     goal: Goal
+    statue_checks: StatueChecks
     boss_checks: BossChecks
     floor_checks: FloorChecks
     room_checks: RoomChecks

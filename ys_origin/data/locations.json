@@ -1608,6 +1608,279 @@
   ]
  },
  {
+  "id": "S_1000/statue",
+  "type": "statue",
+  "zone": "Wailing Blue",
+  "floor": "1F",
+  "room": "1F Save",
+  "name": "Statue: 1F Save (S_1000)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x12C"
+  },
+  "items": []
+ },
+ {
+  "id": "S_1009/statue",
+  "type": "statue",
+  "zone": "Wailing Blue",
+  "floor": "4F",
+  "room": "4F Save (Forward)",
+  "name": "Statue: 4F Save (Forward) (S_1009)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x137"
+  },
+  "items": []
+ },
+ {
+  "id": "S_1011/statue",
+  "type": "statue",
+  "zone": "Wailing Blue",
+  "floor": "5F",
+  "room": "5F Save",
+  "name": "Statue: 5F Save (S_1011)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x142"
+  },
+  "items": []
+ },
+ {
+  "id": "S_2000/statue",
+  "type": "statue",
+  "zone": "Flooded Prison",
+  "floor": "6F",
+  "room": "6F Save",
+  "name": "Statue: 6F Save (S_2000)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x144"
+  },
+  "items": []
+ },
+ {
+  "id": "S_2012/statue",
+  "type": "statue",
+  "zone": "Flooded Prison",
+  "floor": "",
+  "room": "Pre-Boss Room",
+  "name": "Statue: Pre-Boss Room (S_2012)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x155"
+  },
+  "items": []
+ },
+ {
+  "id": "S_2013/statue",
+  "type": "statue",
+  "zone": "Flooded Prison",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_2013)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x14A"
+  },
+  "items": []
+ },
+ {
+  "id": "S_2100/statue",
+  "type": "statue",
+  "zone": "Flooded Prison",
+  "floor": "",
+  "room": "Outer Corridor 1",
+  "name": "Statue: Outer Corridor 1 (S_2100)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1DF"
+  },
+  "items": []
+ },
+ {
+  "id": "S_3000/statue",
+  "type": "statue",
+  "zone": "Flames of Guilt",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_3000)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x157"
+  },
+  "items": []
+ },
+ {
+  "id": "S_3006/statue",
+  "type": "statue",
+  "zone": "Flames of Guilt",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_3006)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x15D"
+  },
+  "items": []
+ },
+ {
+  "id": "S_3014/statue",
+  "type": "statue",
+  "zone": "Flames of Guilt",
+  "floor": "",
+  "room": "Pre-Boss Room",
+  "name": "Statue: Pre-Boss Room (S_3014)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x177"
+  },
+  "items": []
+ },
+ {
+  "id": "S_3015/statue",
+  "type": "statue",
+  "zone": "Flames of Guilt",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_3015)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x168"
+  },
+  "items": []
+ },
+ {
+  "id": "S_4000/statue",
+  "type": "statue",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_4000)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x179"
+  },
+  "items": []
+ },
+ {
+  "id": "S_4020/statue",
+  "type": "statue",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_4020)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x194"
+  },
+  "items": []
+ },
+ {
+  "id": "S_4104/statue",
+  "type": "statue",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Rado Tower",
+  "name": "Statue: Rado Tower (S_4104)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1BB"
+  },
+  "items": []
+ },
+ {
+  "id": "S_5000/statue",
+  "type": "statue",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Layer 5 Save",
+  "name": "Statue: Layer 5 Save (S_5000)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x196"
+  },
+  "items": []
+ },
+ {
+  "id": "S_5010/statue",
+  "type": "statue",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_5010)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1A6"
+  },
+  "items": []
+ },
+ {
+  "id": "S_5014/statue",
+  "type": "statue",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Save Point",
+  "name": "Statue: Save Point (S_5014)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1AB"
+  },
+  "items": []
+ },
+ {
+  "id": "S_6000/statue",
+  "type": "statue",
+  "zone": "Demonic Core",
+  "floor": "22F",
+  "room": "22F Save",
+  "name": "Statue: 22F Save (S_6000)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1AD"
+  },
+  "items": []
+ },
+ {
+  "id": "S_6010/statue",
+  "type": "statue",
+  "zone": "Demonic Core",
+  "floor": "23F",
+  "room": "23F Save",
+  "name": "Statue: 23F Save (S_6010)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1B1"
+  },
+  "items": []
+ },
+ {
+  "id": "S_6053/statue",
+  "type": "statue",
+  "zone": "Demonic Core",
+  "floor": "25F",
+  "room": "25F Save",
+  "name": "Statue: 25F Save (S_6053)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1B7"
+  },
+  "items": []
+ },
+ {
+  "id": "S_6082/statue",
+  "type": "statue",
+  "zone": "Demonic Core",
+  "floor": "24F",
+  "room": "24F Yog & Om",
+  "name": "Statue: 24F Yog & Om (S_6082)",
+  "detect": {
+   "method": "box_flag",
+   "flag": "0x1B5"
+  },
+  "items": []
+ },
+ {
   "id": "S_1000/room",
   "type": "room",
   "zone": "Wailing Blue",

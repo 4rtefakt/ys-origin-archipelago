@@ -39,7 +39,7 @@ ZONE_GATE: Dict[str, str] = {
 
 GOAL_ITEM = "Devil Medallion"
 
-CATEGORIES = ("chest", "event", "boss", "floor", "room")
+CATEGORIES = ("chest", "event", "statue", "boss", "floor", "room")
 ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 
 # Varied filler for sanity locations (real INVINFO names; counts not gated).
@@ -97,6 +97,8 @@ def item_classification(name: str) -> str:
 def enabled_categories(opts) -> Set[str]:
     """Resolve which optional categories are on from the options dataclass."""
     on = set(ALWAYS_ON)
+    if getattr(opts, "statue_checks", 1):
+        on.add("statue")
     if getattr(opts, "boss_checks", 1):
         on.add("boss")
     if getattr(opts, "floor_checks", 1):
