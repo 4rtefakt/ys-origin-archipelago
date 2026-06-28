@@ -183,6 +183,20 @@ box-open flag (high index, the location signal) and its item index (low index,
 the grant) — pairing them gives the apworld's location↔vanilla-item table.
 Low indices `0x1E`–`0x4E` (stepping by 6) are likely per-character equipment.
 
+**4. The give-item op + catalog.** Class-2 **sub-op `0x116` = give-item**
+(operand0 = item id); this is the authoritative grant signal (knowns line up:
+`0x57` Roda, `0x59` Panacea, `0x6F` Blue Moon Crest). A chest's box-open flag is
+its **entry guard**: the index both *tested* (`0x5F [idx,1]`→return-if-set, or
+`0x5F [idx,0]`+jump-if-nonzero) and *set* (`0x64 [idx,1]`) in the same script.
+`tools/xso_catalog.py <root> --csv <dir>` classifies every script
+(chest/cutscene/item-use/scene-main) and writes `chests.csv` (scene, zone,
+box-flag, item ids) + `gives.csv`. Result: **65 chests** across the 7 tower
+zones (box-flag auto-resolved for 63), plus 47 cutscenes and 15 item-use
+scripts. Multi-item chests = parallel grants across difficulty/character
+variants (confirm which fires in-game). Item *names* aren't in the scripts (only
+ids); attach them by triggering in-game (`tools/flaglog.py`) or from the runtime
+item-name table (not yet extracted).
+
 ## Ghidra (set up for future deep dives)
 
 - JDK 21: `D:\ghidra-work\jdk\jdk-21.0.11+10`; Ghidra 12.1.2: `D:\ghidra-work\ghidra\…`
