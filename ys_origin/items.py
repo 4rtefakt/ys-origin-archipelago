@@ -33,7 +33,7 @@ class ItemDef:
 
 # Append-only. Grantable names must match client ITEM_OFFSETS keys.
 _ITEM_DEFS: list[ItemDef] = [
-    ItemDef("Cerulean Flabellum", ItemKind.PROGRESSION),  # key item; grants bubble
+    ItemDef("Cerulean Flabellum", ItemKind.PROGRESSION),  # key item; grants Ventus Bracelet
     ItemDef("Celcetan Panacea", ItemKind.FILLER, count=2),
     ItemDef("Roda Fruit", ItemKind.FILLER, count=2),
 ]

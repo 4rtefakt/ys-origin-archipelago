@@ -35,7 +35,7 @@ class FakeMemory:
 
 # Offsets of the entries we touch, by name (mirrors ITEM_OFFSETS).
 FLAB = _ITEM_OFFSETS["Cerulean Flabellum"]
-BUBBLE = _ITEM_OFFSETS["Protective Bubble"]
+BUBBLE = _ITEM_OFFSETS["Ventus Bracelet"]  # wind power (the "bubble" ability)
 PANACEA = _ITEM_OFFSETS["Celcetan Panacea"]
 
 
@@ -61,7 +61,7 @@ def test_vanilla_key_item_reverted_skill_kept():
     sup.prime(_state())  # nothing obtained yet -> all baselines NEVER
 
     # Player opens the vanilla chest: both the key item and its skill get set.
-    state = _state(**{"Cerulean Flabellum": 1, "Protective Bubble": 1})
+    state = _state(**{"Cerulean Flabellum": 1, "Ventus Bracelet": 1})
     mem = _mem_from(state)
 
     reverts = sup.suppress(mem, state)
@@ -72,7 +72,7 @@ def test_vanilla_key_item_reverted_skill_kept():
     assert mem.cells[BUBBLE] == 1, "skill slot must be left untouched (cosmetic)"
     # state mutated to post-suppression reality
     assert state.items["Cerulean Flabellum"] == NEVER
-    assert state.items["Protective Bubble"] == 1
+    assert state.items["Ventus Bracelet"] == 1
 
 
 def test_ap_grant_not_reverted():

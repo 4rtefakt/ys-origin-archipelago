@@ -193,8 +193,8 @@ OFFSETS = build_offsets()
 ITEM_OFFSETS: dict[str, int] = {
     "Roda Fruit": 0x36BA78,              # consumable (count-safe)   idx 0x57
     "Celcetan Panacea": 0x36BA80,        # consumable (count-safe)   idx 0x59
-    "Cerulean Flabellum": 0x36BAC8,      # key item; grants bubble   idx 0x6B
-    "Protective Bubble": 0x36BAEC,        # skill from the Flabellum   idx 0x74
+    "Cerulean Flabellum": 0x36BAC8,      # key item; grants Ventus Bracelet  idx 0x6B
+    "Ventus Bracelet": 0x36BAEC,         # wind power (the "bubble" ability)  idx 0x74
     "Blue Moon Crest": 0x36BAD8,         # key item                   idx 0x6F
 }
 
@@ -214,7 +214,9 @@ LOCATION_FLAG_OFFSETS: dict[str, int] = {
 # Entries that spawn a live runtime object — clearing them (value < 1) FREEZES
 # the game. The suppression/revert path must NEVER lower these; everything else
 # is freely revertible.
-SKILL_ITEMS: frozenset[str] = frozenset({"Protective Bubble"})
+# Elemental bracelets grant a castable ability; casting one whose g_flags entry
+# is -1 freezes the game (see SAFETY note above). Names per INVINFO.DAT.
+SKILL_ITEMS: frozenset[str] = frozenset({"Ventus Bracelet"})
 
 # Minimum value apply_item writes to an ITEM_OFFSETS entry (it only grants, so
 # this is just a floor; the real freeze risk is only for SKILL_ITEMS above).
