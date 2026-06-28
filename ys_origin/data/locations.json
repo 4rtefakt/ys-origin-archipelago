@@ -2034,6 +2034,20 @@
   "items": []
  },
  {
+  "id": "blessing/bit11",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Hasten Skill recovery LV2",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 11
+  },
+  "items": []
+ },
+ {
   "id": "blessing/bit12",
   "type": "blessing",
   "zone": "Blessings",
@@ -2062,6 +2076,20 @@
   "items": []
  },
  {
+  "id": "blessing/bit15",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Increase Boost recovery LV2",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 15
+  },
+  "items": []
+ },
+ {
   "id": "blessing/bit17",
   "type": "blessing",
   "zone": "Blessings",
@@ -2072,6 +2100,20 @@
    "method": "bit",
    "offset": "0x36BC80",
    "bit": 17
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/bit18",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Reduce MP usage LV2",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 18
   },
   "items": []
  },
@@ -2100,6 +2142,34 @@
    "method": "bit",
    "offset": "0x36BC80",
    "bit": 21
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/bit22",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Bolster bad status resists LV2",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 22
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/bit23",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Extend drop item effects LV2",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 23
   },
   "items": []
  },
