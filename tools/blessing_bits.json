@@ -1,22 +1,41 @@
 {
- "_storage": "Divine Blessings: armor -> array slot +0x36A684; every other blessing (each level) -> one bit in the bitfield at +0x36BC80 (g_flags 0xD9). total purchased = popcount(0x36BC80)+(armor!=0).",
+ "_storage": "armor -> array slot +0x36A684; every other blessing/level -> one scattered bit in the bitfield at +0x36BC80 (g_flags 0xD9).",
+ "_status": "flip-order mapping proved UNRELIABLE (buy order desynced by mid-sequence leveling). Only clear-tested bits are trusted; the rest carry stable 'slot N' labels until verified (e.g. during the mod build, via the clear-a-bit/see-which-un-Dones trick).",
  "armor_array_+0x36A684": "Strengthen current armor",
- "bit": {
+ "known_bits": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  8,
+  9,
+  10,
+  12,
+  13,
+  17,
+  20,
+  21
+ ],
+ "verified_bit": {
+  "6": "Reduce MP usage LV1",
+  "10": "Hasten Skill recovery LV1",
+  "13": "Increase movement speed"
+ },
+ "_unverified_guess_from_flip_order": {
   "0": "Increase stationary heal rate",
   "1": "Reduce damage from terrain",
   "2": "Reduce bad status duration LV1",
   "3": "Increase item drop rate",
   "4": "Increase Boost recovery LV1",
   "5": "Hasten Skill recovery LV1",
-  "6": "Reduce MP usage LV1",
   "8": "Increase SP gain",
   "9": "Extend drop item effects LV1",
-  "10": "Reduce bad status duration LV2",
   "12": "Increase effect of herbs LV1",
-  "13": "Increase movement speed",
   "17": "Increase effect of herbs LV2",
   "20": "Bolster bad status resists LV1",
   "21": "Strengthen Eyes of Fact"
- },
- "_unmapped_LV2_bits": "LV2 of Bolster resists / Extend drop / Boost recovery / Hasten skill / Reduce MP not yet bought (each will be one more bit)."
+ }
 }

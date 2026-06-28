@@ -217,20 +217,24 @@ class Builder:
         check per known bit (+ armor). EXCLUDED (filler-only) so the expensive
         ones don't force SP grinds for progression."""
         mp = json.loads((Path(__file__).parent / "blessing_bits.json").read_text())
-        armor = mp.get("armor_array_+0x36A684")
-        if armor:
-            self.locs.append({
-                "id": "blessing/armor", "type": "blessing", "zone": "Blessings",
-                "floor": "", "room": "Goddess Statue",
-                "name": self._name(f"Divine Blessing: {armor}"),
-                "detect": {"method": "flag", "offset": f"0x{BLESSING_ARMOR_OFFSET:X}"},
-                "items": [],
-            })
-        for bit, name in sorted(mp.get("bit", {}).items(), key=lambda x: int(x[0])):
+        verified = mp.get("verified_bit", {})   # only clear-tested names are trusted
+        # armor blessing (its own array slot)
+        self.locs.append({
+            "id": "blessing/armor", "type": "blessing", "zone": "Blessings",
+            "floor": "", "room": "Goddess Statue",
+            "name": self._name("Divine Blessing: Strengthen current armor"),
+            "detect": {"method": "flag", "offset": f"0x{BLESSING_ARMOR_OFFSET:X}"},
+            "items": [],
+        })
+        # one check per known bit; use the verified name if we have it, else a
+        # stable slot label (never a guessed name).
+        for bit in mp.get("known_bits", []):
+            name = verified.get(str(bit))
+            label = f"Divine Blessing: {name}" if name else f"Divine Blessing (slot {bit})"
             self.locs.append({
                 "id": f"blessing/bit{bit}", "type": "blessing", "zone": "Blessings",
                 "floor": "", "room": "Goddess Statue",
-                "name": self._name(f"Divine Blessing: {name}"),
+                "name": self._name(label),
                 "detect": {"method": "bit", "offset": f"0x{BLESSING_BITFIELD:X}",
                            "bit": int(bit)},
                 "items": [],
