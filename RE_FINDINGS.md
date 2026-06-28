@@ -113,6 +113,29 @@ client, which only reads them. The writable equip *master* was not hunted.
 - **double_jump / dash, weapon_level, boots, current_floor** — unmapped; map via
   snapshot-diff as encountered.
 
+## Divine Blessings (SP-bought upgrades) — array, mapped via Ghidra
+
+Long believed "scattered / unmappable" (snapshot-diff was too noisy). Static RE
+settled it: blessings are a clean **state array** (NOT in g_flags). The player-
+update function reads `(&DAT_0076a634)[idx*2]` and writes the derived effect at
+`&DAT_0076a638 + idx*8` from a per-level **data table** at `+0x34E720` (0x30/entry).
+
+| Field | Address | Meaning |
+|---|---|---|
+| level/owned | `+0x36A634 + idx*8` | 0 = not bought; ≥1 = bought/tier — **check & grant target** |
+| derived | `+0x36A638 + idx*8` | effect value, game-managed (don't write) |
+| SP currency | g_flags[0xD8] = `+0x36BC7C` | `GROWnn.XSO` scripts deduct it |
+| recompute req | `+0x36B914` bit `0x10` | OR in to force re-apply from the table |
+
+- **Detect** a purchase: level field `0 -> ≥1`. **Grant**: write the level, then
+  set the dirty bit so the effect re-applies. (armor blessing = idx 10 → `+0x36A684`.)
+- `GROWnn.XSO` (00–25, ~24 menu entries) handle SP payment + UI; the apply runs
+  through the menu VM. The static data table is zero-init (populated at runtime).
+- **OPEN:** index→blessing-name map + exact count — not in static data. Capture
+  live with `tools/flaglog.py --bless` (watches `+0x36A634`) while buying each
+  blessing, exactly like flag discovery for locations. Offsets in `client/offsets.py`
+  (`BLESSING_BASE` …).
+
 ## How offsets are discovered
 
 1. **`tools/snapdiff.py`** (workhorse): snapshot the module, change ONE thing

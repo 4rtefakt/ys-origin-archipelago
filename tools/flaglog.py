@@ -42,6 +42,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from client.memory import ProcessMemory, MemoryError_  # noqa: E402
 from client.offsets import (  # noqa: E402
+    BLESSING_BASE,
+    BLESSING_COUNT,
+    BLESSING_STRIDE,
     ITEM_OFFSETS,
     LOCATION_FLAG_OFFSETS,
     MODULE_NAME,
@@ -93,9 +96,11 @@ class Change:
 
 
 class FlagLogger:
-    def __init__(self, mem: ProcessMemory, csv_path: Path):
+    def __init__(self, mem: ProcessMemory, csv_path: Path, watch_bless: bool = False):
         self.mem = mem
         self.known = _known_names()
+        self.watch_bless = watch_bless
+        self.prev_bless: list[int] | None = None
         self.prev: list[int] | None = None
         self.start = time.monotonic()
         self.session = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -129,7 +134,40 @@ class FlagLogger:
             return None
         return list(struct.unpack(f"<{GFLAGS_COUNT}i", raw))
 
+    def _read_bless(self) -> list[int] | None:
+        """Read the level field (+0) of each blessing-array entry."""
+        try:
+            raw = self.mem.read_bytes(self.mem.resolve(BLESSING_BASE),
+                                      BLESSING_COUNT * BLESSING_STRIDE)
+        except MemoryError_:
+            return None
+        return [struct.unpack_from("<i", raw, i * BLESSING_STRIDE)[0]
+                for i in range(BLESSING_COUNT)]
+
+    def _poll_bless(self) -> None:
+        cur = self._read_bless()
+        if cur is None:
+            return
+        if self.prev_bless is None:
+            self.prev_bless = cur
+            return
+        t = time.monotonic() - self.start
+        for i in range(BLESSING_COUNT):
+            o, n = self.prev_bless[i], cur[i]
+            if o == n:
+                continue
+            off = BLESSING_BASE + i * BLESSING_STRIDE
+            print(f"\nBLESSING idx {i} (+0x{off:X})  level {o} -> {n}   "
+                  "<- note which blessing you just bought")
+            self.writer.writerow([self.session, f"{t:.2f}", "bless", i,
+                                  f"0x{i:X}", f"+0x{off:X}", o, n, "BLESS",
+                                  "", "", ""])
+            self.fh.flush()
+        self.prev_bless = cur
+
     def poll_once(self) -> None:
+        if self.watch_bless:
+            self._poll_bless()
         cur = self._read()
         if cur is None:
             return
@@ -215,11 +253,14 @@ class FlagLogger:
         self.fh.close()
 
 
-def run(mem: ProcessMemory, csv_path: Path) -> None:
-    fl = FlagLogger(mem, csv_path)
+def run(mem: ProcessMemory, csv_path: Path, watch_bless: bool = False) -> None:
+    fl = FlagLogger(mem, csv_path, watch_bless=watch_bless)
     print(f"  attached pid={mem.pid} base=0x{mem.base_address:X}")
     print(f"  watching g_flags[{GFLAGS_COUNT}] at +0x{GFLAGS_OFFSET:X}, "
           f"poll {int(POLL_S * 1000)}ms")
+    if watch_bless:
+        print(f"  also watching blessing array[{BLESSING_COUNT}] at "
+              f"+0x{BLESSING_BASE:X} — buy blessings to map index->blessing")
     print(f"  logging to {csv_path}")
     print("  Play the game; pickups/plates/events will print here. Ctrl+C to stop.\n")
     try:
@@ -238,7 +279,10 @@ def run(mem: ProcessMemory, csv_path: Path) -> None:
 
 
 def main() -> int:
-    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("flaglog.csv")
+    args = [a for a in sys.argv[1:]]
+    watch_bless = "--bless" in args
+    args = [a for a in args if a != "--bless"]
+    csv_path = Path(args[0]) if args else Path("flaglog.csv")
     print(f"Ys Origin g_flags logger — attaching to {MODULE_NAME} ...")
     try:
         mem = ProcessMemory.attach(MODULE_NAME)
@@ -247,7 +291,7 @@ def main() -> int:
         print("  Make sure the game is running (launch this as Admin if needed).")
         return 1
     try:
-        run(mem, csv_path)
+        run(mem, csv_path, watch_bless=watch_bless)
     finally:
         mem.close()
     return 0

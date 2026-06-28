@@ -222,3 +222,27 @@ SKILL_ITEMS: frozenset[str] = frozenset({"Ventus Bracelet"})
 # this is just a floor; the real freeze risk is only for SKILL_ITEMS above).
 GRANT_SAFE_MIN = 1
 
+
+# --------------------------------------------------------------------------- #
+# Divine Blessings (SP-bought permanent upgrades) — array, mapped via Ghidra
+# --------------------------------------------------------------------------- #
+#
+# Blessings are a contiguous state array (NOT in g_flags), confirmed by static RE
+# (the player-update fn reads `(&DAT_0076a634)[idx*2]` and writes the derived
+# value at `&DAT_0076a638 + idx*8` from a per-level data table at +0x34E720).
+#   * BLESSING_BASE + idx*BLESSING_STRIDE + 0  = level/owned (0 = not bought)  <- check & grant target
+#   * BLESSING_BASE + idx*BLESSING_STRIDE + 4  = derived effect value (game-managed; don't touch)
+# Grant a blessing: write the level field, then request a recompute by OR-ing the
+# dirty bit into BLESSING_DIRTY so the game re-applies the effect from the table.
+# Detect a purchase: level field 0 -> >=1.
+# The SP currency is g_flags[0xD8] (mirror +0x36BC7C); GROWnn.XSO scripts deduct it.
+# OPEN: the index->blessing NAME map + exact count (~13-24 menu entries) are not
+# in static data (zero-init .data); capture them live with tools/flaglog.py
+# (--bless), which watches this array while you buy blessings in-game.
+BLESSING_BASE = 0x36A634
+BLESSING_STRIDE = 8
+BLESSING_LEVEL_OFFSET = 0       # +0 within an entry
+BLESSING_COUNT = 32             # scan width until the live index map is pinned
+BLESSING_DIRTY = 0x36B914       # combat/state bitfield; bit 0x10 = recompute req
+BLESSING_DIRTY_BIT = 0x10
+
