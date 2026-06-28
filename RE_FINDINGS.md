@@ -131,10 +131,27 @@ update function reads `(&DAT_0076a634)[idx*2]` and writes the derived effect at
   set the dirty bit so the effect re-applies. (armor blessing = idx 10 → `+0x36A684`.)
 - `GROWnn.XSO` (00–25, ~24 menu entries) handle SP payment + UI; the apply runs
   through the menu VM. The static data table is zero-init (populated at runtime).
-- **OPEN:** index→blessing-name map + exact count — not in static data. Capture
-  live with `tools/flaglog.py --bless` (watches `+0x36A634`) while buying each
-  blessing, exactly like flag discovery for locations. Offsets in `client/offsets.py`
-  (`BLESSING_BASE` …).
+**LIVE RE UPDATE (the array was only half the story).** Buying blessings in-game
+showed storage is **heterogeneous**, not one array:
+- **Armor blessing** → the array slot `0x36A684` (= `0x36A634[10]`), as found.
+- **Every other blessing** (simple *and* each level-up) → sets **one bit in a
+  bitfield at `+0x36BC80`** (g_flags `0xD9`). Bits are **scattered**, not
+  sequential (heal=bit0, terrain=bit1, then bits 3/8/12/17/21…), so there's no
+  clean index→name map.
+- So **blessings purchased = popcount(`0x36BC80`) + (`0x36A684`≠0)**, +1 per
+  purchase. The client uses this as **progressive checks** ("Purchase #N" fires
+  when the total reaches N) — no per-bit mapping needed. (14 blessings, several
+  leveled; herbs maxes at LV2.) Menu list captured (names+costs) for reference.
+
+## Current floor — `+0x36BC58` (live-confirmed)
+
+The current floor (1..26) lives at **`+0x36BC58`** (g_flags `0xCF`). Stable while
+on a floor, ticks on floor change; **not** a level mirror (it read 2 on 2F while
+level master `0x36A760` stayed 1). Drives the "Reach NF" floor checks
+(`detect = {method:"floor", offset:"0x36BC58", floor:N}`). Found via
+`tools/scenefind.py` diffing across floor changes. (Per-room **scene id** has no
+clean global — only dynamic heap asset paths — so room/boss detection is
+deferred.)
 
 ## How offsets are discovered
 
