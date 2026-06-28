@@ -15,6 +15,9 @@ flaglog*.csv
 # generate locally with tools/extract_icons.py, don't commit
 client/icons/
 
+# native mod build output (CMake + fetched deps)
+mod/build/
+
 # OS / editor
 Thumbs.db
 .DS_Store

@@ -1,0 +1,11 @@
+; Export the dinput8.dll entry points the game imports, so our proxy DLL can
+; stand in for the system one. Implementations (in proxy_dinput8.cpp) forward to
+; the real system dinput8.dll.
+LIBRARY dinput8
+EXPORTS
+    DirectInput8Create
+    DllCanUnloadNow
+    DllGetClassObject
+    DllRegisterServer
+    DllUnregisterServer
+    GetdfDIJoystick
