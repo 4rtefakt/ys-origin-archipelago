@@ -340,6 +340,22 @@ def floor_levels() -> Dict[str, int]:
     """floor number (as str, for JSON) -> expected character level."""
     return {str(k): v for k, v in FLOOR_LEVELS.items()}
 
+
+def scene_levels() -> Dict[str, int]:
+    """scene leaf number (as str, e.g. '6000') -> expected character level, via
+    the scene's floor. Keyed by SCENE on purpose: the live current_floor
+    (g_flags[0xCF]) is unreliable for warp destinations (reads the climbed-to
+    floor, not the warped-to one), while current_scene (g_flags[0x1F9]) is exact."""
+    out: Dict[str, int] = {}
+    for _sc, _fl in SCENE_FLOOR.items():
+        _m = re.match(r"\s*(\d+)\s*[Ff]", str(_fl))
+        if not _m:
+            continue
+        _lvl = FLOOR_LEVELS.get(int(_m.group(1)))
+        if _lvl:
+            out[str(int(_sc[2:]))] = _lvl
+    return out
+
 # Per-character room-logic gate substitutions for items a character lacks. Toal
 # gets Cleria Ring where Yunica/Hugo get Mask of Eyes (same chest = the
 # hidden-door ability). Lacked items with no substitute are simply RELAXED (the

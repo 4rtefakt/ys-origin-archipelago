@@ -178,7 +178,9 @@ class YsOriginWorld(World):
             "level_scaling": int(self.options.level_scaling.value),
             "level_margin": int(self.options.level_margin.value),
             "exp_multiplier_max": int(self.options.exp_multiplier_max.value),
-            "floor_levels": dt.floor_levels(),
+            # expected level keyed by SCENE (current_floor/0xCF is unreliable for
+            # warp destinations; the mod reads current_scene/0x1F9 reliably).
+            "scene_levels": dt.scene_levels(),
             "location_signals": {
                 n: i for n, i in self.location_name_to_id.items() if n in active
             },

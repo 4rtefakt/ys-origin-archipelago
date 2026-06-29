@@ -182,12 +182,9 @@ static const SetLevelFn kSetLevel = (SetLevelFn)0x004200F0;
 static int g_level_scaling = 0;        // 0 off, 1 level_floor, 2 exp_mult, 3 both
 static int g_level_margin = 3;
 static int g_exp_mult_max = 8;
-static int g_floor_levels[64] = {0};   // floor number -> expected level (0 = unknown)
+static std::map<int, int> g_scene_levels;  // scene number -> expected level
 static std::atomic<int> g_pending_level{0};  // bump requested; applied on the main thread
 static inline int read_level() { return *(volatile int*)kLevelAbs; }
-static inline int read_current_floor() {
-    return *(volatile int*)(kGFlagsAbs + 0xCF * 4);  // g_flags[0xCF] = current floor
-}
 static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
@@ -349,11 +346,9 @@ static void on_slot_connected(const nlohmann::json& sd) {
     g_level_scaling = sd.value("level_scaling", 0);
     g_level_margin = sd.value("level_margin", 3);
     g_exp_mult_max = sd.value("exp_multiplier_max", 8);
-    if (sd.contains("floor_levels")) {
-        for (auto& kv : sd["floor_levels"].items()) {
-            int f = atoi(kv.key().c_str());
-            if (f >= 0 && f < 64) g_floor_levels[f] = kv.value().get<int>();
-        }
+    if (sd.contains("scene_levels")) {
+        for (auto& kv : sd["scene_levels"].items())
+            g_scene_levels[atoi(kv.key().c_str())] = kv.value().get<int>();
     }
     if (g_level_scaling)
         mod_log("ap: level scaling mode=%d (margin %d, exp x<=%d)",
@@ -502,10 +497,10 @@ static void poll_statue_warp() {
 // target; the actual level write happens on the main thread (exp_scaling_on_frame).
 static void exp_scaling_poll() {
     if (!g_level_scaling) { g_exp_factor = 1.0f; return; }
-    int fl = read_current_floor();
-    int explv = (fl >= 0 && fl < 64) ? g_floor_levels[fl] : 0;
+    auto it = g_scene_levels.find(read_current_scene());
+    int explv = (it != g_scene_levels.end()) ? it->second : 0;
     int lv = read_level();
-    if (explv <= 0 || lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game
+    if (explv <= 0 || lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game / unknown room
     int gap = explv - lv;
     // EXP multiplier (modes 2 + 3): scale with how far under-level you are.
     if (g_level_scaling == 2 || g_level_scaling == 3) {
