@@ -19,6 +19,7 @@
 // <windows.h>; the poll loop is a std::thread.
 #include <apclient.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -154,6 +155,17 @@ static std::map<std::string, int> g_name_to_idx;
 // receiving that item clears g_statue_lock (purification allowed). Populated
 // from slot_data statue_unlocks when statue_warp_locks is on.
 static std::map<std::string, int> g_statue_item_idx;
+// Statue WARP REGISTRY: a byte-per-statue array at g_flags[0x200] (abs 0x76C11C),
+// indexed by statue SCENE order (live-confirmed: byte0=S_1000/1F, byte1=S_1009/4F,
+// ...); byte=1 => that statue is a Crystal warp destination. The game writes it
+// natively (not through the VM grant store), so the mod can't intercept the
+// write — instead the poll loop clears locked statues' bytes each tick (revert
+// pattern). g_statue_reg holds (registry index, activation-flag index, scene) for
+// every statue, ordered by scene = registry index order.
+struct StatueReg { int reg_index; int flag_idx; int scene; };
+static std::vector<StatueReg> g_statue_reg;
+static bool g_statue_locks_on = false;
+static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
 static std::vector<int64_t> g_checks;
@@ -284,7 +296,9 @@ static void on_slot_connected(const nlohmann::json& sd) {
     }
     int statues = 0;
     if (sd.value("statue_warp_locks", false) && sd.contains("statue_unlocks")) {
+        g_statue_locks_on = true;
         int start_scene = sd.value("start_statue_scene", 0);
+        std::vector<StatueReg> tmp;
         for (auto& kv : sd["statue_unlocks"].items()) {
             const auto& v = kv.value();
             int scene = v.value("scene", 0);
@@ -297,8 +311,15 @@ static void on_slot_connected(const nlohmann::json& sd) {
             // The start statue stays usable from the beginning so the player can
             // always save; every other statue is locked until its item arrives.
             g_statue_lock[idx] = (scene != start_scene);
+            tmp.push_back({0, idx, scene});
             statues++;
         }
+        // Registry byte index = position in scene order (live-confirmed pairing).
+        std::sort(tmp.begin(), tmp.end(),
+                  [](const StatueReg& a, const StatueReg& b) { return a.scene < b.scene; });
+        g_statue_reg.clear();
+        for (int i = 0; i < (int)tmp.size(); i++)
+            g_statue_reg.push_back({i, tmp[i].flag_idx, tmp[i].scene});
         mod_log("ap: statue warp locks ON — %d statues, start scene S_%d",
                 statues, start_scene);
     }
@@ -410,12 +431,29 @@ static void poll_scene() {
     }
 }
 
+// Clear the warp-registry byte of every currently-locked statue. The game writes
+// it natively when you interact with a statue (we can't catch that at the VM
+// grant store), so we revert it here each tick. Unlocked + start statues keep
+// their bytes, so they stay valid Crystal warp destinations.
+static void poll_statue_warp() {
+    if (!g_statue_locks_on) return;
+    volatile unsigned char* reg = (volatile unsigned char*)kWarpRegAbs;
+    for (const auto& s : g_statue_reg) {
+        if (g_statue_lock[s.flag_idx] && reg[s.reg_index] != 0) {
+            reg[s.reg_index] = 0;
+            mod_log("statue: cleared warp registry byte[%d] (scene S_%d, locked)",
+                    s.reg_index, s.scene);
+        }
+    }
+}
+
 static void poll_loop() {
     while (g_run.load()) {
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
             poll_deathlink();
+            poll_statue_warp();
             // drain queued checks
             std::vector<int64_t> pending;
             {
