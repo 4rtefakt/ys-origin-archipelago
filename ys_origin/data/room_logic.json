@@ -11,8 +11,11 @@
     "chests/drops physically reached from a different room than their script",
     "scene. See data/room_graph_notes.md for the mapping rationale.",
     "",
-    "STATUS: Wailing Blue authored (full vanilla map, Hugo). Other zones still on",
-    "the coarse zone-medallion default until mapped."
+    "STATUS: Wailing Blue + Flooded Prison authored (Hugo). Flooded Prison gates:",
+    "Silver Bracelet (Dash) -> 7F, Water Dragon's Scales -> 8F, Levinstrike",
+    "Warhammer (Thunder) -> the walled Arthropod Medallion area + 9F. Remaining",
+    "zones (Guilty Fire, Silent Sands, Corrupted Blood, Demonic Core) still on the",
+    "coarse zone-medallion default until mapped."
   ],
   "scenes": {
     "S_1000": { "from": [["Wailing Blue", []]] },
@@ -36,14 +39,39 @@
     "S_1102": { "from": [["S_1100", []]] },
     "S_1011": { "from": [["S_1102", []]] },
     "S_1099": { "from": [["S_1011", ["Beast Medallion"]]] },
-    "S_1097": { "from": [["S_1099", []]] }
+    "S_1097": { "from": [["S_1099", []]] },
+
+    "S_2000": { "from": [["Flooded Prison", []]] },
+    "S_2001": { "from": [["S_2000", []]] },
+    "S_2002": { "from": [["S_2001", []]] },
+    "S_2003": { "from": [["S_2002", ["Silver Bracelet"]]] },
+    "S_2004": { "from": [["S_2003", []]] },
+    "S_2013": { "from": [["S_2004", []]] },
+    "S_2012": { "from": [["S_2004", []]] },
+    "S_2080": { "from": [["S_2012", []]] },
+    "S_2005": { "from": [["S_2080", []]] },
+    "S_2006": { "from": [["S_2005", []]] },
+    "S_2007": { "from": [["S_2006", []]] },
+    "S_2011": { "from": [["S_2007", ["Water Dragon's Scales"]]] },
+    "S_2015": { "from": [["S_2011", []]] },
+    "S_2016": { "from": [["S_2015", []]] },
+    "S_2010": { "from": [["S_2015", []]] },
+    "S_2014": { "from": [["S_2010", []]] },
+    "S_2009": { "from": [["S_2014", []]] },
+    "S_2017": { "from": [["S_2009", ["Levinstrike Warhammer"]]] },
+    "S_2100": { "from": [["S_2017", []]] },
+    "S_2101": { "from": [["S_2100", []]] },
+    "S_2008": { "from": [["S_2017", []]] },
+    "S_2099": { "from": [["S_2101", []]] },
+    "S_2097": { "from": [["S_2099", []]] }
   },
   "locations": {
     "Wailing Blue: 2F Path 1 #2": "S_1080",
     "Wailing Blue: 2F Path 1 #3": "S_1080"
   },
   "zone_exits": {
-    "Wailing Blue": "S_1097"
+    "Wailing Blue": "S_1097",
+    "Flooded Prison": "S_2097"
   },
   "_interim_notes": [
     "S_1010 gate is now [\"Blue Necklace\"] (the necklace lets you resist the",
