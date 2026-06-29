@@ -142,21 +142,40 @@ class YsOriginWorld(World):
         # method is "box_flag" / "item_flag" (detectable live today) or
         # "scene"/"scene_floor" (needs a current-scene memory offset — pending).
         active = {n for names in self._active_locations().values() for n in names}
+        locks = bool(self.options.statue_warp_locks.value)
+        # With warp-locks on, the mod suppresses each locked statue's
+        # purification (its activation flag write) so it stays dark. That flag is
+        # also the statue CHECK, so detection is switched to scene-method (firing
+        # on room entry) to keep checks reachable on foot regardless of locks.
+        statue_scenes = dt.statue_location_scenes() if locks else {}
+        location_detect = {}
+        for n in active:
+            if n in statue_scenes:
+                location_detect[n] = {"method": "scene", "scene": statue_scenes[n]}
+            else:
+                location_detect[n] = LOC_META[n]["detect"]
+        # Which statue starts unlocked (always-usable so the player can save).
+        # Default: the 1F starting statue (S_1000). Random start picks any statue.
+        if locks:
+            start_statue = (self.random.choice(dt.statue_scenes())
+                            if self.options.random_start.value else 1000)
+        else:
+            start_statue = 0
         return {
             "character": int(self.options.character.value),
             "goal": int(self.options.goal.value),
             "death_link": bool(self.options.death_link.value),
             # statue warp locks: on/off + item name -> {scene, flag} so the mod
-            # knows which statue each received unlock item enables.
-            "statue_warp_locks": bool(self.options.statue_warp_locks.value),
-            "statue_unlocks": (dt.statue_unlock_slot_data()
-                               if self.options.statue_warp_locks.value else {}),
+            # knows which statue each received unlock item enables, plus which
+            # statue starts unlocked (start_statue_scene; 0 when locks are off).
+            "statue_warp_locks": locks,
+            "statue_unlocks": (dt.statue_unlock_slot_data() if locks else {}),
+            "random_start": bool(self.options.random_start.value),
+            "start_statue_scene": start_statue,
             "location_signals": {
                 n: i for n, i in self.location_name_to_id.items() if n in active
             },
-            "location_detect": {
-                n: LOC_META[n]["detect"] for n in active
-            },
+            "location_detect": location_detect,
             # item name -> g_flags item index, so the client can grant anything.
             "item_index": dt.item_index,
             # scene leaf number -> room name, for the in-game overlay's current

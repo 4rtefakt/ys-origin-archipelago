@@ -308,6 +308,18 @@ def statue_unlock_slot_data() -> Dict[str, dict]:
     statue."""
     return {k: {"scene": v["scene"], "flag": v["flag"]} for k, v in STATUE_UNLOCKS.items()}
 
+
+def statue_location_scenes() -> Dict[str, str]:
+    """statue LOCATION name -> "S_<scene>" scene tag. When warp-locks are on the
+    statue check is detected by ENTERING the room (scene-method) instead of by
+    the activation flag, so blocking purification no longer hides the check."""
+    return {v["location"]: f"S_{v['scene']}" for v in STATUE_UNLOCKS.values()}
+
+
+def statue_scenes() -> List[int]:
+    """All statue scene leaf numbers (for picking a random start statue)."""
+    return sorted({v["scene"] for v in STATUE_UNLOCKS.values()})
+
 # Per-character room-logic gate substitutions for items a character lacks. Toal
 # gets Cleria Ring where Yunica/Hugo get Mask of Eyes (same chest = the
 # hidden-door ability). Lacked items with no substitute are simply RELAXED (the

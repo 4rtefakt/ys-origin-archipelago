@@ -58,10 +58,21 @@ class RoomChecks(Toggle):
 
 
 class StatueWarpLocks(Toggle):
-    """Lock goddess-statue WARP/fast-travel: each statue's warp is disabled until
-    you receive its unlock item (one per statue, shuffled into the multiworld).
-    Saving + healing still work everywhere. Bonus items — doesn't affect logic."""
+    """Lock the goddess statues. Each statue starts wrapped in darkness and stays
+    fully inactive — no warp, healing, saving, or blessings — until you receive
+    its unlock item (one per statue, shuffled into the multiworld). One statue is
+    unlocked from the start so you can always save (see Random start). Unlock
+    items are bonus convenience and don't affect logic (everything stays
+    reachable on foot)."""
     display_name = "Statue warp locks"
+
+
+class RandomStart(Toggle):
+    """With Statue warp locks on, pick a random goddess statue as the one that
+    starts unlocked, instead of the 1F starting statue. (Physically spawning at
+    that statue comes later; for now it only chooses which statue begins
+    unlocked.)"""
+    display_name = "Random start statue"
 
 
 @dataclass
@@ -74,4 +85,5 @@ class YsOriginOptions(PerGameCommonOptions):
     floor_checks: FloorChecks
     room_checks: RoomChecks
     statue_warp_locks: StatueWarpLocks
+    random_start: RandomStart
     death_link: DeathLink

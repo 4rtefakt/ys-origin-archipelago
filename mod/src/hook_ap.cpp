@@ -44,6 +44,7 @@ void set_room(const std::string& text);
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
 extern bool g_loc_flag[0x200];    // location flags that are checks
+extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
 static const char* AP_GAME = "Ys Origin";
 
@@ -149,6 +150,10 @@ static inline void write_hp_zero() {
 }
 // AP item name -> g_flags index (from slot_data item_index).
 static std::map<std::string, int> g_name_to_idx;
+// Statue warp locks: unlock-item name -> the statue's activation-flag index, so
+// receiving that item clears g_statue_lock (purification allowed). Populated
+// from slot_data statue_unlocks when statue_warp_locks is on.
+static std::map<std::string, int> g_statue_item_idx;
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
 static std::vector<int64_t> g_checks;
@@ -277,6 +282,26 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["scene_names"].items())
             g_scene_name[atoi(kv.key().c_str())] = kv.value().get<std::string>();
     }
+    int statues = 0;
+    if (sd.value("statue_warp_locks", false) && sd.contains("statue_unlocks")) {
+        int start_scene = sd.value("start_statue_scene", 0);
+        for (auto& kv : sd["statue_unlocks"].items()) {
+            const auto& v = kv.value();
+            int scene = v.value("scene", 0);
+            const std::string off = v.value("flag", std::string());
+            if (off.empty()) continue;
+            int o = (int)strtol(off.c_str(), nullptr, 16);
+            int idx = (o - kGFlagsRel) / 4;
+            if (idx < 0 || idx >= 0x200) continue;
+            g_statue_item_idx[kv.key()] = idx;     // unlock item name -> flag idx
+            // The start statue stays usable from the beginning so the player can
+            // always save; every other statue is locked until its item arrives.
+            g_statue_lock[idx] = (scene != start_scene);
+            statues++;
+        }
+        mod_log("ap: statue warp locks ON — %d statues, start scene S_%d",
+                statues, start_scene);
+    }
     if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
     if (g_death_link) {
         g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
@@ -293,8 +318,16 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
         std::string from = g_ap->get_player_alias(it.player);
+        auto su = g_statue_item_idx.find(name);
         auto f = g_name_to_idx.find(name);
-        if (f != g_name_to_idx.end())
+        if (su != g_statue_item_idx.end()) {
+            // Statue warp unlock: allow that statue to be purified from now on.
+            // The player still interacts with it to activate it (and gets the
+            // location check via scene-entry); we just stop suppressing.
+            g_statue_lock[su->second] = false;
+            mod_log("ap: statue unlock '%s' -> g_flags[0x%X] purification allowed",
+                    name.c_str(), su->second);
+        } else if (f != g_name_to_idx.end())
             ap_give(f->second, 1);
         else
             mod_log("ap: received '%s' (id %lld) — no g_flags index, skipped",

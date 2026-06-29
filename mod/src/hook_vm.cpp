@@ -27,6 +27,7 @@ void bridge_emit(const char* line);
 void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
+extern bool g_statue_lock[0x200];// locked statue activation flags (suppress purify)
 
 static const uintptr_t kGrantStore = 0x00567D17;  // mov [eax], ecx
 static const uintptr_t kGFlagsBase = 0x0076B91C;
@@ -62,6 +63,13 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         bridge_emit(buf);     // legacy bridge (no-op if no socket client)
         ap_on_check((int)idx); // embedded AP client -> LocationChecks
         return addr;  // let the flag set; the chest/event plays normally
+    }
+    if (g_statue_lock[idx] && val >= 1) {  // locked goddess statue being purified
+        // Suppress the activation write -> the statue stays wrapped in darkness
+        // (no warp/heal/save) until its unlock item arrives. The statue CHECK is
+        // detected by scene-method when locks are on, so nothing is lost here.
+        mod_log("statue: suppressed purification of g_flags[0x%X] (locked)", idx);
+        return &g_sink;
     }
     if (g_supp_item[idx] && val >= 1) {    // vanilla content of a randomized loc
         // Skill items (bracelets): open a window so the event's skill-equip ops

@@ -34,6 +34,11 @@ static const uintptr_t kGFlagsBase = 0x0076B91C;
 // randomized location's content — the player gets the AP item via 'V' instead).
 bool g_loc_flag[0x200] = {false};
 bool g_supp_item[0x200] = {false};
+// Statue warp locks: g_flags index of a statue's activation flag -> currently
+// LOCKED? The VM hook suppresses a locked statue's purification write so it
+// stays dark/inactive (no warp/heal/save) until its unlock item is received
+// (which clears the entry). Set up from slot_data in hook_ap.cpp.
+bool g_statue_lock[0x200] = {false};
 
 // Outgoing line queue (VM hook -> socket thread).
 static std::mutex g_out_mtx;
