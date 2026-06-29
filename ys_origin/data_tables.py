@@ -273,11 +273,40 @@ def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
     return variants[0]
 
 
+# Goddess-statue warp unlocks (optional, statue_warp_locks). One item per statue;
+# receiving it lets the mod enable warping to that statue. Bonus/useful (not
+# progression) -> they never change reachability (everything stays reachable on
+# foot), so seeds are beatable regardless of where they land.
+STATUE_UNLOCKS: Dict[str, dict] = {}
+for _l in _LOCS:
+    if _l["type"] != "statue":
+        continue
+    _m = re.match(r"(S_\d+)", _l.get("id", ""))
+    _sc = _m.group(1) if _m else ""
+    _nm = f"Statue Warp: {_l['room']} ({_sc})"
+    STATUE_UNLOCKS[_nm] = {
+        "scene": int(_sc[2:]) if _sc else 0,         # scene leaf number (g_flags[0x1F9])
+        "flag": _l["detect"].get("offset", ""),      # the statue's activation flag
+        "location": _l["name"],
+    }
+
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
-    | set(FILLER_POOL) | {GOAL_ITEM}
+    | set(FILLER_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS)
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
+
+
+def statue_unlock_items() -> List[str]:
+    """The 21 statue-warp-unlock item names (added to the pool when the option
+    is on, displacing filler)."""
+    return list(STATUE_UNLOCKS)
+
+
+def statue_unlock_slot_data() -> Dict[str, dict]:
+    """item name -> {scene, flag} so the mod can map a received unlock to its
+    statue."""
+    return {k: {"scene": v["scene"], "flag": v["flag"]} for k, v in STATUE_UNLOCKS.items()}
 
 # Per-character room-logic gate substitutions for items a character lacks. Toal
 # gets Cleria Ring where Yunica/Hugo get Mask of Eyes (same chest = the
@@ -311,6 +340,8 @@ def character_req(req: list, char: str) -> list:
 def item_classification(name: str) -> str:
     if name == GOAL_ITEM or name in GATE_ITEMS:
         return "progression"
+    if name in STATUE_UNLOCKS:
+        return "useful"
     return _item_class.get(name, "filler")
 
 

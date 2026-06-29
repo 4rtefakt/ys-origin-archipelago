@@ -95,6 +95,10 @@ class YsOriginWorld(World):
         # (boss/floor/room sanity checks) with varied filler.
         char = dt.char_name(self.options)
         pool = [self.create_item(n) for n in dt.vanilla_items(enabled, char)]
+        # statue warp-unlock items (one per statue) when the option is on; they
+        # take real-item slots, displacing that many filler.
+        if self.options.statue_warp_locks.value:
+            pool += [self.create_item(n) for n in dt.statue_unlock_items()]
         for _ in range(n_locations - len(pool)):
             pool.append(self.create_item(self.get_filler_item_name()))
 
@@ -142,6 +146,11 @@ class YsOriginWorld(World):
             "character": int(self.options.character.value),
             "goal": int(self.options.goal.value),
             "death_link": bool(self.options.death_link.value),
+            # statue warp locks: on/off + item name -> {scene, flag} so the mod
+            # knows which statue each received unlock item enables.
+            "statue_warp_locks": bool(self.options.statue_warp_locks.value),
+            "statue_unlocks": (dt.statue_unlock_slot_data()
+                               if self.options.statue_warp_locks.value else {}),
             "location_signals": {
                 n: i for n, i in self.location_name_to_id.items() if n in active
             },

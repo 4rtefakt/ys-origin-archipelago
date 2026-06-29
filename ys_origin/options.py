@@ -57,6 +57,13 @@ class RoomChecks(Toggle):
     display_name = "Room checks (sanity)"
 
 
+class StatueWarpLocks(Toggle):
+    """Lock goddess-statue WARP/fast-travel: each statue's warp is disabled until
+    you receive its unlock item (one per statue, shuffled into the multiworld).
+    Saving + healing still work everywhere. Bonus items — doesn't affect logic."""
+    display_name = "Statue warp locks"
+
+
 @dataclass
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
@@ -66,4 +73,5 @@ class YsOriginOptions(PerGameCommonOptions):
     boss_checks: BossChecks
     floor_checks: FloorChecks
     room_checks: RoomChecks
+    statue_warp_locks: StatueWarpLocks
     death_link: DeathLink
