@@ -20,6 +20,8 @@ from .data_tables import (
     CONNECTIONS,
     GOAL_ITEM,
     active_gates,
+    char_name,
+    character_req,
     edge_requirements,
     req_satisfied,
 )
@@ -40,12 +42,18 @@ def set_rules(world: "YsOriginWorld") -> None:
         entrance = mw.get_entrance(f"{srcs[0]} -> {zone}", player)
         entrance.access_rule = lambda state, i=item: state.has(i, player)
 
-    # Fine: per-edge room-logic requirements (items/skills). These sit on
-    # scene->scene (or zone->scene) entrances and never collide with the zone
-    # gates above, which live on zone->zone entrances.
+    # Fine: per-edge room-logic requirements (items/skills), transformed for the
+    # selected character (substitute/relax items they can't receive — e.g. Toal
+    # gets Cleria Ring for Mask of Eyes, and lacks Blue Necklace/Evil Ring so
+    # those edges relax to free). These sit on scene->scene (or zone->scene)
+    # entrances and never collide with the zone gates (zone->zone entrances).
+    char = char_name(world.options)
     for (src, dst), req in edge_requirements().items():
+        creq = character_req(req, char)
+        if not creq:
+            continue  # fully relaxed for this character -> free edge
         entrance = mw.get_entrance(f"{src} -> {dst}", player)
-        entrance.access_rule = lambda state, r=req: req_satisfied(r, state, player)
+        entrance.access_rule = lambda state, r=creq: req_satisfied(r, state, player)
 
 
 def set_completion_condition(world: "YsOriginWorld") -> None:

@@ -93,7 +93,8 @@ class YsOriginWorld(World):
 
         # One real (vanilla) item per enabled chest/event location; pad the rest
         # (boss/floor/room sanity checks) with varied filler.
-        pool = [self.create_item(n) for n in dt.vanilla_items(enabled)]
+        char = dt.char_name(self.options)
+        pool = [self.create_item(n) for n in dt.vanilla_items(enabled, char)]
         for _ in range(n_locations - len(pool)):
             pool.append(self.create_item(self.get_filler_item_name()))
 
@@ -155,9 +156,9 @@ class YsOriginWorld(World):
             # locations — the in-game mod suppresses these (player gets the AP
             # item over the network instead).
             "suppress_items": sorted({
-                dt.item_index[dt.location_vanilla_item[n]]
+                dt.item_index[dt.location_vanilla_item(n, dt.char_name(self.options))]
                 for n in active
-                if dt.location_vanilla_item.get(n)
-                and dt.location_vanilla_item[n] in dt.item_index
+                if dt.location_vanilla_item(n, dt.char_name(self.options))
+                and dt.location_vanilla_item(n, dt.char_name(self.options)) in dt.item_index
             }),
         }

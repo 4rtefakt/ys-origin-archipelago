@@ -215,21 +215,90 @@ def _collect_gate_items() -> Set[str]:
 
 GATE_ITEMS: Set[str] = _collect_gate_items()
 
-# Vanilla item per location (canonical = first granted item), and the item
-# universe (every item that can be created: vanilla + filler + goal).
-location_vanilla_item: Dict[str, str] = {
-    l["name"]: (l["items"][0]["name"] if l["items"] else "") for l in _LOCS
+# -- character-aware item selection ----------------------------------------- #
+# Yunica / Hugo / Toal climb the SAME tower but receive different equipment
+# variants (the multi-item chests) + a few unique key items. character_items.json
+# maps every pool item name -> the characters who can receive it (or ["shared"]).
+# The item-id universe stays FULL (all variants, stable ids AP needs); per-world
+# we only CREATE the selected character's items.
+_CHAR_ITEMS: Dict[str, list] = json.loads(
+    (Path(__file__).parent / "data" / "character_items.json").read_text("utf-8"))
+_CHAR_BY_VALUE = {0: "yunica", 1: "hugo", 2: "toal"}
+
+# All item variants at each location (for the full universe + per-char pick).
+LOCATION_VARIANTS: Dict[str, List[str]] = {
+    l["name"]: [it["name"] for it in l["items"]] for l in _LOCS
 }
 _item_class: Dict[str, str] = {}
 for _l in _LOCS:
     for _it in _l["items"]:
         _item_class[_it["name"]] = _it["class"]
 
-_universe = set(v for v in location_vanilla_item.values() if v) \
+
+def char_name(opts_or_value) -> str:
+    """'yunica' | 'hugo' | 'toal' from an options object or a raw int value."""
+    v = getattr(opts_or_value, "character", opts_or_value)
+    v = getattr(v, "value", v)
+    try:
+        return _CHAR_BY_VALUE.get(int(v), "hugo")
+    except (TypeError, ValueError):
+        return "hugo"
+
+
+def item_allowed(name: str, char: str) -> bool:
+    """True if item `name` can be received by character `char` (shared/filler/
+    goal -> all characters)."""
+    who = _CHAR_ITEMS.get(name)
+    if who is None or "shared" in who:
+        return True
+    return char in who
+
+
+def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
+    """The vanilla item a location grants the given character — its per-character
+    variant among the chest's items (fallback: the first variant)."""
+    variants = LOCATION_VARIANTS.get(loc_name, [])
+    if len(variants) <= 1:
+        return variants[0] if variants else ""  # single item = shared by all
+    for v in variants:                          # multi = pick the char's variant
+        if item_allowed(v, char):
+            return v
+    return variants[0]
+
+
+_universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
     | set(FILLER_POOL) | {GOAL_ITEM}
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
+
+# Per-character room-logic gate substitutions for items a character lacks. Toal
+# gets Cleria Ring where Yunica/Hugo get Mask of Eyes (same chest = the
+# hidden-door ability). Lacked items with no substitute are simply RELAXED (the
+# edge becomes free for that character) — AP-safe (only ever more permissive).
+_GATE_SUBST: Dict[str, Dict[str, str]] = {
+    "toal": {"Mask of Eyes": "Cleria Ring"},
+}
+# substitution targets must also count as progression
+GATE_ITEMS |= {v for m in _GATE_SUBST.values() for v in m.values()}
+
+
+def character_req(req: list, char: str) -> list:
+    """Transform a room-logic requirement for a character: substitute or drop
+    items the character cannot receive; a term that fully drops becomes free."""
+    subst = _GATE_SUBST.get(char, {})
+    out: list = []
+    for term in req:
+        if isinstance(term, (list, tuple)):
+            opts = [subst.get(x, x) for x in term]
+            opts = [x for x in opts if item_allowed(x, char)]
+            if opts:
+                out.append(opts if len(opts) > 1 else opts[0])
+        else:
+            x = subst.get(term, term)
+            if item_allowed(x, char):
+                out.append(x)
+    return out
 
 
 def item_classification(name: str) -> str:
@@ -318,10 +387,17 @@ def is_excluded(loc_name: str) -> bool:
 item_index: Dict[str, int] = json.loads(_ITEMS_PATH.read_text(encoding="utf-8"))
 
 
-def vanilla_items(enabled: Set[str]) -> List[str]:
-    """The real items to seed the pool (one per enabled chest/event location)."""
-    return [location_vanilla_item[l["name"]] for l in _LOCS
-            if l["type"] in enabled and location_vanilla_item[l["name"]]]
+def vanilla_items(enabled: Set[str], char: str = "hugo") -> List[str]:
+    """The real items to seed the pool (one per enabled chest/event location),
+    using the selected character's variant at each location."""
+    out: List[str] = []
+    for l in _LOCS:
+        if l["type"] not in enabled:
+            continue
+        it = location_vanilla_item(l["name"], char)
+        if it:
+            out.append(it)
+    return out
 
 
 def active_gates() -> Dict[str, str]:
