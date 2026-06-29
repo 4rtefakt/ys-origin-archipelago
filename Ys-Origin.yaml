@@ -30,6 +30,16 @@ Ys Origin:
   random_start: false      # with the above on, randomize WHICH statue starts
                            #   unlocked (default: the 1F starting statue)
 
+  # --- catch-up level scaling (so warping far ahead isn't a grind wall) ---
+  level_scaling: both    # off | level_floor | exp_multiplier | both
+                         #   level_floor    = entering a floor far above your
+                         #                    level bumps you up to (floor - margin)
+                         #   exp_multiplier = bonus EXP scaled by how under-level
+                         #                    you are (1x when on level)
+                         #   both (default) = bump most of the way, EXP boost the rest
+  level_margin: 3        # how many levels under a floor you may be before it kicks in
+  exp_multiplier_max: 8  # cap for the catch-up EXP multiplier
+
   # --- multiworld extras ---
   death_link: false      # when on, you die when any other DeathLink player dies
 

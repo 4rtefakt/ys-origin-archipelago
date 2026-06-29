@@ -91,6 +91,10 @@ hide/show the overlay.
 - **Optional statue warp locks** — turn the goddess statues into a warp network:
   each one starts locked (dark — no warp, heal, or save) until you receive its
   unlock item, with one statue unlocked from the start. See `statue_warp_locks`.
+- **Catch-up level scaling** — so warping to a far-off floor isn't a grind wall:
+  the mod can bump an under-leveled character toward the floor's expected level
+  and/or grant scaled bonus EXP, tapering to nothing once you're on level. On by
+  default; tune or disable with `level_scaling`.
 - **Goal:** defeat Darm (the final boss), or optionally all bosses.
 
 ## ⚙️ Options (in your yaml)
@@ -106,6 +110,9 @@ hide/show the overlay.
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | With `statue_warp_locks` on, randomize which statue starts unlocked (default: the 1F starting statue) |
+| `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
+| `level_margin` | `0`–`10` | `3` | How many levels under a floor you may be before scaling kicks in |
+| `exp_multiplier_max` | `1`–`20` | `8` | Cap for the catch-up EXP multiplier (scales with how under-level you are) |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
 
 ## ❓ Troubleshooting
