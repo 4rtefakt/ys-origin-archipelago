@@ -1,0 +1,27 @@
+# Ys Origin — Archipelago player settings template.
+# Edit "name" and the options, then drop this file in Archipelago's Players/ folder.
+# (You can have several players/yamls in one multiworld.)
+
+name: Player1            # your slot name — must match `slot=` in yso_ap.cfg
+description: Ys Origin
+game: Ys Origin
+requires:
+  version: 0.4.0
+
+Ys Origin:
+  # --- who you play as (the seed is built for this character) ---
+  character: hugo        # yunica | hugo | toal
+
+  # --- what wins the seed ---
+  goal: defeat_darm      # defeat_darm | defeat_all_bosses
+
+  # --- which things count as checks (more checks = more to find) ---
+  statue_checks: true    # activating goddess statues
+  blessing_checks: true  # buying divine blessings
+  boss_checks: true      # reaching each boss arena
+  floor_checks: true     # reaching each floor
+  room_checks: false     # entering each room (adds ~145 filler checks — big!)
+
+  # --- standard Archipelago knobs (leave as-is if unsure) ---
+  progression_balancing: 0
+  accessibility: items

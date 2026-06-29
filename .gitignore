@@ -33,3 +33,6 @@ scenelog.jsonl
 # third-party reference material (copyrighted) — local only, never published
 fanmade_maps/
 Ys-Origin-Guide.md
+
+# apworld build output
+dist/

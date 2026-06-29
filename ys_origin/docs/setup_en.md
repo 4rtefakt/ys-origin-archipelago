@@ -2,71 +2,70 @@
 
 ## Requirements
 
-- Windows 10/11
-- Ys Origin (Steam), `yso_win.exe`, version **1.1.1.0**
-- Python 3.11+ (only needed to run the client from source)
-- An Archipelago installation (for generating and hosting), or access to a host
+- Windows 10 / 11
+- **Ys Origin** (Steam), `yso_win.exe`, version **1.1.1.0**
+- An [Archipelago](https://archipelago.gg) installation (to generate / host), or
+  access to someone who hosts
+- Two files from the project's **latest Release**: `ys_origin.apworld` and
+  `dinput8.dll`
 
-## Installing the apworld
+## 1. Install the apworld
 
-1. Zip the `ys_origin/` directory into `ys_origin.apworld`
-   (the archive's top-level folder must be `ys_origin/`). From the repo root:
+Copy `ys_origin.apworld` into your Archipelago **`custom_worlds`** folder. The
+Launcher's **Generate** will now list **Ys Origin**.
 
-   ```powershell
-   Compress-Archive -Path ys_origin -DestinationPath ys_origin.zip
-   Rename-Item ys_origin.zip ys_origin.apworld
-   ```
+(Building it yourself from source: from the repo root,
+`Compress-Archive -Path ys_origin -DestinationPath ys_origin.zip -Force` then
+rename `ys_origin.zip` → `ys_origin.apworld`. The archive's top folder must be
+`ys_origin`.)
 
-2. Copy `ys_origin.apworld` into your Archipelago `custom_worlds/` folder
-   (older installs: `lib/worlds/`).
+## 2. Make your settings file (YAML)
 
-3. Confirm it loads: the Archipelago Launcher → "Generate" should now list
-   **Ys Origin** as an available game.
+Start from the `Ys-Origin.yaml` template in the Release (or the Launcher's
+"Generate Template Options"). Set your **name** and options:
 
-## Generating a seed
+- `character`: `yunica` / `hugo` / `toal` — the seed is built for this character.
+- `goal`: `defeat_darm` / `defeat_all_bosses`
+- `statue_checks` / `blessing_checks` / `boss_checks` / `floor_checks`:
+  `true` / `false` (default `true`)
+- `room_checks`: `true` / `false` (default `false`; adds ~145 filler checks)
 
-1. Create a YAML for Ys Origin (the Launcher's "Generate Template Options"
-   produces one once the apworld is installed). Options:
-   - `character`: `yunica` / `hugo` / `toal`
-   - `start_with_double_jump`: `true` / `false`
-   - `include_equipment`: `true` / `false`
-   - `goal`: `defeat_darm` / `defeat_all_bosses`
-2. Generate and host as usual.
+Put the yaml in Archipelago's `Players/` folder.
 
-## Running the client
+## 3. Generate and host
 
-1. Launch Ys Origin and load your save.
-2. From the repo root, run the client (it needs the Archipelago source on the
-   path — set `AP_ROOT` to your Archipelago checkout):
+Use the Archipelago Launcher to **Generate**, then **Host** the resulting seed
+(or upload it at [archipelago.gg/uploads](https://archipelago.gg/uploads)). Note
+the room's **host / port**.
 
-   ```powershell
-   $env:AP_ROOT = "C:\path\to\Archipelago"
-   python -m client.ap_client <host:port> [password]
-   ```
+## 4. Install the mod
 
-   Run as Administrator if attaching to the game fails — reading another
-   process's memory requires it on some systems.
+Copy `dinput8.dll` into your **Ys Origin** folder (next to `yso_win.exe`),
+e.g. `...\Steam\steamapps\common\Ys Origin\`. Uninstall by deleting it.
 
-3. The client attaches to `yso_win.exe`, connects to the AP server, and begins
-   polling. Received items are written into the game; checks are sent as you
-   find them.
+## 5. Connect
 
-## Discovering offsets (developers)
+Launch the game once and quit — the mod writes **`yso_ap.cfg`** next to the exe.
+Edit it:
 
-Many memory offsets are still being reverse-engineered. The scanner helps map
-them against a live game:
-
-```powershell
-python -m tools.scan
+```ini
+host=archipelago.gg
+port=12345
+slot=YourName
+password=
 ```
 
-See the repo README for the scanner workflow.
+`slot` is the **name** from your yaml. Relaunch the game and load a save (or New
+Game). The top-right overlay shows your connection, current room, and items;
+press **`INSERT`** to toggle it. Open chests / trigger checks and play normally —
+the mod swaps in the randomized items and applies items sent to you.
 
 ## Troubleshooting
 
-- **"Could not import Archipelago's CommonClient"** — set `AP_ROOT` to your
-  Archipelago checkout, or run the client from inside that tree.
-- **"failed to attach"** — the game isn't running, or you need Administrator.
-- **Items not applying / "Offset ... is not mapped yet"** — that item's memory
-  offset hasn't been discovered. Map it with `tools/scan.py` and add it to
-  `client/offsets.py`.
+- **No overlay / not connecting:** confirm `dinput8.dll` sits next to
+  `yso_win.exe`, and that `yso_ap.cfg` host/port/slot match the room and your
+  yaml name. Log: `%TEMP%\yso_ap_mod.log`.
+- **Crashes on launch:** verify the game is **v1.1.1.0** and you're using the
+  `dinput8.dll` from the matching Release.
+- **Starting gear missing:** don't run any other external AP client alongside the
+  mod — the mod is the client.

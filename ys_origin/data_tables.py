@@ -13,14 +13,22 @@ those fixed) plus helpers that select the active subset for a given option set.
 from __future__ import annotations
 
 import json
+import pkgutil
 import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-_DATA_PATH = Path(__file__).parent / "data" / "locations.json"
-_ITEMS_PATH = Path(__file__).parent / "data" / "items.json"
-_ROOM_LOGIC_PATH = Path(__file__).parent / "data" / "room_logic.json"
+
+def _read_data(relpath: str) -> str:
+    """Read a bundled data file as UTF-8 text. Works both on disk (dev) AND
+    inside a zipped ``.apworld`` (where a filesystem ``Path`` can't reach into
+    the archive — must go through the package loader)."""
+    if __package__:
+        raw = pkgutil.get_data(__package__, relpath)
+        if raw is not None:
+            return raw.decode("utf-8")
+    return (Path(__file__).parent / relpath).read_text(encoding="utf-8")
 
 LOC_BASE_ID = 0x59_6000
 ITEM_BASE_ID = 0x59_5000
@@ -67,7 +75,7 @@ FILLER_POOL: List[str] = [
 
 
 def _load() -> List[dict]:
-    return json.loads(_DATA_PATH.read_text(encoding="utf-8"))
+    return json.loads(_read_data("data/locations.json"))
 
 
 _LOCS = _load()
@@ -147,7 +155,7 @@ for _sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
 # locations physically reached from a different room than their script scene
 # (e.g. an elevated chest entered from above, or a boss drop mis-scened to a
 # chest's room).
-_room_logic_doc: dict = json.loads(_ROOM_LOGIC_PATH.read_text("utf-8"))
+_room_logic_doc: dict = json.loads(_read_data("data/room_logic.json"))
 _room_logic: dict = _room_logic_doc.get("scenes", {})
 _loc_region_override: Dict[str, str] = _room_logic_doc.get("locations", {})
 # zone -> the authored scene you physically EXIT through to the next zone. For an
@@ -221,8 +229,7 @@ GATE_ITEMS: Set[str] = _collect_gate_items()
 # maps every pool item name -> the characters who can receive it (or ["shared"]).
 # The item-id universe stays FULL (all variants, stable ids AP needs); per-world
 # we only CREATE the selected character's items.
-_CHAR_ITEMS: Dict[str, list] = json.loads(
-    (Path(__file__).parent / "data" / "character_items.json").read_text("utf-8"))
+_CHAR_ITEMS: Dict[str, list] = json.loads(_read_data("data/character_items.json"))
 _CHAR_BY_VALUE = {0: "yunica", 1: "hugo", 2: "toal"}
 
 # All item variants at each location (for the full universe + per-char pick).
@@ -384,7 +391,7 @@ def is_excluded(loc_name: str) -> bool:
 
 # item name -> g_flags item index (== INVINFO id); the client grants by writing
 # that array entry. Published in slot_data so the client needs no local table.
-item_index: Dict[str, int] = json.loads(_ITEMS_PATH.read_text(encoding="utf-8"))
+item_index: Dict[str, int] = json.loads(_read_data("data/items.json"))
 
 
 def vanilla_items(enabled: Set[str], char: str = "hugo") -> List[str]:
