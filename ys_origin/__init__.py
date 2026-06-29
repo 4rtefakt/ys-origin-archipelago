@@ -76,10 +76,12 @@ class YsOriginWorld(World):
     # -- items --------------------------------------------------------------- #
 
     def create_item(self, name: str) -> YsOriginItem:
-        return YsOriginItem(
-            name, _KIND_TO_AP[kind_of(name)], self.item_name_to_id[name],
-            self.player,
-        )
+        cls = _KIND_TO_AP[kind_of(name)]
+        # Cleria Ore becomes progression when weapon gating is on (it's the
+        # weapon-upgrade currency the zone gates require).
+        if name == dt.CLERIA_ORE and self.options.weapon_requirements.value:
+            cls = ItemClassification.progression
+        return YsOriginItem(name, cls, self.item_name_to_id[name], self.player)
 
     def get_filler_item_name(self) -> str:
         return self.random.choice(dt.FILLER_POOL)
@@ -178,6 +180,9 @@ class YsOriginWorld(World):
             "level_scaling": int(self.options.level_scaling.value),
             "level_margin": int(self.options.level_margin.value),
             "exp_multiplier_max": int(self.options.exp_multiplier_max.value),
+            # weapon gating: Cleria Ore = weapon level (for the eventual mod hook
+            # that upgrades the weapon on Cleria Ore receipt instead of granting it).
+            "weapon_requirements": int(self.options.weapon_requirements.value),
             # expected level keyed by SCENE (current_floor/0xCF is unreliable for
             # warp destinations; the mod reads current_scene/0x1F9 reliably).
             "scene_levels": dt.scene_levels(),

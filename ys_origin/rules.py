@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .data_tables import (
+    CLERIA_ORE,
     CONNECTIONS,
     GOAL_ITEM,
     active_gates,
@@ -24,6 +25,7 @@ from .data_tables import (
     character_req,
     edge_requirements,
     req_satisfied,
+    zone_ore_requirements,
 )
 
 if TYPE_CHECKING:
@@ -34,13 +36,23 @@ def set_rules(world: "YsOriginWorld") -> None:
     mw = world.multiworld
     player = world.player
 
-    # Coarse: boss-medallion gate on each zone entrance.
-    for zone, item in active_gates().items():
+    # Coarse: boss-medallion gate on each zone entrance, plus (optional) a Cleria
+    # Ore = weapon-level requirement so the warp network can't strand you on a
+    # floor your weapon can't dent. The generator then guarantees enough ore is
+    # obtainable before each zone is in logic.
+    gates = active_gates()
+    ore_req = zone_ore_requirements(int(world.options.weapon_requirements.value))
+    for zone in set(gates) | set(ore_req):
         srcs = [s for s, d in CONNECTIONS if d == zone]
         if not srcs:
             continue
         entrance = mw.get_entrance(f"{srcs[0]} -> {zone}", player)
-        entrance.access_rule = lambda state, i=item: state.has(i, player)
+        medallion = gates.get(zone)
+        ore = ore_req.get(zone, 0)
+        entrance.access_rule = lambda state, i=medallion, n=ore: (
+            (i is None or state.has(i, player))
+            and (n == 0 or state.has(CLERIA_ORE, player, n))
+        )
 
     # Fine: per-edge room-logic requirements (items/skills), transformed for the
     # selected character (substitute/relax items they can't receive — e.g. Toal

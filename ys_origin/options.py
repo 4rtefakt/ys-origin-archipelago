@@ -115,6 +115,24 @@ class ExpMultiplierMax(Range):
     default = 8
 
 
+class WeaponRequirements(Choice):
+    """Gate each tower zone behind enough Cleria Ore (= weapon upgrades) to fight
+    there, so the warp network can't strand you somewhere your weapon can't dent.
+    The generator guarantees floor-appropriate ore is obtainable (by you, or
+    friends in a multiworld) before each zone is in logic.
+
+    - ``off``    : no weapon gating.
+    - ``casual`` : lenient ore requirements (default).
+    - ``strict`` : ore pacing close to a normal climb.
+
+    (Cleria Ore becomes progression when this is on.)"""
+    display_name = "Weapon requirements"
+    option_off = 0
+    option_casual = 1
+    option_strict = 2
+    default = 1  # casual
+
+
 @dataclass
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
@@ -129,4 +147,5 @@ class YsOriginOptions(PerGameCommonOptions):
     level_scaling: LevelScaling
     level_margin: LevelMargin
     exp_multiplier_max: ExpMultiplierMax
+    weapon_requirements: WeaponRequirements
     death_link: DeathLink

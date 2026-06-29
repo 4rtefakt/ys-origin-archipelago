@@ -345,6 +345,31 @@ def floor_levels() -> Dict[str, int]:
     return {str(k): v for k, v in FLOOR_LEVELS.items()}
 
 
+CLERIA_ORE = "Cleria Ore"
+
+# Cleria Ore (= weapon-upgrade) count required to ENTER each zone, per the
+# weapon_requirements option: (casual, strict). 5 ore exist (one per zone in
+# vanilla), so a normal climb hands you up to 4 before the final zone. Gating on
+# zone ENTRY (not just bosses) because regular enemies hit just as hard.
+ZONE_ORE_REQ: Dict[str, Tuple[int, int]] = {
+    "Flooded Prison": (0, 1),
+    "Flames of Guilt": (1, 2),
+    "Silent Sands": (1, 2),
+    "Corrupted Blood": (2, 3),
+    "Demonic Core": (2, 4),
+}
+
+
+def zone_ore_requirements(mode: int) -> Dict[str, int]:
+    """zone -> required Cleria Ore count for weapon_requirements mode
+    (0 off, 1 casual, 2 strict). Empty when off."""
+    if mode not in (1, 2):
+        return {}
+    idx = 0 if mode == 1 else 1
+    return {z: n for z, (c, s) in ZONE_ORE_REQ.items()
+            for n in ((c, s)[idx],) if n > 0 and z in ALL_REGIONS}
+
+
 def scene_levels() -> Dict[str, int]:
     """scene leaf number (as str, e.g. '6000') -> expected character level, via
     the scene's floor. Keyed by SCENE on purpose: the live current_floor
