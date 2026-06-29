@@ -172,6 +172,13 @@ class YsOriginWorld(World):
             "statue_unlocks": (dt.statue_unlock_slot_data() if locks else {}),
             "random_start": bool(self.options.random_start.value),
             "start_statue_scene": start_statue,
+            # catch-up level scaling: mode + tuning + the floor->expected-level
+            # curve, so the mod can bump under-leveled players / boost their EXP
+            # when the warp network drops them somewhere too high.
+            "level_scaling": int(self.options.level_scaling.value),
+            "level_margin": int(self.options.level_margin.value),
+            "exp_multiplier_max": int(self.options.exp_multiplier_max.value),
+            "floor_levels": dt.floor_levels(),
             "location_signals": {
                 n: i for n, i in self.location_name_to_id.items() if n in active
             },

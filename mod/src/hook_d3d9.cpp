@@ -99,11 +99,14 @@ static void imgui_init(IDirect3DDevice9* dev) {
 
 static bool g_logged_first_endscene = false;
 
+extern "C" void exp_scaling_on_frame();  // apply pending level bump (hook_ap.cpp)
+
 static HRESULT WINAPI hk_EndScene(IDirect3DDevice9* dev) {
     if (!g_logged_first_endscene) {
         g_logged_first_endscene = true;
         mod_log("hk_EndScene: first call (dev=%p)", (void*)dev);
     }
+    exp_scaling_on_frame();  // main-thread: safe to call the game's set-level fn
     if (!g_imgui_ready)
         imgui_init(dev);
     if (g_show) {

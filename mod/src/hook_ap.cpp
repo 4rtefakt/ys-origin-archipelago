@@ -170,6 +170,24 @@ static bool g_statue_locks_on = false;
 // an in-game save load (which reloads g_flags + the registry from the save file,
 // clobbering a one-time write made at item-receipt / reconnect-replay time).
 static std::set<int> g_statue_forced;
+
+// -- catch-up level scaling ------------------------------------------------- #
+// Static globals (no ASLR): current EXP, current LEVEL. FUN_004200f0(level) is
+// the game's own "set to level N" (sets EXP=threshold, level, recomputes stats).
+// g_exp_factor (in hook_vm.cpp) scales earned EXP at the award hook.
+extern float g_exp_factor;
+static const uintptr_t kLevelAbs = 0x0076A760;   // current character level
+typedef void(__fastcall* SetLevelFn)(unsigned);
+static const SetLevelFn kSetLevel = (SetLevelFn)0x004200F0;
+static int g_level_scaling = 0;        // 0 off, 1 level_floor, 2 exp_mult, 3 both
+static int g_level_margin = 3;
+static int g_exp_mult_max = 8;
+static int g_floor_levels[64] = {0};   // floor number -> expected level (0 = unknown)
+static std::atomic<int> g_pending_level{0};  // bump requested; applied on the main thread
+static inline int read_level() { return *(volatile int*)kLevelAbs; }
+static inline int read_current_floor() {
+    return *(volatile int*)(kGFlagsAbs + 0xCF * 4);  // g_flags[0xCF] = current floor
+}
 static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
@@ -328,6 +346,18 @@ static void on_slot_connected(const nlohmann::json& sd) {
         mod_log("ap: statue warp locks ON — %d statues, start scene S_%d",
                 statues, start_scene);
     }
+    g_level_scaling = sd.value("level_scaling", 0);
+    g_level_margin = sd.value("level_margin", 3);
+    g_exp_mult_max = sd.value("exp_multiplier_max", 8);
+    if (sd.contains("floor_levels")) {
+        for (auto& kv : sd["floor_levels"].items()) {
+            int f = atoi(kv.key().c_str());
+            if (f >= 0 && f < 64) g_floor_levels[f] = kv.value().get<int>();
+        }
+    }
+    if (g_level_scaling)
+        mod_log("ap: level scaling mode=%d (margin %d, exp x<=%d)",
+                g_level_scaling, g_level_margin, g_exp_mult_max);
     if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
     if (g_death_link) {
         g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
@@ -467,6 +497,43 @@ static void poll_statue_warp() {
     }
 }
 
+// Compute the catch-up EXP factor and (for the level floor) request a bump.
+// Runs on the poll thread: only READS level/floor + sets g_exp_factor / a pending
+// target; the actual level write happens on the main thread (exp_scaling_on_frame).
+static void exp_scaling_poll() {
+    if (!g_level_scaling) { g_exp_factor = 1.0f; return; }
+    int fl = read_current_floor();
+    int explv = (fl >= 0 && fl < 64) ? g_floor_levels[fl] : 0;
+    int lv = read_level();
+    if (explv <= 0 || lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game
+    int gap = explv - lv;
+    // EXP multiplier (modes 2 + 3): scale with how far under-level you are.
+    if (g_level_scaling == 2 || g_level_scaling == 3) {
+        float f = (gap > 0) ? (1.0f + (float)gap) : 1.0f;
+        if (f > (float)g_exp_mult_max) f = (float)g_exp_mult_max;
+        g_exp_factor = f;
+    } else {
+        g_exp_factor = 1.0f;
+    }
+    // Level floor (modes 1 + 3): bump up to (expected - margin) if below.
+    if (g_level_scaling == 1 || g_level_scaling == 3) {
+        int target = explv - g_level_margin;
+        if (target > lv && target > 1) g_pending_level.store(target);
+    }
+}
+
+// Apply a requested level bump on the GAME's main thread (called from the D3D9
+// EndScene hook). Uses the game's own set-level fn so EXP/threshold/stats all
+// stay consistent. Only ever raises the level.
+extern "C" void exp_scaling_on_frame() {
+    int t = g_pending_level.exchange(0);
+    if (t <= 0 || t > 99) return;
+    if (read_level() < t) {
+        kSetLevel((unsigned)t);
+        mod_log("level scaling: bumped to Lv %d (floor catch-up)", t);
+    }
+}
+
 static void poll_loop() {
     while (g_run.load()) {
         if (g_ap) {
@@ -474,6 +541,7 @@ static void poll_loop() {
             poll_scene();
             poll_deathlink();
             poll_statue_warp();
+            exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;
             {

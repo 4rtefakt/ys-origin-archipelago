@@ -320,6 +320,26 @@ def statue_scenes() -> List[int]:
     """All statue scene leaf numbers (for picking a random start statue)."""
     return sorted({v["scene"] for v in STATUE_UNLOCKS.values()})
 
+
+# Expected character level per tower floor, from the bundled Hugo guide's
+# per-boss "Your Level" recommendations, interpolated for the floors between.
+# Used by the mod's catch-up level scaling (level floor + EXP multiplier) so
+# warping far ahead doesn't strand you under-leveled. Floor number == the game's
+# current_floor (g_flags[0xCF]).
+FLOOR_LEVELS: Dict[int, int] = {
+    1: 1, 2: 3, 3: 5, 4: 7, 5: 9,           # Wailing Blue (5F Beast ~9)
+    6: 11, 7: 13, 8: 15, 9: 17,             # Flooded Prison (9F Arthropod ~17)
+    10: 18, 11: 19, 12: 21, 13: 22,         # Flames of Guilt (13F Monk ~20-23)
+    14: 23, 15: 24, 16: 25, 17: 25,         # Silent Sands (17F Thorn ~25; Rado ~29)
+    18: 26, 19: 28, 20: 30, 21: 32,         # Corrupted Blood (21F Mantis ~32)
+    22: 34, 23: 35, 24: 37, 25: 38,         # Demonic Core (25F Darm ~38)
+}
+
+
+def floor_levels() -> Dict[str, int]:
+    """floor number (as str, for JSON) -> expected character level."""
+    return {str(k): v for k, v in FLOOR_LEVELS.items()}
+
 # Per-character room-logic gate substitutions for items a character lacks. Toal
 # gets Cleria Ring where Yunica/Hugo get Mask of Eyes (same chest = the
 # hidden-door ability). Lacked items with no substitute are simply RELAXED (the

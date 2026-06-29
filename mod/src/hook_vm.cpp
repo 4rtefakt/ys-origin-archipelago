@@ -279,6 +279,28 @@ __declspec(naked) static void Hook_Equip12C() {
     }
 }
 
+// --- Catch-up EXP multiplier ----------------------------------------------- #
+//
+// The EXP-award (FUN_004fa4a0) computes earned EXP in xmm1 (boost[0x76a5fc] *
+// base_exp[enemy+0x1c] * difficulty, floored to a min), then:
+//     0x4FA525  addss xmm1, [0x76A748]   ; earned + current EXP
+//     0x4FA52D  movss [0x76A748], xmm1   ; store EXP
+//     0x4FA535  call 0x420C40            ; process level-ups
+// We splice 0x4FA525 to multiply the earned EXP (xmm1) by g_exp_factor BEFORE the
+// add: 1.0 = byte-for-byte vanilla (keeps the game's own up-to-1.99 boost), >1 =
+// catch-up when you're under-leveled for the floor (set by the AP poll loop). The
+// game's own level-up processor runs right after, so leveling cascades safely.
+float g_exp_factor = 1.0f;
+static const uintptr_t kExpAdd = 0x004FA525;
+static void* g_orig_expadd = nullptr;
+
+__declspec(naked) static void Hook_ExpAdd() {
+    __asm {
+        mulss xmm1, dword ptr [g_exp_factor]   // earned *= factor
+        jmp   dword ptr [g_orig_expadd]        // addss xmm1,[0x76a748] ; -> 0x4FA52D
+    }
+}
+
 void hook_vm_install() {
     mod_log("hook_vm_install: begin (grant store @0x%X, override)", (unsigned)kGrantStore);
     MH_Initialize();  // may already be initialized by the D3D9 hook (returns 9)
@@ -291,6 +313,8 @@ void hook_vm_install() {
     MH_STATUS es = MH_EnableHook((void*)kEquip12C);
     MH_CreateHook((void*)kBoxFn, (void*)&Hook_Box, &g_orig_box);
     MH_EnableHook((void*)kBoxFn);
-    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d (+box)",
-            (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es);
+    MH_STATUS cx = MH_CreateHook((void*)kExpAdd, (void*)&Hook_ExpAdd, &g_orig_expadd);
+    MH_STATUS ex = MH_EnableHook((void*)kExpAdd);
+    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d exp=%d/%d (+box)",
+            (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es, (int)cx, (int)ex);
 }

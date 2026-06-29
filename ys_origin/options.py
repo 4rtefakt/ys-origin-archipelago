@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from Options import Choice, DeathLink, DefaultOnToggle, PerGameCommonOptions, Toggle
+from Options import (
+    Choice, DeathLink, DefaultOnToggle, PerGameCommonOptions, Range, Toggle,
+)
 
 
 class Character(Choice):
@@ -75,6 +77,44 @@ class RandomStart(Toggle):
     display_name = "Random start statue"
 
 
+class LevelScaling(Choice):
+    """Catch-up leveling so the statue warp network never means a grind wall.
+    Compares your level to the floor you're on (per the game's own level curve):
+
+    - ``off``            : vanilla leveling.
+    - ``level_floor``    : entering a floor far above your level bumps you up to
+                           (floor level - margin); only ever raises you.
+    - ``exp_multiplier`` : you gain bonus EXP scaled by how far under-level you
+                           are (1x when on level), so fighting catches you up
+                           fast without changing combat.
+    - ``both``           : the bump gets you most of the way, the EXP boost
+                           finishes it through play. Frictionless (default)."""
+    display_name = "Level scaling"
+    option_off = 0
+    option_level_floor = 1
+    option_exp_multiplier = 2
+    option_both = 3
+    default = 3  # both
+
+
+class LevelMargin(Range):
+    """How many levels under a floor's expected level you may be before Level
+    scaling kicks in (also the gap the level-floor bump leaves for you to earn)."""
+    display_name = "Level scaling margin"
+    range_start = 0
+    range_end = 10
+    default = 3
+
+
+class ExpMultiplierMax(Range):
+    """Cap for the catch-up EXP multiplier (it scales with how far under-level you
+    are, up to this much, and is 1x when you're on level)."""
+    display_name = "Catch-up EXP multiplier cap"
+    range_start = 1
+    range_end = 20
+    default = 8
+
+
 @dataclass
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
@@ -86,4 +126,7 @@ class YsOriginOptions(PerGameCommonOptions):
     room_checks: RoomChecks
     statue_warp_locks: StatueWarpLocks
     random_start: RandomStart
+    level_scaling: LevelScaling
+    level_margin: LevelMargin
+    exp_multiplier_max: ExpMultiplierMax
     death_link: DeathLink
