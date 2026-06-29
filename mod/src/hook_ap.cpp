@@ -54,8 +54,11 @@ static int  g_port = 38281;
 static char g_slot[128] = "Hugo";
 static char g_pass[128] = "";
 static char g_uri[192] = "ws://127.0.0.1:38281";
-static int  g_hp_offset = 0;        // module-relative current-HP cell (0 = unmapped)
-static bool g_hp_is_float = true;   // HP stored as float (cfg hp_float=0 -> int)
+// Combat HP = *(module + g_hp_ptr) + g_hp_field, a float (reverse-engineered).
+// g_hp_ptr is a static global holding the player-entity pointer; +0x98 = HP. The
+// HUD/menu HP cells are mirrors that do NOT drive death — this entity HP does.
+static int g_hp_ptr = 0x349D44;     // module-relative static entity pointer
+static int g_hp_field = 0x98;       // HP offset within the entity
 
 static void strip_eol(char* s) { s[strcspn(s, "\r\n")] = '\0'; }
 
@@ -87,8 +90,8 @@ static void load_config() {
         else if (!strcmp(key, "port")) { g_port = atoi(val); }
         else if (!strcmp(key, "slot")) { strncpy(g_slot, val, sizeof(g_slot) - 1); }
         else if (!strcmp(key, "password")) { strncpy(g_pass, val, sizeof(g_pass) - 1); }
-        else if (!strcmp(key, "hp_offset")) { g_hp_offset = (int)strtol(val, nullptr, 0); }
-        else if (!strcmp(key, "hp_float")) { g_hp_is_float = atoi(val) != 0; }
+        else if (!strcmp(key, "hp_ptr")) { g_hp_ptr = (int)strtol(val, nullptr, 0); }
+        else if (!strcmp(key, "hp_field")) { g_hp_field = (int)strtol(val, nullptr, 0); }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -128,19 +131,21 @@ static std::string g_pending_death_cause;
 static double g_last_death_ts = 0.0;      // debounce sends / suppress self-echo
 static int g_prev_hp = -1;
 
+// Resolve the entity HP cell through the static pointer; 0 if not (yet) valid
+// (during loads / menus the pointer may be null).
 static inline uintptr_t hp_addr() {
-    return g_hp_offset ? (0x00400000u + (uintptr_t)g_hp_offset) : 0;
+    if (!g_hp_ptr) return 0;
+    uint32_t ent = *(volatile uint32_t*)(0x00400000u + (uintptr_t)g_hp_ptr);
+    if (ent < 0x10000u) return 0;
+    return (uintptr_t)ent + (uintptr_t)g_hp_field;
 }
 static inline int read_hp() {
     uintptr_t a = hp_addr();
-    if (!a) return -1;
-    return g_hp_is_float ? (int)(*(volatile float*)a) : (*(volatile int*)a);
+    return a ? (int)(*(volatile float*)a) : -1;
 }
 static inline void write_hp_zero() {
     uintptr_t a = hp_addr();
-    if (!a) return;
-    if (g_hp_is_float) *(volatile float*)a = 0.0f;
-    else *(volatile int*)a = 0;
+    if (a) *(volatile float*)a = 0.0f;
 }
 // AP item name -> g_flags index (from slot_data item_index).
 static std::map<std::string, int> g_name_to_idx;
@@ -275,7 +280,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
     if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
     if (g_death_link) {
         g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
-        mod_log("ap: DeathLink ON (hp_offset=0x%X)", g_hp_offset);
+        mod_log("ap: DeathLink ON (hp_ptr=0x%X+0x%X)", g_hp_ptr, g_hp_field);
     }
     mod_log("ap: slot_connected — %d items, %d suppress, %d location flags, "
             "%d scene checks", names, supp, locs, scenes);
