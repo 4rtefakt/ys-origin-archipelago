@@ -326,13 +326,17 @@ def statue_scenes() -> List[int]:
 # Used by the mod's catch-up level scaling (level floor + EXP multiplier) so
 # warping far ahead doesn't strand you under-leveled. Floor number == the game's
 # current_floor (g_flags[0xCF]).
+# Recommended player level per floor, from the guide's per-boss "Your Level" plus
+# the Steam "Recommended Boss Levels" reference (they agree). Boss/chamber floors
+# are the anchors; non-boss floors interpolated. NOTE the steep Demonic Core spike
+# (21F~32 -> 22F~41) and that useful levels run to ~52 at the summit (max 60).
 FLOOR_LEVELS: Dict[int, int] = {
-    1: 1, 2: 3, 3: 5, 4: 7, 5: 9,           # Wailing Blue (5F Beast ~9)
-    6: 11, 7: 13, 8: 15, 9: 17,             # Flooded Prison (9F Arthropod ~17)
-    10: 18, 11: 19, 12: 21, 13: 22,         # Flames of Guilt (13F Monk ~20-23)
-    14: 23, 15: 24, 16: 25, 17: 25,         # Silent Sands (17F Thorn ~25; Rado ~29)
-    18: 26, 19: 28, 20: 30, 21: 32,         # Corrupted Blood (21F Mantis ~32)
-    22: 34, 23: 35, 24: 37, 25: 38,         # Demonic Core (25F Darm ~38)
+    1: 1, 2: 4, 3: 6, 4: 8, 5: 9,           # Wailing Blue (5F Beast 9)
+    6: 11, 7: 13, 8: 15, 9: 17,             # Flooded Prison (9F Arthropod 17)
+    10: 18, 11: 19, 12: 20, 13: 21,         # Flames of Guilt (13F Monk 20, win 23)
+    14: 22, 15: 23, 16: 24, 17: 25,         # Silent Sands (17F Construct 25; Rado 29)
+    18: 28, 19: 30, 20: 31, 21: 32,         # Corrupted Blood (21F Creeper 32)
+    22: 41, 23: 44, 24: 47, 25: 51,         # Demonic Core / Summit (Mantid 41 -> Darm 52)
 }
 
 
