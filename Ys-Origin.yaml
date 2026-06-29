@@ -22,6 +22,14 @@ Ys Origin:
   floor_checks: true     # reaching each floor
   room_checks: false     # entering each room (adds ~145 filler checks — big!)
 
+  # --- goddess statue warp locks ---
+  statue_warp_locks: false # when on, every goddess statue starts locked (dark:
+                           #   no warp/heal/save) until you receive its unlock
+                           #   item; one statue is unlocked from the start so you
+                           #   can always save. Adds 21 "Statue Warp" items.
+  random_start: false      # with the above on, randomize WHICH statue starts
+                           #   unlocked (default: the 1F starting statue)
+
   # --- multiworld extras ---
   death_link: false      # when on, you die when any other DeathLink player dies
 

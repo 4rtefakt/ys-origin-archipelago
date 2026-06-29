@@ -88,6 +88,9 @@ hide/show the overlay.
   overlay in the game's own font. No second program to babysit.
 - **Honest item boxes** — the in-game "Acquired ___" popup is relabeled to show
   the **real** item that was placed (name + icon).
+- **Optional statue warp locks** — turn the goddess statues into a warp network:
+  each one starts locked (dark — no warp, heal, or save) until you receive its
+  unlock item, with one statue unlocked from the start. See `statue_warp_locks`.
 - **Goal:** defeat Darm (the final boss), or optionally all bosses.
 
 ## ⚙️ Options (in your yaml)
@@ -101,6 +104,8 @@ hide/show the overlay.
 | `boss_checks` | `true` / `false` | `true` | Reaching each boss arena is a check |
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
+| `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
+| `random_start` | `true` / `false` | `false` | With `statue_warp_locks` on, randomize which statue starts unlocked (default: the 1F starting statue) |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
 
 ## ❓ Troubleshooting
