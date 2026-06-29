@@ -165,6 +165,11 @@ static std::map<std::string, int> g_statue_item_idx;
 struct StatueReg { int reg_index; int flag_idx; int scene; };
 static std::vector<StatueReg> g_statue_reg;
 static bool g_statue_locks_on = false;
+// Statues unlocked via a received "Statue Warp" item (by activation-flag index).
+// The poll loop FORCES these warpable+purified every tick, so the state survives
+// an in-game save load (which reloads g_flags + the registry from the save file,
+// clobbering a one-time write made at item-receipt / reconnect-replay time).
+static std::set<int> g_statue_forced;
 static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
@@ -342,12 +347,15 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         auto su = g_statue_item_idx.find(name);
         auto f = g_name_to_idx.find(name);
         if (su != g_statue_item_idx.end()) {
-            // Statue warp unlock: allow that statue to be purified from now on.
-            // The player still interacts with it to activate it (and gets the
-            // location check via scene-entry); we just stop suppressing.
-            g_statue_lock[su->second] = false;
-            mod_log("ap: statue unlock '%s' -> g_flags[0x%X] purification allowed",
-                    name.c_str(), su->second);
+            // Statue warp unlock: fully activate that statue immediately so it's
+            // warpable right away (no need to revisit it). Stop clearing its warp
+            // byte, set the warp-registry byte, and set the purify/activation flag
+            // (darkness clears on next room entry; save/heal/warp all work).
+            int fidx = su->second;
+            g_statue_lock[fidx] = false;     // stop reverting its warp byte
+            g_statue_forced.insert(fidx);    // poll forces it warpable+purified
+            mod_log("ap: statue unlock '%s' -> g_flags[0x%X] forced warpable",
+                    name.c_str(), fidx);
         } else if (f != g_name_to_idx.end())
             ap_give(f->second, 1);
         else
@@ -439,10 +447,22 @@ static void poll_statue_warp() {
     if (!g_statue_locks_on) return;
     volatile unsigned char* reg = (volatile unsigned char*)kWarpRegAbs;
     for (const auto& s : g_statue_reg) {
-        if (g_statue_lock[s.flag_idx] && reg[s.reg_index] != 0) {
-            reg[s.reg_index] = 0;
-            mod_log("statue: cleared warp registry byte[%d] (scene S_%d, locked)",
-                    s.reg_index, s.scene);
+        if (g_statue_lock[s.flag_idx]) {
+            // Locked: keep it un-registered (the game writes the byte natively on
+            // interaction; revert it).
+            if (reg[s.reg_index] != 0) {
+                reg[s.reg_index] = 0;
+                mod_log("statue: cleared warp registry byte[%d] (scene S_%d, locked)",
+                        s.reg_index, s.scene);
+            }
+        } else if (g_statue_forced.count(s.flag_idx)) {
+            // Unlocked via item: force it warpable + purified every tick so it
+            // survives a save load (which would otherwise reset it to the saved,
+            // still-locked state). The start statue is neither locked nor forced
+            // and registers normally via the intro.
+            if (reg[s.reg_index] != 1) reg[s.reg_index] = 1;
+            volatile int* pf = (volatile int*)(kGFlagsAbs + s.flag_idx * 4);
+            if (*pf != 1) *pf = 1;
         }
     }
 }
