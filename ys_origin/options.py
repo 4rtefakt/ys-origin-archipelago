@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from Options import Choice, DefaultOnToggle, PerGameCommonOptions, Toggle
+from Options import Choice, DeathLink, DefaultOnToggle, PerGameCommonOptions, Toggle
 
 
 class Character(Choice):
@@ -66,3 +66,4 @@ class YsOriginOptions(PerGameCommonOptions):
     boss_checks: BossChecks
     floor_checks: FloorChecks
     room_checks: RoomChecks
+    death_link: DeathLink

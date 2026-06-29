@@ -141,6 +141,7 @@ class YsOriginWorld(World):
         return {
             "character": int(self.options.character.value),
             "goal": int(self.options.goal.value),
+            "death_link": bool(self.options.death_link.value),
             "location_signals": {
                 n: i for n, i in self.location_name_to_id.items() if n in active
             },

@@ -22,6 +22,9 @@ Ys Origin:
   floor_checks: true     # reaching each floor
   room_checks: false     # entering each room (adds ~145 filler checks — big!)
 
+  # --- multiworld extras ---
+  death_link: false      # when on, you die when any other DeathLink player dies
+
   # --- standard Archipelago knobs (leave as-is if unsure) ---
   progression_balancing: 0
   accessibility: items

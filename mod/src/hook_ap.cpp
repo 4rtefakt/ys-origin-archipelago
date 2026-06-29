@@ -54,6 +54,8 @@ static int  g_port = 38281;
 static char g_slot[128] = "Hugo";
 static char g_pass[128] = "";
 static char g_uri[192] = "ws://127.0.0.1:38281";
+static int  g_hp_offset = 0;        // module-relative current-HP cell (0 = unmapped)
+static bool g_hp_is_float = true;   // HP stored as float (cfg hp_float=0 -> int)
 
 static void strip_eol(char* s) { s[strcspn(s, "\r\n")] = '\0'; }
 
@@ -85,6 +87,8 @@ static void load_config() {
         else if (!strcmp(key, "port")) { g_port = atoi(val); }
         else if (!strcmp(key, "slot")) { strncpy(g_slot, val, sizeof(g_slot) - 1); }
         else if (!strcmp(key, "password")) { strncpy(g_pass, val, sizeof(g_pass) - 1); }
+        else if (!strcmp(key, "hp_offset")) { g_hp_offset = (int)strtol(val, nullptr, 0); }
+        else if (!strcmp(key, "hp_float")) { g_hp_is_float = atoi(val) != 0; }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -112,6 +116,32 @@ static std::map<int, std::vector<int64_t>> g_scene_locs;
 static std::map<int, std::string> g_scene_name;
 static std::set<int64_t> g_scene_fired;   // dedupe (each scene loc fires once)
 static int g_last_scene = -1;
+
+// -- DeathLink -------------------------------------------------------------- #
+// Enabled from slot_data (death_link). We add the "DeathLink" tag after connect,
+// send a bounce when the player dies, and kill the player when we receive one.
+// The current-HP cell is reverse-engineered live; its module-relative offset is
+// read from yso_ap.cfg (hp_offset=0x...) so it can be tuned without a rebuild.
+static bool g_death_link = false;
+static std::atomic<bool> g_pending_death{false};
+static std::string g_pending_death_cause;
+static double g_last_death_ts = 0.0;      // debounce sends / suppress self-echo
+static int g_prev_hp = -1;
+
+static inline uintptr_t hp_addr() {
+    return g_hp_offset ? (0x00400000u + (uintptr_t)g_hp_offset) : 0;
+}
+static inline int read_hp() {
+    uintptr_t a = hp_addr();
+    if (!a) return -1;
+    return g_hp_is_float ? (int)(*(volatile float*)a) : (*(volatile int*)a);
+}
+static inline void write_hp_zero() {
+    uintptr_t a = hp_addr();
+    if (!a) return;
+    if (g_hp_is_float) *(volatile float*)a = 0.0f;
+    else *(volatile int*)a = 0;
+}
 // AP item name -> g_flags index (from slot_data item_index).
 static std::map<std::string, int> g_name_to_idx;
 // queued AP location ids to check (VM hook thread -> poll thread).
@@ -242,6 +272,11 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["scene_names"].items())
             g_scene_name[atoi(kv.key().c_str())] = kv.value().get<std::string>();
     }
+    if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
+    if (g_death_link) {
+        g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
+        mod_log("ap: DeathLink ON (hp_offset=0x%X)", g_hp_offset);
+    }
     mod_log("ap: slot_connected — %d items, %d suppress, %d location flags, "
             "%d scene checks", names, supp, locs, scenes);
     overlay::set_status(std::string("connected as ") + g_slot);
@@ -263,6 +298,41 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
                                ? name : (name + "  <- " + from));
         g_applied_through = it.index;
     }
+}
+
+// Send a DeathLink bounce (we died). Debounced so a forced death / rapid HP
+// flicker doesn't spam the room.
+static void send_deathlink(const std::string& cause) {
+    if (!g_ap || !g_death_link) return;
+    double now = g_ap->get_server_time();
+    if (now - g_last_death_ts < 6.0) return;
+    g_last_death_ts = now;
+    nlohmann::json data;
+    data["time"] = now;
+    data["source"] = g_slot;
+    data["cause"] = cause;
+    g_ap->Bounce(data, {}, {}, {std::string("DeathLink")});
+    mod_log("ap: -> DeathLink sent (%s)", cause.c_str());
+}
+
+// Each tick: if a DeathLink arrived, kill the player (write HP=0); also detect
+// our own death (HP crossed >0 -> <=0) and broadcast it. No-op until the HP
+// offset is configured (hp_offset in yso_ap.cfg) and we're in a loaded scene.
+static void poll_deathlink() {
+    if (!g_death_link || !hp_addr()) return;
+    bool in_game = read_current_scene() > 0;
+    if (g_pending_death.exchange(false) && in_game) {
+        write_hp_zero();
+        g_last_death_ts = g_ap->get_server_time();   // suppress echoing this death
+        g_prev_hp = 0;
+        overlay::push_item("DeathLink: " + g_pending_death_cause);
+        return;
+    }
+    if (!in_game) { g_prev_hp = -1; return; }
+    int hp = read_hp();
+    if (g_prev_hp > 0 && hp <= 0)
+        send_deathlink(std::string(g_slot) + " ran out of HP");
+    g_prev_hp = hp;
 }
 
 // Read current_scene each tick; on a room change, update the overlay room line
@@ -307,6 +377,7 @@ static void poll_loop() {
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
+            poll_deathlink();
             // drain queued checks
             std::vector<int64_t> pending;
             {
@@ -348,6 +419,23 @@ void ap_install() {
     g_ap->set_slot_connected_handler(on_slot_connected);
     g_ap->set_items_received_handler(on_items_received);
     g_ap->set_location_info_handler(on_location_info);
+    g_ap->set_bounced_handler([](const nlohmann::json& packet) {
+        if (!g_death_link || !packet.contains("tags")) return;
+        bool dl = false;
+        for (auto& t : packet["tags"])
+            if (t.is_string() && t.get<std::string>() == "DeathLink") { dl = true; break; }
+        if (!dl) return;
+        std::string src, cause = "DeathLink";
+        if (packet.contains("data")) {
+            const auto& d = packet["data"];
+            if (d.contains("source") && d["source"].is_string()) src = d["source"].get<std::string>();
+            if (d.contains("cause") && d["cause"].is_string()) cause = d["cause"].get<std::string>();
+        }
+        if (src == g_slot) return;          // ignore our own death echo
+        g_pending_death_cause = cause;
+        g_pending_death.store(true);
+        mod_log("ap: <- DeathLink (%s)", cause.c_str());
+    });
 
     g_run.store(true);
     g_thread = std::thread(poll_loop);

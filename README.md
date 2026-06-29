@@ -101,6 +101,7 @@ hide/show the overlay.
 | `boss_checks` | `true` / `false` | `true` | Reaching each boss arena is a check |
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
+| `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
 
 ## ❓ Troubleshooting
 
