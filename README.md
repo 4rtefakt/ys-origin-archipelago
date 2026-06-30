@@ -91,6 +91,12 @@ hide/show the overlay.
 - **Optional statue warp locks** — turn the goddess statues into a warp network:
   each one starts locked (dark — no warp, heal, or save) until you receive its
   unlock item, with one statue unlocked from the start. See `statue_warp_locks`.
+- **Start anywhere (`random_start`)** — New Game spawns you at a *random* goddess
+  statue anywhere in the tower. The mod skips the entire intro (movies +
+  cutscenes, for every character) and warps you straight there with a
+  floor-appropriate level + weapon so you're playable wherever you land;
+  reachability uses a bidirectional warp-network logic so the seed stays beatable
+  from any spawn. Needs `statue_warp_locks`. Normal seeds are unaffected.
 - **Catch-up level scaling** — so warping to a far-off floor isn't a grind wall:
   the mod can bump an under-leveled character toward the floor's expected level
   and/or grant scaled bonus EXP, tapering to nothing once you're on level. On by
@@ -116,7 +122,7 @@ hide/show the overlay.
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
-| `random_start` | `true` / `false` | `false` | With `statue_warp_locks` on, randomize which statue starts unlocked (default: the 1F starting statue) |
+| `random_start` | `true` / `false` | `false` | **Start anywhere.** With `statue_warp_locks` on, New Game spawns you at a random statue: the mod skips the whole intro (movies + cutscenes, every character) and warps you there geared for the floor; bidirectional warp-network logic keeps the seed beatable from any spawn |
 | `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
 | `level_margin` | `0`–`10` | `0` | How many levels under a floor's expected level the floor-bump leaves you (0 = right at the expected level); raise for more challenge |
 | `exp_multiplier_max` | `1`–`20` | `8` | Cap for the catch-up EXP multiplier (scales with how under-level you are) |

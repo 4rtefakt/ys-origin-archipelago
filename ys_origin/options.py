@@ -70,10 +70,12 @@ class StatueWarpLocks(Toggle):
 
 
 class RandomStart(Toggle):
-    """With Statue warp locks on, pick a random goddess statue as the one that
-    starts unlocked, instead of the 1F starting statue. (Physically spawning at
-    that statue comes later; for now it only chooses which statue begins
-    unlocked.)"""
+    """Start a New Game at a RANDOM goddess statue anywhere in the tower instead
+    of 1F. Requires Statue warp locks. The mod skips the entire intro (movies +
+    cutscenes, all characters) and warps you straight to the spawn statue with a
+    floor-appropriate level + weapon loadout so you're playable wherever you land;
+    reachability uses a bidirectional warp-network logic so the seed stays
+    beatable from any spawn. (Normal, non-random seeds are unchanged.)"""
     display_name = "Random start statue"
 
 

@@ -301,6 +301,144 @@ __declspec(naked) static void Hook_ExpAdd() {
     }
 }
 
+// --- Cutscene fast-forward (hold a key to blow through cutscenes) ---------- #
+//
+// The event VM drives cutscenes; the thing that makes them slow is the 0xF2
+// frame-WAIT op (handler 0x56DE74): a countdown at ctx+0x1e8 that yields back to
+// the frame loop (jns -> 0x56DF91) until it goes negative, then advances. We zero
+// the countdown so each wait elapses in a single frame -> camera pans, pauses and
+// animation holds collapse, and a cutscene that's mostly timed waits blows past.
+//
+// Gated on a HELD key (g_cutscene_ff), NOT always-on, on purpose: dialog ADVANCE
+// is a separate op (0xF3 -> 0x5741B0) shared with interactive event dialog
+// (shops, NPC choices, save prompts), so auto-dismissing it globally would break
+// menus. Holding the key is an explicit "I'm skipping" — the player taps the
+// game's own confirm to advance text while waits are skipped. (A New-Game-scoped
+// auto-skip + dialog auto-advance is the follow-up, alongside the force-spawn.)
+volatile bool g_cutscene_ff = false;          // set from the poll loop (key state)
+
+static const uintptr_t kWaitOp   = 0x0056DE74;  // 0xF2 frame-wait handler entry
+static const uintptr_t kWaitDone = 0x0056DE98;  // its "wait elapsed" path (zeros
+                                                // ctx+0x1e8, runs the clean epilogue)
+static void* g_orig_wait = nullptr;
+
+// Entry: edi = VM ctx (set by the dispatch). When fast-forwarding, jump into the
+// handler's own "wait elapsed" path with ecx=ctx so the op completes this frame
+// (the PC was already advanced by the dispatch, so the next op runs next frame).
+__declspec(naked) static void Hook_Wait() {
+    __asm {
+        cmp  byte ptr [g_cutscene_ff], 0
+        je   passthrough
+        mov  ecx, edi                  // ecx = ctx (kWaitDone does mov eax,ecx ...)
+        mov  eax, kWaitDone            // 0x56DE98: [ctx+0x1e8]=0 ; epilogue ; ret
+        jmp  eax
+    passthrough:
+        jmp  dword ptr [g_orig_wait]   // trampoline -> original 0xF2 handler
+    }
+}
+
+// Cutscenes spend most of their time in the "wait for a subsystem to finish" ops
+// (actor move 0x5742B0, camera/effect 0x574310/0x574330, dialog-advance 0x5741B0,
+// ...). They all share the tail @0x56A4AC: a check fn returns al = "done?"; al!=0
+// -> 0x56DB1D (op completes), al==0 -> re-run the op (keep waiting). Forcing al
+// nonzero while fast-forwarding makes every such wait complete this frame, so
+// camera pans / character moves / fades all blow past (the 0xF2 hook only covered
+// pure frame-counter waits = dialog pacing). The done path (0x56DB1D) just
+// continues the op loop, so this is a clean "treat the wait as finished".
+static const uintptr_t kWaitTail = 0x0056A4AC;   // test al,al ; jne 0x56DB1D ...
+static void* g_orig_waittail = nullptr;
+
+// Scene-load wait (op handler 0x574310) reports "done" only when both streaming
+// managers *[0x730194] and *[0x730170] are idle. Forcing the shared tail "done"
+// WHILE a load is pending would let the script charge past the load -> crash. So
+// the tail FF self-guards: if either manager is busy, fall through and wait
+// normally (only non-load waits get collapsed).
+__declspec(naked) static void Hook_WaitTail() {
+    __asm {
+        cmp  byte ptr [g_cutscene_ff], 0
+        je   passthrough
+        push eax                          // preserve the check fn's al
+        mov  eax, dword ptr [0x730194]
+        cmp  dword ptr [eax], 0
+        jne  loading
+        mov  eax, dword ptr [0x730170]
+        cmp  dword ptr [eax], 0
+        jne  loading
+        pop  eax                          // restore al
+        mov  al, 1                        // not loading -> force the wait done
+        jmp  dword ptr [g_orig_waittail]
+    loading:
+        pop  eax                          // restore al -> wait normally for the load
+    passthrough:
+        jmp  dword ptr [g_orig_waittail]  // test al,al ; jne 0x56DB1D ; ...
+    }
+}
+
+// Decide whether to fast-forward this tick (called each tick from the AP poll
+// loop). AUTO during the New-Game intro: the intro plays as scene 2 with scene-0
+// interludes, so we arm a window when scene 2 appears and disarm once a real room
+// (>=1000) loads. Holding Right Ctrl is an extra manual override for any other
+// cutscene. The load-guard above keeps even an always-armed window crash-safe.
+extern "C" void request_force_spawn();           // hook_ap.cpp (test hotkey)
+static const uintptr_t kCurScene = 0x0076C100;   // g_flags[0x1F9]
+extern "C" void cutscene_ff_poll() {
+    static bool intro = false;
+    int scene = *(volatile int*)kCurScene;
+    if (scene == 2) intro = true;          // New-Game intro cutscene seen
+    else if (scene >= 1000) intro = false; // reached a real room -> stop
+    bool key = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    g_cutscene_ff = intro || key;
+
+    // F9 (edge-triggered) = manually force-spawn, for testing the warp without
+    // replaying the intro.
+    static bool f9_prev = false;
+    bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
+    if (f9 && !f9_prev) request_force_spawn();
+    f9_prev = f9;
+}
+
+// --- Intro-movie skip (shippable, no file renames) ------------------------- #
+//
+// The opening AVIs (release/yso_logo.avi, yso_op.avi, yso_pro.avi + the
+// yso_ins01-03.dat inserts) play before any player entity exists, so the
+// force-spawn warp can't skip them. The engine, however, skips a MISSING movie
+// gracefully (proven). So we hook CreateFileW/A and report these specific files
+// as not-found — the movies vanish, every other file opens normally. Endings
+// (yso_ed*) and yso_ins04 (not a movie) are left alone.
+typedef HANDLE (WINAPI* CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+typedef HANDLE (WINAPI* CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static CreateFileW_t g_orig_cfw = nullptr;
+static CreateFileA_t g_orig_cfa = nullptr;
+
+static bool is_intro_movie(const char* low) {
+    return strstr(low, "yso_logo") || strstr(low, "yso_op") || strstr(low, "yso_pro")
+        || strstr(low, "yso_ins01") || strstr(low, "yso_ins02") || strstr(low, "yso_ins03");
+}
+static bool blocked_a(const char* p) {
+    if (!p) return false;
+    char low[520]; int i = 0;
+    for (; p[i] && i < (int)sizeof(low) - 1; i++) low[i] = (char)tolower((unsigned char)p[i]);
+    low[i] = 0;
+    return is_intro_movie(low);
+}
+static bool blocked_w(const wchar_t* p) {
+    if (!p) return false;
+    char low[520]; int i = 0;
+    for (; p[i] && i < (int)sizeof(low) - 1; i++) low[i] = (char)towlower(p[i]);
+    low[i] = 0;
+    return is_intro_movie(low);
+}
+static HANDLE WINAPI Hook_CreateFileW(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
+                                      DWORD c, DWORD f, HANDLE t) {
+    if (blocked_w(n)) { SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE; }
+    return g_orig_cfw(n, a, s, sa, c, f, t);
+}
+static HANDLE WINAPI Hook_CreateFileA(LPCSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
+                                      DWORD c, DWORD f, HANDLE t) {
+    if (blocked_a(n)) { SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE; }
+    return g_orig_cfa(n, a, s, sa, c, f, t);
+}
+
 void hook_vm_install() {
     mod_log("hook_vm_install: begin (grant store @0x%X, override)", (unsigned)kGrantStore);
     MH_Initialize();  // may already be initialized by the D3D9 hook (returns 9)
@@ -315,6 +453,18 @@ void hook_vm_install() {
     MH_EnableHook((void*)kBoxFn);
     MH_STATUS cx = MH_CreateHook((void*)kExpAdd, (void*)&Hook_ExpAdd, &g_orig_expadd);
     MH_STATUS ex = MH_EnableHook((void*)kExpAdd);
-    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d exp=%d/%d (+box)",
-            (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es, (int)cx, (int)ex);
+    MH_STATUS cw = MH_CreateHook((void*)kWaitOp, (void*)&Hook_Wait, &g_orig_wait);
+    MH_STATUS ew = MH_EnableHook((void*)kWaitOp);
+    MH_STATUS ct = MH_CreateHook((void*)kWaitTail, (void*)&Hook_WaitTail, &g_orig_waittail);
+    MH_STATUS et = MH_EnableHook((void*)kWaitTail);
+    // Intro-movie skip: report the opening AVIs as not-found.
+    if (HMODULE k = GetModuleHandleA("kernel32.dll")) {
+        void* cfw = (void*)GetProcAddress(k, "CreateFileW");
+        void* cfa = (void*)GetProcAddress(k, "CreateFileA");
+        if (cfw) { MH_CreateHook(cfw, (void*)&Hook_CreateFileW, (void**)&g_orig_cfw); MH_EnableHook(cfw); }
+        if (cfa) { MH_CreateHook(cfa, (void*)&Hook_CreateFileA, (void**)&g_orig_cfa); MH_EnableHook(cfa); }
+        mod_log("hook_movies: CreateFileW/A hooked (intro movies -> not found)");
+    }
+    mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d exp=%d/%d wait-ff=%d/%d tail-ff=%d/%d (+box)",
+            (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es, (int)cx, (int)ex, (int)cw, (int)ew, (int)ct, (int)et);
 }

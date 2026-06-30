@@ -24,7 +24,10 @@ from .data_tables import (
     char_name,
     character_req,
     edge_requirements,
+    interzone_climb_rules,
+    open_scene_edge_requirements,
     req_satisfied,
+    warp_edge_rules,
     zone_ore_requirements,
 )
 
@@ -33,6 +36,15 @@ if TYPE_CHECKING:
 
 
 def set_rules(world: "YsOriginWorld") -> None:
+    """Forward (linear) rules by default; the bidirectional warp-network rules
+    when random spawn is on."""
+    if getattr(world, "open_mode", False):
+        _set_rules_open(world)
+    else:
+        _set_rules_forward(world)
+
+
+def _set_rules_forward(world: "YsOriginWorld") -> None:
     mw = world.multiworld
     player = world.player
 
@@ -66,6 +78,47 @@ def set_rules(world: "YsOriginWorld") -> None:
             continue  # fully relaxed for this character -> free edge
         entrance = mw.get_entrance(f"{src} -> {dst}", player)
         entrance.access_rule = lambda state, r=creq: req_satisfied(r, state, player)
+
+
+def _set_rules_open(world: "YsOriginWorld") -> None:
+    """Open (random-spawn) rules: per-edge requirements on the bidirectional room
+    graph, Cleria-Ore + medallion gates on the inter-zone climbs, and the warp
+    hub (spawn statue free; other statues need their unlock item + the warped-to
+    zone's Cleria Ore). The coarse zone backbone / active_gates is dropped — the
+    medallions live on the boss-door + inter-zone climb edges instead."""
+    mw = world.multiworld
+    player = world.player
+    char = char_name(world.options)
+    weapon_on = int(world.options.weapon_requirements.value)
+    locks = bool(world.options.statue_warp_locks.value)
+
+    def gate(src, dst, item, ore_n):
+        """Attach an (item AND ore-count) access rule to an entrance."""
+        if item is None and ore_n == 0:
+            return                          # free edge
+        entrance = mw.get_entrance(f"{src} -> {dst}", player)
+        entrance.access_rule = lambda state, i=item, n=ore_n: (
+            (i is None or state.has(i, player))
+            and (n == 0 or state.has(CLERIA_ORE, player, n))
+        )
+
+    # Per-scene room logic (bidirectional graph), character-transformed.
+    for (src, dst), req in open_scene_edge_requirements().items():
+        creq = character_req(req, char)
+        if not creq:
+            continue
+        entrance = mw.get_entrance(f"{src} -> {dst}", player)
+        entrance.access_rule = lambda state, r=creq: req_satisfied(r, state, player)
+
+    # Inter-zone climbs: next zone's medallion + that zone's Cleria-Ore count.
+    for (src, dst), (med, ore_n) in interzone_climb_rules(weapon_on).items():
+        gate(src, dst, med, ore_n)
+
+    # Warp hub: spawn statue free; others need their unlock item (when locks are
+    # on) + the warped-to zone's Cleria Ore (when weapon requirements are on).
+    for (src, dst), (unlock, ore_n) in warp_edge_rules(
+            world.start_statue_scene, locks, weapon_on).items():
+        gate(src, dst, unlock, ore_n)
 
 
 def set_completion_condition(world: "YsOriginWorld") -> None:

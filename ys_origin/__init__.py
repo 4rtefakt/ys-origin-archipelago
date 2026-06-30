@@ -73,6 +73,24 @@ class YsOriginWorld(World):
     location_name_to_id = location_name_to_id
     item_name_groups = item_name_groups
 
+    # -- early setup --------------------------------------------------------- #
+
+    def generate_early(self) -> None:
+        """Pick the spawn / start-unlocked statue and decide the graph mode.
+
+        ``open_mode`` (random spawn) swaps the linear zone backbone for the warp
+        hub + bidirectional room graph. RNG is consumed here ONLY when
+        ``random_start`` is on, so normal (non-random) seeds are byte-identical
+        to before — the draw simply moved out of ``fill_slot_data``."""
+        o = self.options
+        self.open_mode = bool(o.random_start.value)
+        if o.random_start.value:
+            self.start_statue_scene = self.random.choice(dt.statue_scenes())
+        elif o.statue_warp_locks.value:
+            self.start_statue_scene = 1000          # 1F starting statue
+        else:
+            self.start_statue_scene = 0             # locks off: no forced start
+
     # -- items --------------------------------------------------------------- #
 
     def create_item(self, name: str) -> YsOriginItem:
@@ -80,6 +98,11 @@ class YsOriginWorld(World):
         # Cleria Ore becomes progression when weapon gating is on (it's the
         # weapon-upgrade currency the zone gates require).
         if name == dt.CLERIA_ORE and self.options.weapon_requirements.value:
+            cls = ItemClassification.progression
+        # In open mode the warp network is part of the reachability spine, so a
+        # statue's unlock item gates real access -> promote it to progression
+        # (it's merely "useful" convenience in normal, on-foot seeds).
+        elif getattr(self, "open_mode", False) and name in dt.STATUE_UNLOCKS:
             cls = ItemClassification.progression
         return YsOriginItem(name, cls, self.item_name_to_id[name], self.player)
 
@@ -109,8 +132,13 @@ class YsOriginWorld(World):
     # -- regions / locations ------------------------------------------------- #
 
     def create_regions(self) -> None:
+        open_mode = getattr(self, "open_mode", False)
+        region_names = dt.open_regions() if open_mode else ALL_REGIONS
+        connections = (dt.warp_connections() + dt.open_scene_connections()
+                       if open_mode else CONNECTIONS)
+
         regions: dict[str, Region] = {}
-        for name in ALL_REGIONS:
+        for name in region_names:
             region = Region(name, self.player, self.multiworld)
             regions[name] = region
             self.multiworld.regions.append(region)
@@ -128,7 +156,7 @@ class YsOriginWorld(World):
                     loc.progress_type = LocationProgressType.EXCLUDED
                 region.locations.append(loc)
 
-        for src, dst in CONNECTIONS:
+        for src, dst in connections:
             regions[src].connect(regions[dst], f"{src} -> {dst}")
 
     # -- rules + slot data --------------------------------------------------- #
@@ -157,12 +185,9 @@ class YsOriginWorld(World):
             else:
                 location_detect[n] = LOC_META[n]["detect"]
         # Which statue starts unlocked (always-usable so the player can save).
-        # Default: the 1F starting statue (S_1000). Random start picks any statue.
-        if locks:
-            start_statue = (self.random.choice(dt.statue_scenes())
-                            if self.options.random_start.value else 1000)
-        else:
-            start_statue = 0
+        # Default: the 1F starting statue (S_1000); Random start picks any statue.
+        # Chosen in generate_early so create_regions/set_rules use the same value.
+        start_statue = self.start_statue_scene if locks else 0
         return {
             "character": int(self.options.character.value),
             "goal": int(self.options.goal.value),
@@ -174,6 +199,15 @@ class YsOriginWorld(World):
             "statue_unlocks": (dt.statue_unlock_slot_data() if locks else {}),
             "random_start": bool(self.options.random_start.value),
             "start_statue_scene": start_statue,
+            # Spawn loadout for random start: the vanilla weapon record value for
+            # the spawn floor, so force-spawn at a high floor isn't a Lv1-weapon
+            # death (the mod grants it once on spawn; the level-floor handles the
+            # level via scene_levels). 0 = no grant (1F start / random off).
+            "start_weapon": (
+                dt.floor_weapon_value(dt.scene_floor(start_statue) or 1)
+                if self.options.random_start.value and start_statue not in (0, 1000)
+                else 0
+            ),
             # catch-up level scaling: mode + tuning + the floor->expected-level
             # curve, so the mod can bump under-leveled players / boost their EXP
             # when the warp network drops them somewhere too high.

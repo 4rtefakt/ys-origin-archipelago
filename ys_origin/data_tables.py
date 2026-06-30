@@ -33,6 +33,7 @@ def _read_data(relpath: str) -> str:
 LOC_BASE_ID = 0x59_6000
 ITEM_BASE_ID = 0x59_5000
 MENU = "Menu"
+WARP_HUB = "Warp Network"          # open-mode (random-spawn) reachability origin
 
 ZONE_ORDER: List[str] = [
     "Wailing Blue", "Flooded Prison", "Flames of Guilt",
@@ -340,6 +341,60 @@ FLOOR_LEVELS: Dict[int, int] = {
 }
 
 
+# Tower floor for each goddess-statue scene whose location data carries NO floor
+# label (save-point rooms tagged only by zone). Random spawn can drop you at any
+# of these, so every one needs a floor -> the catch-up level-floor has a target.
+# Approximate per the zone's floor range; erring is harmless (level_margin tunes).
+STATUE_FLOOR: Dict[int, int] = {
+    2012: 7, 2013: 8, 2100: 9,                 # Flooded Prison (6-9F)
+    3000: 10, 3006: 11, 3014: 13, 3015: 13,    # Flames of Guilt (10-13F)
+    4000: 14, 4020: 16, 4104: 16,              # Silent Sands (14-17F, Rado annex)
+    5000: 18, 5010: 21, 5014: 21,              # Corrupted Blood (18F entry; deep saves 21F)
+}
+
+
+# Top (boss-approach) floor of each zone. Rooms with no floor label — boss rooms,
+# corridors, vaults, save points near the zone end — fall back to this so the
+# catch-up level-floor always has a target (a random spawn can roam the whole
+# zone, and these unlabeled rooms cluster at the tough top end). The level-floor
+# only ever RAISES, so an on-level normal climber is barely affected.
+ZONE_TOP_FLOOR: Dict[str, int] = {
+    "Wailing Blue": 5, "Flooded Prison": 9, "Flames of Guilt": 13,
+    "Silent Sands": 17, "Corrupted Blood": 21, "Demonic Core": 25,
+}
+
+
+def scene_floor(scene_leaf: int) -> Optional[int]:
+    """Tower floor number for a scene leaf, from the parsed floor label, the
+    STATUE_FLOOR fallback, or the zone-top fallback; None if zone unknown."""
+    sc = f"S_{scene_leaf}"
+    fl = SCENE_FLOOR.get(sc)
+    m = re.match(r"\s*(\d+)\s*[Ff]", str(fl)) if fl else None
+    if m:
+        return int(m.group(1))
+    if scene_leaf in STATUE_FLOOR:
+        return STATUE_FLOOR[scene_leaf]
+    return ZONE_TOP_FLOOR.get(SCENE_ZONE.get(sc, ""))
+
+
+def floor_weapon_value(floor: int) -> int:
+    """The vanilla weapon record value (g_flags[0x94]) appropriate for a floor —
+    used as the spawn loadout when random spawn drops you ahead. Vanilla weapon by
+    floor (guide): Lv2~5F, Lv3~12F, Lv4~16F, Lv5~20F, Lv6~23F; the record value
+    maps to displayed Lv = value/2 + 2 (0=starter Lv1)."""
+    if floor <= 5:
+        return 0          # starter (Lv1-2)
+    if floor <= 9:
+        return 1          # Lv2
+    if floor <= 13:
+        return 2          # Lv3
+    if floor <= 17:
+        return 4          # Lv4
+    if floor <= 21:
+        return 6          # Lv5
+    return 8              # Lv6
+
+
 def floor_levels() -> Dict[str, int]:
     """floor number (as str, for JSON) -> expected character level."""
     return {str(k): v for k, v in FLOOR_LEVELS.items()}
@@ -377,13 +432,12 @@ def scene_levels() -> Dict[str, int]:
     (g_flags[0xCF]) is unreliable for warp destinations (reads the climbed-to
     floor, not the warped-to one), while current_scene (g_flags[0x1F9]) is exact."""
     out: Dict[str, int] = {}
-    for _sc, _fl in SCENE_FLOOR.items():
-        _m = re.match(r"\s*(\d+)\s*[Ff]", str(_fl))
-        if not _m:
-            continue
-        _lvl = FLOOR_LEVELS.get(int(_m.group(1)))
+    for _sc in SCENE_ROOM:
+        _leaf = int(_sc[2:])
+        _floor = scene_floor(_leaf)          # label / STATUE_FLOOR / zone-top
+        _lvl = FLOOR_LEVELS.get(_floor) if _floor else None
         if _lvl:
-            out[str(int(_sc[2:]))] = _lvl
+            out[str(_leaf)] = _lvl
     return out
 
 # Per-character room-logic gate substitutions for items a character lacks. Toal
@@ -539,3 +593,191 @@ def req_satisfied(req: list, state, player) -> bool:
 def edge_requirements() -> Dict[Tuple[str, str], list]:
     """(src_region, dst_region) -> requirement expr, for every authored edge."""
     return dict(EDGE_REQS)
+
+
+# --------------------------------------------------------------------------- #
+# OPEN (random-spawn) graph — Phase B.
+#
+# When `random_start` is on, the linear Menu->zone backbone is dropped and
+# reachability instead spreads from the SPAWN statue through a BIDIRECTIONAL
+# room graph plus a warp hub. The forward graph above is left completely
+# untouched (zero regression for normal seeds).
+#
+# Each authored `from`-edge may carry an optional 3rd element describing its
+# REVERSE semantics (the forward builder reads only [0]/[1], so this is a no-op
+# for normal seeds):
+#   (bare) / "sym" : symmetric  — both directions need the reqs (e.g. a wind gap)
+#   "up"           : forward needs reqs, REVERSE FREE (doors, climbs, boss doors)
+#   "down"         : reverse needs reqs, FORWARD FREE (rare; a gated descent)
+#   "oneway"       : forward only, NO reverse (a drop you can't climb back)
+#
+# On top of the per-scene edges we re-create the inter-zone links the dropped
+# backbone used to provide (exit room of zone z -> entry scene of z+1), gated on
+# the next zone's medallion and "up" (free to descend between zones), so any
+# spawn can fall back down to 1F and climb the tower normally.
+# --------------------------------------------------------------------------- #
+
+# zone -> the scene whose authored source is the zone name (its entry room).
+_zone_entry_scene: Dict[str, str] = {}
+for _sc, _spec in _room_logic.items():
+    for _e in _spec.get("from", []):
+        if not re.match(r"S_\d+$", _e[0]):
+            _zone_entry_scene[_e[0]] = _sc
+
+
+def _edge_mode(edge: list) -> str:
+    return edge[2] if len(edge) > 2 else "sym"
+
+
+def _build_open_scene_graph() -> Tuple[List[Tuple[str, str]], Dict[Tuple[str, str], list]]:
+    """Bidirectional scene graph + inter-zone climb links. On a duplicate
+    (src,dst) the LEAST restrictive requirement wins (a free edge beats a gated
+    one) so a reverse-free edge is never accidentally re-gated."""
+    edges: Dict[Tuple[str, str], list] = {}   # (src,dst) -> req ([] = free)
+
+    def add(a: str, b: str, req: list) -> None:
+        if a == b:
+            return
+        if (a, b) in edges:
+            if not req or not edges[(a, b)]:
+                edges[(a, b)] = []            # free wins
+            elif len(req) < len(edges[(a, b)]):
+                edges[(a, b)] = list(req)
+        else:
+            edges[(a, b)] = list(req)
+
+    for sc in sorted(SCENE_ROOM):
+        spec = _room_logic.get(sc)
+        if not (spec and spec.get("from")):
+            continue
+        dst = scene_region(sc)
+        for edge in spec["from"]:
+            src = edge[0]
+            if re.match(r"S_\d+$", src) is None:
+                continue                       # zone-name source -> via hub/inter-zone
+            req = list(edge[1]) if len(edge) > 1 else []
+            mode = _edge_mode(edge)
+            srcr = scene_region(src)
+            if mode == "oneway":
+                add(srcr, dst, req)
+            elif mode == "up":
+                add(srcr, dst, req); add(dst, srcr, [])
+            elif mode == "down":
+                add(dst, srcr, req); add(srcr, dst, [])
+            else:                              # "sym" / bare
+                add(srcr, dst, req); add(dst, srcr, list(req))
+
+    # un-authored scenes (no authored 'from' -> in forward they hang free off
+    # the zone region): connect them free to/from the zone's entry statue so they
+    # stay reachable in open mode (matters only when room_checks is on).
+    for sc in sorted(SCENE_ROOM):
+        spec = _room_logic.get(sc)
+        if spec and spec.get("from"):
+            continue
+        entry = _zone_entry_scene.get(SCENE_ZONE.get(sc, ""))
+        if entry and entry != sc:
+            add(scene_region(entry), scene_region(sc), [])
+            add(scene_region(sc), scene_region(entry), [])
+
+    # inter-zone climb links (replace the dropped backbone): exit(z) -> entry(z+1)
+    # gated on z+1's medallion, "up" (free descent back down the tower).
+    for a, b in zip(_present, _present[1:]):
+        ex, en = _zone_exits.get(a), _zone_entry_scene.get(b)
+        if not (ex and en):
+            continue
+        med = ZONE_GATE.get(b)
+        req = [med] if med and med in item_name_to_id else []
+        add(scene_region(ex), scene_region(en), req)
+        add(scene_region(en), scene_region(ex), [])
+
+    conns = list(edges.keys())
+    reqs = {k: v for k, v in edges.items() if v}
+    return conns, reqs
+
+
+OPEN_SCENE_CONNECTIONS, OPEN_SCENE_EDGE_REQS = _build_open_scene_graph()
+
+# forward (src,dst) pairs of the inter-zone climb edges — handled with an added
+# Cleria-Ore requirement in rules.py, so they're excluded from the generic
+# scene-requirement loop there.
+OPEN_INTERZONE_EDGES: Set[Tuple[str, str]] = {
+    (scene_region(_zone_exits[a]), scene_region(_zone_entry_scene[b]))
+    for a, b in zip(_present, _present[1:])
+    if _zone_exits.get(a) and _zone_entry_scene.get(b)
+}
+
+
+def open_regions() -> List[str]:
+    """Region list for open mode: Menu + the warp hub + every scene (NO coarse
+    zone regions — nothing routes through them once the backbone is dropped)."""
+    return [MENU, WARP_HUB] + [scene_region(s) for s in sorted(SCENE_ROOM)]
+
+
+def open_scene_connections() -> List[Tuple[str, str]]:
+    return list(OPEN_SCENE_CONNECTIONS)
+
+
+def open_scene_edge_requirements() -> Dict[Tuple[str, str], list]:
+    """Per-scene edge reqs EXCLUDING the inter-zone climb edges (those get an
+    extra ore requirement applied in rules.py)."""
+    return {k: v for k, v in OPEN_SCENE_EDGE_REQS.items()
+            if k not in OPEN_INTERZONE_EDGES}
+
+
+def _statue_targets() -> List[Tuple[str, dict]]:
+    """(unlock-item name, info) for every statue whose scene exists, deduped by
+    scene (first wins)."""
+    seen: Set[int] = set()
+    out: List[Tuple[str, dict]] = []
+    for nm, info in STATUE_UNLOCKS.items():
+        sc = f"S_{info['scene']}"
+        if sc in SCENE_ROOM and info["scene"] not in seen:
+            seen.add(info["scene"])
+            out.append((nm, info))
+    return out
+
+
+def warp_connections() -> List[Tuple[str, str]]:
+    """Static hub edges: Menu -> hub, hub -> each statue scene. The per-statue
+    gating (spawn-free / unlock item / zone ore) is applied in rules.py."""
+    conns = [(MENU, WARP_HUB)]
+    for _nm, info in _statue_targets():
+        conns.append((WARP_HUB, scene_region(f"S_{info['scene']}")))
+    return conns
+
+
+def warp_edge_rules(spawn_scene: int, locks: bool, weapon_on) -> Dict[Tuple[str, str], Tuple[Optional[str], int]]:
+    """(hub,statue) -> (unlock-item or None, ore-count). The spawn statue is free;
+    other statues need their unlock item (when warp locks are on) AND the warped-to
+    zone's Cleria-Ore count (when weapon requirements are on)."""
+    ore = zone_ore_requirements(weapon_on)
+    out: Dict[Tuple[str, str], Tuple[Optional[str], int]] = {}
+    for nm, info in _statue_targets():
+        sc = f"S_{info['scene']}"
+        dst = scene_region(sc)
+        if info["scene"] == spawn_scene:
+            out[(WARP_HUB, dst)] = (None, 0)            # spawn: always free
+        else:
+            unlock = nm if locks else None
+            out[(WARP_HUB, dst)] = (unlock, ore.get(SCENE_ZONE.get(sc, ""), 0))
+    return out
+
+
+def interzone_climb_rules(weapon_on) -> Dict[Tuple[str, str], Tuple[Optional[str], int]]:
+    """(exit_z, entry_z+1) -> (medallion or None, ore-count) for the open-mode
+    inter-zone climb edges."""
+    ore = zone_ore_requirements(weapon_on)
+    out: Dict[Tuple[str, str], Tuple[Optional[str], int]] = {}
+    for a, b in zip(_present, _present[1:]):
+        ex, en = _zone_exits.get(a), _zone_entry_scene.get(b)
+        if not (ex and en):
+            continue
+        med = ZONE_GATE.get(b)
+        med = med if med and med in item_name_to_id else None
+        out[(scene_region(ex), scene_region(en))] = (med, ore.get(b, 0))
+    return out
+
+
+def statue_scene_for(scene_leaf: int) -> bool:
+    """True if a statue exists at this scene leaf number (a valid spawn)."""
+    return any(info["scene"] == scene_leaf for _n, info in _statue_targets())

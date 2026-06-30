@@ -177,6 +177,9 @@ static std::set<int> g_statue_forced;
 // the game's own "set to level N" (sets EXP=threshold, level, recomputes stats).
 // g_exp_factor (in hook_vm.cpp) scales earned EXP at the award hook.
 extern float g_exp_factor;
+// Cutscene fast-forward: hook_vm reads the hold-to-skip hotkey each tick (it owns
+// <windows.h>); while held, the event-VM wait op (0xF2) elapses instantly.
+extern "C" void cutscene_ff_poll();
 static const uintptr_t kLevelAbs = 0x0076A760;   // current character level
 typedef void(__fastcall* SetLevelFn)(unsigned);
 static const SetLevelFn kSetLevel = (SetLevelFn)0x004200F0;
@@ -209,7 +212,81 @@ static const int kWeaponTier[5] = {1, 2, 4, 6, 8};  // 1..5 ore -> Lv2..Lv6
 static std::atomic<int> g_cleria_count{0};   // ore received this run
 static std::atomic<int> g_pending_weapon{0}; // tier requested; applied on main thread
 static int g_weapon_applied = 0;             // last tier pushed to the entity
+static char* g_weapon_entity = nullptr;      // entity we last pushed the weapon to
+                                             // (re-push on respawn = new entity)
 static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
+
+// -- force-spawn (random start) --------------------------------------------- #
+// On a random-start New Game, after the intro drops the player at 1F, warp them
+// to the chosen spawn statue and grant a floor-appropriate loadout (weapon now;
+// level falls out of the existing level-floor via the fixed scene_levels). The
+// warp replicates the Crystal menu's confirm path (live-RE'd): set the target
+// statue index at 0x76BB40, then run the menu's warp-confirm sequence.
+static int g_start_statue_scene = 0;     // slot_data start_statue_scene (0/1000 = no warp)
+static int g_start_weapon = 0;           // slot_data start_weapon (g_flags[0x94] value)
+static int g_character = 1;              // 0=Yunica 1=Hugo 2=Toal (slot_data character)
+static int g_spawn_reg_idx = -1;         // warp-registry index of the spawn statue
+static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statue
+static std::atomic<bool> g_saw_intro{false};     // New-Game intro (scene 2) seen
+static std::atomic<bool> g_force_spawn_done{false};
+static std::atomic<bool> g_warp_request{false};  // manual test hotkey -> main thread
+static volatile int g_warp_idx = -1;     // target for do_warp_native()
+static const uintptr_t kWarpTarget = 0x0076BB40;  // warp target statue index
+
+// Replicates the warp-menu confirm at 0x5ACCAF..0x5ACD16 (set target -> optional
+// fade 0x5CE2A0 -> warp 0x434970 -> set flag 0x739160). MUST run on the main
+// thread. Reads g_warp_idx for the destination; preserves nonvolatile regs.
+// (Byte ops on absolute addresses are loaded through ebx: MSVC inline asm rejects
+//  the `byte ptr [literal]` form that dword reads accept.)
+__declspec(naked) static void do_warp_native() {
+    __asm {
+        push esi
+        push edi
+        push ebx
+        xor  edi, edi
+        mov  esi, dword ptr [g_warp_idx]
+        mov  ebx, 0x0076BB40
+        mov  dword ptr [ebx], esi              // 0x76BB40 = target index
+        mov  esi, dword ptr [0x0074E238]
+        test byte ptr [esi+8], 0x80
+        jne  s1
+        mov  ebx, 0x006D6067
+        cmp  byte ptr [ebx], 0
+        je   s2
+        xor  ecx, ecx
+        mov  eax, 0x00439EE0
+        call eax
+        test eax, eax
+        js   s2
+    s1:
+        mov  edx, dword ptr [esi+8]
+        xor  ecx, ecx
+        push 0x400
+        and  edx, 1
+        mov  eax, 0x005CE2A0
+        call eax
+        add  esp, 4
+    s2:
+        push dword ptr [0x0074C09C]            // player entity
+        xor  edx, edx
+        mov  ecx, 0x006A7620
+        push 0
+        mov  eax, 0x00434970                   // the warp
+        call eax
+        add  esp, 8
+        mov  eax, dword ptr [0x0074C09C]
+        mov  ebx, 0x00739160
+        mov  byte ptr [ebx], 1
+        test eax, eax
+        je   s3
+        mov  word ptr [eax+0x4C8], di
+    s3:
+        pop  ebx
+        pop  edi
+        pop  esi
+        ret
+    }
+}
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
 static std::vector<int64_t> g_checks;
@@ -260,7 +337,7 @@ void ap_on_check(int flag_idx) {
         auto in = g_loc_item_name.find(loc);
         if (in != g_loc_item_name.end()) name = in->second;
     }
-    if (!found.empty()) overlay::push_item("Found: " + found);
+    if (!found.empty()) overlay::push_item(found);
     // Stash the actually-placed item so the native "Acquired <item>" box (the
     // 0xD5 op, which runs just after this check flag) shows the REAL item: its
     // art (local id, or a generic icon for foreign) and its name text.
@@ -275,8 +352,7 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
         std::string game = g_ap->get_player_game(it.player);
         std::string item = g_ap->get_item_name(it.item, game);
         std::string who = g_ap->get_player_alias(it.player);
-        g_loc_found[it.location] =
-            (who == g_slot) ? (item + "  (yours)") : (item + "  -> " + who);
+        g_loc_found[it.location] = item + "  -> " + who;   // owner = slot name
         // Local Ys Origin item -> remember its g_flags index for the native
         // box art; foreign (other game) -> -1 (use the generic art). Always keep
         // the display name for the box text.
@@ -364,9 +440,18 @@ static void on_slot_connected(const nlohmann::json& sd) {
         g_statue_reg.clear();
         for (int i = 0; i < (int)tmp.size(); i++)
             g_statue_reg.push_back({i, tmp[i].flag_idx, tmp[i].scene});
-        mod_log("ap: statue warp locks ON — %d statues, start scene S_%d",
-                statues, start_scene);
+        // Resolve the spawn statue's registry + purify-flag index for force-spawn.
+        g_start_statue_scene = start_scene;
+        for (const auto& s : g_statue_reg)
+            if (s.scene == start_scene) {
+                g_spawn_reg_idx = s.reg_index;
+                g_spawn_flag_idx = s.flag_idx;
+            }
+        mod_log("ap: statue warp locks ON — %d statues, start scene S_%d (reg idx %d)",
+                statues, start_scene, g_spawn_reg_idx);
     }
+    g_start_weapon = sd.value("start_weapon", 0);   // spawn loadout weapon value
+    g_character = sd.value("character", 1);         // 0 Yunica / 1 Hugo / 2 Toal
     g_level_scaling = sd.value("level_scaling", 0);
     g_level_margin = sd.value("level_margin", 3);
     g_exp_mult_max = sd.value("exp_multiplier_max", 8);
@@ -417,8 +502,11 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         else
             mod_log("ap: received '%s' (id %lld) — no g_flags index, skipped",
                     name.c_str(), (long long)it.item);
-        overlay::push_item(from.empty() || from == g_slot
-                               ? name : (name + "  <- " + from));
+        // Your own items already print as "Found: X (yours)" when their location
+        // fires (ap_on_check), so only surface items coming FROM another player
+        // (or the server) here — avoids showing every self-item twice.
+        if (from != g_slot)
+            overlay::push_item(from.empty() ? name : (name + "  <- " + from));
         g_applied_through = it.index;
     }
 }
@@ -467,6 +555,15 @@ static void poll_scene() {
     if (scene == g_last_scene) return;
     g_last_scene = scene;
 
+    // New-Game intro: Hugo/Yunica play scene 2; Toal plays his own cutscenes in
+    // the 7xxx range (e.g. S_7001, the goddesses) — gameplay scenes are 1000-6151
+    // so 7xxx is a safe Toal-intro marker. Arm force-spawn; the warp fires on the
+    // main thread as soon as a player entity exists (skipping the rest). Fires once
+    // per session (g_force_spawn_done not re-armed here, so a 7xxx cutscene playing
+    // again mid-game can't re-warp the player).
+    if (scene == 2 || (scene >= 7000 && scene < 8000))
+        g_saw_intro.store(true);
+
     auto it = g_scene_name.find(scene);
     char room[160];
     if (it != g_scene_name.end())
@@ -491,7 +588,7 @@ static void poll_scene() {
     for (int64_t loc : fire) {
         std::lock_guard<std::mutex> lk(g_scout_mtx);
         auto f = g_loc_found.find(loc);
-        if (f != g_loc_found.end()) overlay::push_item("Found: " + f->second);
+        if (f != g_loc_found.end()) overlay::push_item(f->second);
     }
 }
 
@@ -570,16 +667,61 @@ static void apply_weapon_level(int tier) {
     mod_log("weapon: applied tier value %d (entity %s)", tier, ent ? "pushed" : "null");
 }
 
+// Force-spawn the player at the random-start statue. MUST run on the main thread
+// (the warp touches the player entity / scene). Registers + purifies the spawn
+// statue, runs the native warp, and queues the floor-appropriate weapon (the
+// level is handled by the level-floor once the new scene loads).
+static void force_spawn() {
+    if (g_spawn_reg_idx < 0) return;
+    // Grant the warp crystal the (now-skipped) intro would have given: Toal uses
+    // the Dark Crystal (g_flags[0x56]), Hugo/Yunica the Crystal (g_flags[0x54]).
+    int crystal_idx = (g_character == 2) ? 0x56 : 0x54;
+    *(volatile int*)(kGFlagsAbs + crystal_idx * 4) = 1;
+    ((volatile unsigned char*)kWarpRegAbs)[g_spawn_reg_idx] = 1;   // register spawn
+    if (g_spawn_flag_idx >= 0)
+        *(volatile int*)(kGFlagsAbs + g_spawn_flag_idx * 4) = 1;   // purify spawn
+    g_warp_idx = g_spawn_reg_idx;
+    do_warp_native();
+    if (g_start_weapon > 0) g_pending_weapon.store(g_start_weapon);
+    mod_log("force-spawn: warped to spawn S_%d (reg idx %d), weapon=%d, crystal idx 0x%X",
+            g_start_statue_scene, g_spawn_reg_idx, g_start_weapon, crystal_idx);
+}
+
+// Manual force-spawn trigger (test hotkey, polled in hook_vm). Re-warps to the
+// spawn statue on demand so the warp can be validated without replaying the intro.
+extern "C" void request_force_spawn() { g_warp_request.store(true); }
+
 // Apply pending stat changes on the GAME's main thread (called from the D3D9
 // EndScene hook). Uses the game's own fns so EXP/threshold/stats stay consistent.
 extern "C" void exp_scaling_on_frame() {
+    // Random-start force-spawn: skip the WHOLE intro. The moment New Game starts
+    // its opening (scene 2 seen) and a player entity exists, warp straight to the
+    // spawn statue and grant the crystal ourselves — no waiting for the intro's
+    // cutscenes/dialogue/tutorial (which also skips Toal's extra cutscenes). F9
+    // re-triggers manually.
+    bool spawn_seed = g_start_statue_scene > 0 && g_start_statue_scene != 1000;
+    bool manual = g_warp_request.exchange(false);
+    bool auto_intro = !g_force_spawn_done.load() && g_saw_intro.load() &&
+                      read_current_scene() >= 2 && *kPlayerEntPtr != nullptr;
+    if (spawn_seed && (manual || auto_intro)) {
+        g_force_spawn_done.store(true);
+        force_spawn();
+    }
+
     // Weapon upgrade (Cleria Ore). Re-enforce if a save load reset g_flags[0x94]
     // below what we applied (the save reloads g_flags from the on-disk state).
     int wv = g_pending_weapon.exchange(0);
     if (wv > g_weapon_applied) g_weapon_applied = wv;
+    // Re-apply when: a new tier arrived (wv), the persistent record dropped (save
+    // load), OR the player ENTITY changed (death/respawn or a scene reload spawns
+    // a fresh entity whose combat weapon stats default to Lv1 even though the
+    // record still reads Lv5). The last case is what makes post-respawn deal 1 dmg.
+    char* cur_ent = *kPlayerEntPtr;
+    bool ent_changed = (cur_ent != nullptr && cur_ent != g_weapon_entity);
     if (g_weapon_applied > 0 &&
-        (wv > 0 || *(volatile int*)kWeaponLevelAbs < g_weapon_applied)) {
+        (wv > 0 || ent_changed || *(volatile int*)kWeaponLevelAbs < g_weapon_applied)) {
         apply_weapon_level(g_weapon_applied);
+        g_weapon_entity = *kPlayerEntPtr;
     }
     // Level floor.
     int t = g_pending_level.exchange(0);
@@ -592,6 +734,7 @@ extern "C" void exp_scaling_on_frame() {
 
 static void poll_loop() {
     while (g_run.load()) {
+        cutscene_ff_poll();   // hold-to-fast-forward hotkey (works pre/post connect)
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
