@@ -37,8 +37,15 @@ Ys Origin:
                          #   exp_multiplier = bonus EXP scaled by how under-level
                          #                    you are (1x when on level)
                          #   both (default) = bump most of the way, EXP boost the rest
-  level_margin: 3        # how many levels under a floor you may be before it kicks in
+  level_margin: 0        # levels under a floor's expected level the bump leaves you
+                         #   (0 = right at the expected level; raise for challenge)
   exp_multiplier_max: 8  # cap for the catch-up EXP multiplier
+
+  # --- weapon gating (so warping far ahead isn't a 1-damage wall) ---
+  weapon_requirements: true # gate each zone behind enough Cleria Ore that the
+                            #   vanilla weapon level for that floor is obtainable
+                            #   first. Cleria Ore becomes progression and upgrades
+                            #   your weapon on pickup. Pairs with level_scaling.
 
   # --- multiworld extras ---
   death_link: false      # when on, you die when any other DeathLink player dies

@@ -99,11 +99,16 @@ class LevelScaling(Choice):
 
 class LevelMargin(Range):
     """How many levels under a floor's expected level you may be before Level
-    scaling kicks in (also the gap the level-floor bump leaves for you to earn)."""
+    scaling kicks in (also the gap the level-floor bump leaves for you to earn).
+    Default 0: with the corrected floor-level curve and a floor-appropriate
+    weapon, the level floor brings you to exactly the floor's expected level
+    (live-tuned at 18F: expected 27 + weapon Lv4 = the right difficulty). Raise it
+    if you want more challenge (you'll be that many levels under); too high and
+    combat clamps to 1 damage on warped-ahead floors."""
     display_name = "Level scaling margin"
     range_start = 0
     range_end = 10
-    default = 3
+    default = 0
 
 
 class ExpMultiplierMax(Range):
@@ -115,22 +120,14 @@ class ExpMultiplierMax(Range):
     default = 8
 
 
-class WeaponRequirements(Choice):
+class WeaponRequirements(DefaultOnToggle):
     """Gate each tower zone behind enough Cleria Ore (= weapon upgrades) to fight
     there, so the warp network can't strand you somewhere your weapon can't dent.
-    The generator guarantees floor-appropriate ore is obtainable (by you, or
-    friends in a multiworld) before each zone is in logic.
-
-    - ``off``    : no weapon gating.
-    - ``casual`` : lenient ore requirements (default).
-    - ``strict`` : ore pacing close to a normal climb.
-
-    (Cleria Ore becomes progression when this is on.)"""
+    When on, the generator guarantees the **vanilla weapon level for each floor**
+    is obtainable (by you, or friends in a multiworld) before that zone is in
+    logic, and Cleria Ore becomes progression that upgrades your weapon on pickup.
+    Off = no weapon gating (Cleria Ore is filler)."""
     display_name = "Weapon requirements"
-    option_off = 0
-    option_casual = 1
-    option_strict = 2
-    default = 1  # casual
 
 
 @dataclass

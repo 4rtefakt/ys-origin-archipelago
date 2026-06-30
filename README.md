@@ -95,6 +95,13 @@ hide/show the overlay.
   the mod can bump an under-leveled character toward the floor's expected level
   and/or grant scaled bonus EXP, tapering to nothing once you're on level. On by
   default; tune or disable with `level_scaling`.
+- **Weapon gating** — your weapon (the dominant damage stat) is upgraded by Cleria
+  Ore, which is shuffled into the pool as progression. The generator guarantees
+  the **vanilla weapon level for each floor** is obtainable before that zone is in
+  logic, so the warp network can't drop you somewhere your weapon deals 1 damage.
+  Receiving Cleria Ore upgrades your weapon directly (no NPC trip). On by default;
+  pairs with level scaling so warped-ahead floors stay playable. See
+  `weapon_requirements`.
 - **Goal:** defeat Darm (the final boss), or optionally all bosses.
 
 ## ⚙️ Options (in your yaml)
@@ -111,8 +118,9 @@ hide/show the overlay.
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | With `statue_warp_locks` on, randomize which statue starts unlocked (default: the 1F starting statue) |
 | `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
-| `level_margin` | `0`–`10` | `3` | How many levels under a floor you may be before scaling kicks in |
+| `level_margin` | `0`–`10` | `0` | How many levels under a floor's expected level the floor-bump leaves you (0 = right at the expected level); raise for more challenge |
 | `exp_multiplier_max` | `1`–`20` | `8` | Cap for the catch-up EXP multiplier (scales with how under-level you are) |
+| `weapon_requirements` | `true` / `false` | `true` | Gate each zone behind enough Cleria Ore that the vanilla weapon level for that floor is obtainable first; Cleria Ore becomes progression and upgrades your weapon on pickup. Pairs with `level_scaling` to keep warped-ahead floors playable |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
 
 ## ❓ Troubleshooting

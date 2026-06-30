@@ -276,3 +276,46 @@ names into the chest catalog. Verified: 0x57 Roda Fruit, 0x59 Celcetan Panacea,
   **fully unpackable** offline — see "Offline script pipeline" above
   (`tools/ni_unpack.py`). Item *names* still load into `.data` at runtime, but
   the chest/event *logic* is in the extractable `.XSO` scripts.
+
+## Weapon level / Cleria Ore upgrade (mapped 2026-06-30, offline)
+
+The dominant combat-damage factor. **Cleria Ore = item id `0x58` (88).** Five ore
+in the pool (chests in S_20/S_31/S_40/S_50/S_60). Vanilla: collect ore, trade it
+to the NPC (`TALKC260_WEAPON.XSO`, scene S_1000) which runs `WEAPON_LEVEL_UP.XSO`.
+
+**Persistent weapon-level record = `g_flags[0x94]` (abs `0x76BB6C`).** Holds the
+*tier value*, not 1..6: the level-up ladder steps it `1 → 2 → 4 → 6 → 8 → 10`
+(6 tiers; start = 1, max = 10). The trade script gates on it (`== 10` ⇒ "already
+max"). This cell is the script/save record + drives the equipment-menu ATK text
+(read at `0x5AFC35` in the menu-stat builder `FUN_005AFB70`, indexed into the
+per-level stat table `0x74E720`). It is **not** read by combat directly.
+
+**The live apply = VM sub-op `0x7F`** (handler `0x568582`, found via the class-2
+sub-op jump table at `0x56E0B0`, indexed by sub-op; dispatch at `0x566429`/`0x566463`).
+`WEAPON_LEVEL_UP.XSO` calls `0x7F [N,N,N,N]` (N = tier value) alongside setting
+`g_flags[0x94]=N`. The handler:
+
+1. Calls **`FUN_004201D0(ecx=idx, edx=value)` four times** — idx `0..3` = the
+   weapon's four stat slots, all set to the tier value N.
+2. Copies the recomputed player stat block (`0x76A72C`..`0x76A767`) into the live
+   player entity at `entity+0x94`..`+0xCC` (so the upgrade takes effect without a
+   room change). Entity = `*(0x74C09C)` (a confirmed player-entity pointer — same
+   one the DeathLink HP chain uses; HP = `entity+0x98`).
+
+| Thing | Address | Notes |
+|---|---|---|
+| Cleria Ore item id | `0x58` | currently granted as a dead g_flags item |
+| Weapon-level record | g_flags[0x94] = `0x76BB6C` | tier value 1/2/4/6/8/10 |
+| Stat-array setter | `FUN_004201D0` | `__fastcall(ecx=idx, edx=value)`: `stat[idx*8+0x76A634]=value`, OR dirty bit `0x10` into `0x76B914`, calls recompute `FUN_00420C40` |
+| Recompute | `FUN_00420C40` = `0x420C40` | the same fn the level-floor feature drives; **must run on the main thread** |
+| Weapon-apply VM op | sub-op `0x7F`, handler `0x568582` | calls `0x4201D0`×4 (idx 0–3) then pushes stat block → entity |
+| Player entity ptr | `*(0x74C09C)` | stat block `0x76A72C` → `entity+0x94` (see sub-op `0x7F`) |
+| Player stat block | `0x76A72C`..`0x76A767` | HP/MP/STR/DEF/EXP/SP/level; copied to `entity+0x94`.. |
+
+**Mod plan (mirrors the EXP/level scaling architecture):** on receiving Cleria
+Ore, set a pending weapon tier = `{0:1,1:2,2:4,3:6,4:8,5:10}[ore_count]`; on the
+next frame (D3D9 EndScene, main thread) set `g_flags[0x94]` + call
+`FUN_004201D0(0..3, tier)` + push the stat block to the entity (= replicate
+sub-op `0x7F`). Do **not** grant the ore into `g_flags[0x58]` (keeps the NPC trade
+inert / no double-dip). The acquire box already shows "Cleria Ore" via the
+existing box-relabel path — only the grant side changes.

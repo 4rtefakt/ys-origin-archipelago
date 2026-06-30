@@ -185,6 +185,29 @@ static int g_exp_mult_max = 8;
 static std::map<int, int> g_scene_levels;  // scene number -> expected level
 static std::atomic<int> g_pending_level{0};  // bump requested; applied on the main thread
 static inline int read_level() { return *(volatile int*)kLevelAbs; }
+
+// -- weapon level (Cleria Ore upgrade) -------------------------------------- #
+// In vanilla you trade Cleria Ore to an NPC, whose cutscene runs WEAPON_LEVEL_UP
+// (VM sub-op 0x7F) to raise the weapon. The weapon is the dominant damage factor,
+// so the rando applies the upgrade the moment Cleria Ore is RECEIVED (no NPC trip
+// needed for warped-ahead floors). We replicate sub-op 0x7F: set the persistent
+// record g_flags[0x94], call the stat setter for the 4 weapon slots, then push
+// the recomputed stat block into the live player entity. See RE_FINDINGS.md.
+static const int kCleriaOreId = 0x58;
+static const uintptr_t kWeaponLevelAbs = kGFlagsAbs + 0x94 * 4;  // 0x0076BB6C
+// FUN_004201D0(ecx=stat idx, edx=value): stat[idx]=value, set recompute dirty bit,
+// recompute (FUN_00420C40). The 4 weapon slots are idx 0..3.
+typedef void(__fastcall* StatSetFn)(unsigned idx, int value);
+static const StatSetFn kStatSet = (StatSetFn)0x004201D0;
+static char** const kPlayerEntPtr = (char**)0x0074C09C;       // *() = player entity
+static const uintptr_t kStatBlock = 0x0076A72C;               // -> entity+0x94..
+// g_flags[0x94] weapon value per Cleria Ore count: the Nth ore is the Nth vanilla
+// upgrade (the game's WEAPON_LEVEL_UP ladder steps 1->2->4->6->8), displaying as
+// Lv = value/2 + 2, i.e. ore N -> vanilla weapon Lv N+1. Indexed by (count-1).
+static const int kWeaponTier[5] = {1, 2, 4, 6, 8};  // 1..5 ore -> Lv2..Lv6
+static std::atomic<int> g_cleria_count{0};   // ore received this run
+static std::atomic<int> g_pending_weapon{0}; // tier requested; applied on main thread
+static int g_weapon_applied = 0;             // last tier pushed to the entity
 static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
 // queued AP location ids to check (VM hook thread -> poll thread).
 static std::mutex g_check_mtx;
@@ -381,6 +404,13 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             g_statue_forced.insert(fidx);    // poll forces it warpable+purified
             mod_log("ap: statue unlock '%s' -> g_flags[0x%X] forced warpable",
                     name.c_str(), fidx);
+        } else if (f != g_name_to_idx.end() && f->second == kCleriaOreId) {
+            // Cleria Ore: upgrade the weapon instead of granting the (dead) ore
+            // item. The acquire box still shows "Cleria Ore" (box-relabel path).
+            int n = g_cleria_count.fetch_add(1) + 1;  // 1..N ore now received
+            int tier = kWeaponTier[(n < 5 ? n : 5) - 1];
+            g_pending_weapon.store(tier);
+            mod_log("ap: Cleria Ore #%d -> weapon tier value %d (pending)", n, tier);
         } else if (f != g_name_to_idx.end())
             ap_give(f->second, 1);
         else
@@ -517,10 +547,40 @@ static void exp_scaling_poll() {
     }
 }
 
-// Apply a requested level bump on the GAME's main thread (called from the D3D9
-// EndScene hook). Uses the game's own set-level fn so EXP/threshold/stats all
-// stay consistent. Only ever raises the level.
+// Replicate VM sub-op 0x7F (the weapon-upgrade apply). MUST run on the main
+// thread (it calls the stat recompute FUN_00420C40 via kStatSet). Sets the
+// persistent record, the 4 weapon stat slots, then pushes the recomputed stat
+// block into the live player entity so the upgrade takes effect immediately.
+static void apply_weapon_level(int tier) {
+    *(volatile int*)kWeaponLevelAbs = tier;     // persistent record / trade gate / menu
+    kStatSet(0, tier);
+    kStatSet(1, tier);
+    kStatSet(2, tier);
+    kStatSet(3, tier);
+    char* ent = *kPlayerEntPtr;
+    if (ent) {
+        memcpy(ent + 0x94, (const void*)(kStatBlock + 0x00), 16);
+        memcpy(ent + 0xA4, (const void*)(kStatBlock + 0x10), 16);
+        memcpy(ent + 0xB4, (const void*)(kStatBlock + 0x20), 16);
+        memcpy(ent + 0xC4, (const void*)(kStatBlock + 0x30), 8);
+        *(int*)(ent + 0xCC) = *(const int*)(kStatBlock + 0x38);
+    }
+    g_weapon_applied = tier;
+    mod_log("weapon: applied tier value %d (entity %s)", tier, ent ? "pushed" : "null");
+}
+
+// Apply pending stat changes on the GAME's main thread (called from the D3D9
+// EndScene hook). Uses the game's own fns so EXP/threshold/stats stay consistent.
 extern "C" void exp_scaling_on_frame() {
+    // Weapon upgrade (Cleria Ore). Re-enforce if a save load reset g_flags[0x94]
+    // below what we applied (the save reloads g_flags from the on-disk state).
+    int wv = g_pending_weapon.exchange(0);
+    if (wv > g_weapon_applied) g_weapon_applied = wv;
+    if (g_weapon_applied > 0 &&
+        (wv > 0 || *(volatile int*)kWeaponLevelAbs < g_weapon_applied)) {
+        apply_weapon_level(g_weapon_applied);
+    }
+    // Level floor.
     int t = g_pending_level.exchange(0);
     if (t <= 0 || t > 99) return;
     if (read_level() < t) {

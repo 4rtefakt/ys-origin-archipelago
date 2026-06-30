@@ -334,9 +334,9 @@ FLOOR_LEVELS: Dict[int, int] = {
     1: 1, 2: 4, 3: 6, 4: 8, 5: 9,           # Wailing Blue (5F Beast 9)
     6: 11, 7: 13, 8: 15, 9: 17,             # Flooded Prison (9F Arthropod 17)
     10: 18, 11: 19, 12: 20, 13: 21,         # Flames of Guilt (13F Monk 20, win 23)
-    14: 22, 15: 23, 16: 24, 17: 25,         # Silent Sands (17F Construct 25; Rado 29)
-    18: 28, 19: 30, 20: 31, 21: 32,         # Corrupted Blood (21F Creeper 32)
-    22: 41, 23: 44, 24: 47, 25: 51,         # Demonic Core / Summit (Mantid 41 -> Darm 52)
+    14: 22, 15: 23, 16: 24, 17: 25,         # Silent Sands (17F Construct ~23-25)
+    18: 27, 19: 32, 20: 36, 21: 41,         # Corrupted Blood (21F Mantid = guide "Lv41")
+    22: 44, 23: 47, 24: 49, 25: 51,         # Demonic Core / Summit (25F Dalles 51)
 }
 
 
@@ -351,23 +351,24 @@ CLERIA_ORE = "Cleria Ore"
 # weapon_requirements option: (casual, strict). 5 ore exist (one per zone in
 # vanilla), so a normal climb hands you up to 4 before the final zone. Gating on
 # zone ENTRY (not just bosses) because regular enemies hit just as hard.
-ZONE_ORE_REQ: Dict[str, Tuple[int, int]] = {
-    "Flooded Prison": (0, 1),
-    "Flames of Guilt": (1, 2),
-    "Silent Sands": (1, 2),
-    "Corrupted Blood": (2, 3),
-    "Demonic Core": (2, 4),
+# Cleria Ore required to ENTER each zone = the vanilla weapon level for the zone's
+# entry floor (weapon Lv = ore + 1: vanilla Lv2~5F, Lv3~12F, Lv4~16F, Lv5~20F,
+# Lv6~23-24F). Guarantees the floor-appropriate weapon is obtainable first, so a
+# warp ahead can't drop you somewhere your weapon deals 1 damage.
+ZONE_ORE_REQ: Dict[str, int] = {
+    "Flooded Prison": 1,    # 6F  -> vanilla Lv2 (1 ore by 5F)
+    "Flames of Guilt": 1,   # 10F -> vanilla Lv2 (the Lv3 ore is at 12F, inside)
+    "Silent Sands": 2,      # 14F -> vanilla Lv3 (12F ore)
+    "Corrupted Blood": 3,   # 18F -> vanilla Lv4 (16F ore)
+    "Demonic Core": 4,      # 22F -> vanilla Lv5 (20F ore)
 }
 
 
-def zone_ore_requirements(mode: int) -> Dict[str, int]:
-    """zone -> required Cleria Ore count for weapon_requirements mode
-    (0 off, 1 casual, 2 strict). Empty when off."""
-    if mode not in (1, 2):
+def zone_ore_requirements(enabled) -> Dict[str, int]:
+    """zone -> required Cleria Ore count when weapon_requirements is on; {} off."""
+    if not enabled:
         return {}
-    idx = 0 if mode == 1 else 1
-    return {z: n for z, (c, s) in ZONE_ORE_REQ.items()
-            for n in ((c, s)[idx],) if n > 0 and z in ALL_REGIONS}
+    return {z: n for z, n in ZONE_ORE_REQ.items() if n > 0 and z in ALL_REGIONS}
 
 
 def scene_levels() -> Dict[str, int]:
