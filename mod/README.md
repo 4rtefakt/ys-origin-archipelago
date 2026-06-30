@@ -29,15 +29,29 @@ You need a **32-bit** MSVC toolchain (the game is 32-bit). Easiest:
 same workload, no IDE.)
 
 ## 2. Build
-The first configure downloads MinHook + Dear ImGui via CMake FetchContent
-(needs internet once).
+The first configure downloads MinHook, Dear ImGui, and the apclientpp deps via
+CMake FetchContent (needs internet once).
+
+**OpenSSL (one-time, for `wss://` / archipelago.gg).** The mod links static 32-bit
+OpenSSL so it can connect directly over TLS. Get it via vcpkg:
+
+```powershell
+git clone https://github.com/microsoft/vcpkg D:\vcpkg
+D:\vcpkg\bootstrap-vcpkg.bat
+D:\vcpkg\vcpkg.exe install openssl:x86-windows-static-md
+```
+
+Then build (point CMake at the vcpkg OpenSSL):
 
 ```powershell
 cd mod
-cmake -A Win32 -B build          # -A Win32 = 32-bit (required)
+cmake -A Win32 -B build -DOPENSSL_ROOT_DIR=D:/vcpkg/installed/x86-windows-static-md
 cmake --build build --config Release
 ```
-Output: `mod/build/Release/dinput8.dll`.
+Output: `mod/build/Release/dinput8.dll` (~4.5 MB — OpenSSL is statically baked in,
+so there are no extra DLLs to ship). CA certs come from the Windows root store at
+runtime; `wss://` is selected automatically when the `host` in `yso_ap.cfg` has a
+`wss://` scheme.
 
 (Or in the VS IDE: **File ▸ Open ▸ Folder…** this `mod/` folder, pick the **x86**
 configuration, Build.)

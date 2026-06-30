@@ -51,9 +51,8 @@ endif()
 set(IMGUI_DIR ${imgui_SOURCE_DIR})
 
 # --- Archipelago C++ client (apclientpp) + its header-only deps ------------ #
-# Self-contained AP networking inside the mod (no Python at runtime). For local
-# ws:// play we define WSWRAP_NO_SSL so no OpenSSL is needed — everything below
-# is header-only.
+# Self-contained AP networking inside the mod (no Python at runtime). All of the
+# deps below are header-only; TLS for wss:// is provided by OpenSSL (found below).
 FetchContent_Declare(json GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG v3.11.3)
 FetchContent_Declare(asio GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
@@ -80,6 +79,14 @@ set(AP_INCLUDE_DIRS
     ${valijson_SOURCE_DIR}/include
     ${apclientpp_SOURCE_DIR})
 
+# --- OpenSSL (TLS for wss://, e.g. archipelago.gg) ------------------------- #
+# Static 32-bit libs from vcpkg (x86-windows-static-md: static OpenSSL + dynamic
+# CRT to match this DLL) -> self-contained, no extra DLLs to ship. Configure with
+#   -DOPENSSL_ROOT_DIR=D:/vcpkg/installed/x86-windows-static-md
+# wswrap loads CA certs from the Windows ROOT store (crypt32), so no cacert bundle.
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_package(OpenSSL REQUIRED)
+
 add_library(dinput8 SHARED
     src/dllmain.cpp
     src/proxy_dinput8.cpp
@@ -101,13 +108,14 @@ add_library(dinput8 SHARED
 target_include_directories(dinput8 PRIVATE
     src ${IMGUI_DIR} ${IMGUI_DIR}/backends ${minhook_SOURCE_DIR}/include
     ${AP_INCLUDE_DIRS})
-target_link_libraries(dinput8 PRIVATE d3d9 dxguid ws2_32 crypt32)
+target_link_libraries(dinput8 PRIVATE
+    d3d9 dxguid ws2_32 crypt32 OpenSSL::SSL OpenSSL::Crypto)
 
-# apclientpp / asio / websocketpp build knobs (local ws:// only, no OpenSSL).
+# apclientpp / asio / websocketpp build knobs. SSL is ON (wss:// support); only
+# zlib compression is disabled (not header-only).
 target_compile_definitions(dinput8 PRIVATE
     ASIO_STANDALONE
     _WEBSOCKETPP_CPP11_STL_
-    WSWRAP_NO_SSL
     WSWRAP_NO_COMPRESSION   # avoid zlib (not header-only)
     WIN32_LEAN_AND_MEAN
     _WIN32_WINNT=0x0600)

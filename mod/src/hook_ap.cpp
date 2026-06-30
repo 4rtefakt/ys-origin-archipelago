@@ -1,8 +1,9 @@
 // Self-contained Archipelago client embedded in the mod (apclientpp).
 //
 // Replaces the external Python client: the mod connects to the AP server
-// directly over ws:// (local play; WSWRAP_NO_SSL so no OpenSSL). It drives the
-// in-game randomizer end to end:
+// directly over ws:// (local) or wss:// (e.g. archipelago.gg — set host with a
+// wss:// scheme in yso_ap.cfg; TLS via OpenSSL, CA certs from the Windows store).
+// It drives the in-game randomizer end to end:
 //
 //   * on slot_connected: parse slot_data to learn which vanilla item grants to
 //     suppress (g_supp_item), which location flags are checks (g_loc_flag) and
