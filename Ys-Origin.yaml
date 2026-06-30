@@ -27,8 +27,12 @@ Ys Origin:
                            #   no warp/heal/save) until you receive its unlock
                            #   item; one statue is unlocked from the start so you
                            #   can always save. Adds 21 "Statue Warp" items.
-  random_start: false      # with the above on, randomize WHICH statue starts
-                           #   unlocked (default: the 1F starting statue)
+  random_start: false      # START ANYWHERE. With the above on, New Game spawns
+                           #   you at a RANDOM statue: the mod skips the whole
+                           #   intro (movies + cutscenes, every character) and
+                           #   warps you there geared for the floor (level +
+                           #   weapon). Beatable from any spawn. Normal seeds
+                           #   are unaffected.
 
   # --- catch-up level scaling (so warping far ahead isn't a grind wall) ---
   level_scaling: both    # off | level_floor | exp_multiplier | both
