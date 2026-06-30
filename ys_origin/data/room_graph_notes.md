@@ -247,3 +247,35 @@ Per-location overrides (reached from a different room than their scene):
 - Where the 4F passages (S_1002/1003/1007/1008/1010/1014/1015) and 5F connect.
 - 2F Hidden Entrance (S_1006), 2F Gemma Room (S_1012) — how reached?
 - 3F Midboss (S_1080) and 5F Velagunder (S_1099) approach.
+
+---
+
+## Phase B — ONE-WAY DROP AUDIT (2026-06-30, 6 parallel agents over the Hugo walkthrough + maps + scene graph)
+
+For the bidirectional (random-spawn) logic conversion: the edges below are genuine
+one-way DROPS — when making room edges bidirectional, these must keep NO free
+reverse edge (you can't climb back the way you fell). Everything else in the tower
+is reversible (bridges/forks/in-room platforming) or gated-reversible. Confidence +
+evidence per the guide; medium/low ones want a live or map confirm before relying.
+
+| From → To | Zone | Conf | Evidence / note |
+|---|---|---|---|
+| **S_1009 → S_1080** | Wailing Blue | high | 4F altar opens a hole, drop to 3F midboss. Already authored, gated [Blue Moon Crest]. |
+| **S_1080 → S_1001** | Wailing Blue | high | 3F→2F north hole post-Epona, lands at the ELEVATED tier of S_1001. Already authored, free. |
+| **S_4080 → S_4009** | Silent Sands | high | Room literally named "Pitfall Trap" (off the 17F critical path). Where it dumps you is UNAUTHORED — confirm in-game; should get no reverse. |
+| **(→ S_5006)** | Corrupted Blood | high | "19F Drop-Off": drop from the Crimson-Key vault S_5007, loop back on foot to fork S_5008. Prose drop = S_5007→S_5006; authored edge = S_5008→S_5006. Keep the edge INTO S_5006 one-way. |
+| **S_2014 → S_2009** | Flooded Prison | med-high | Levinstrike Warhammer chamber: sink in, **Dark-Crystal teleport out** (no walk-back). Authored S_2009.from=[S_2014]. |
+| **S_3012 → S_3013/S_3011** | Flames of Guilt | med | 13F Panacea chest "drop down to the lower right, where you've been before." Exact landing scene uncertain. |
+| **S_4002 → S_4005** | Silent Sands | med | 14F "Rear Bend Room" optional shortcut drop back toward the S_4000 statue. Don't add the upward reverse. |
+| **S_6010 → S_6080** | Demonic Core | med | 23F "big ol' hole" to the Obsidian Key room. ⚠️ also flagged: the authored `S_6010→S_6080 [Obsidian Key]` gate may be **inverted** (prose drops in unlocked to GET the key; the key gates the door NORTH toward Kishgal) — verify. |
+
+**NOT one-way (do NOT flag — reversible or in-room):**
+- S_2006 → S_2007 (7F→8F waterfall): room named "Waterfall Stopper" → likely re-traversable. (low)
+- Flooded Prison 8F waterway gap-drops: in-room, guide says "get it and come back" (the line-1094 "(you can't come back)" was a misread — it's "come back" = reversible).
+- **Demonic Core 24F Hall of Reflection mirror maze: BIDIRECTIONAL** (every mirror "takes you back to…", incl. the True Reflection return mirror). The obvious place for one-ways isn't one.
+- 16F→17F slick slides (S_4012→S_4080): gated-reversible on Earth Dragon's Claws (already modeled).
+- 16F Creeper Medallion "hole" (S_4010): in-room platforming loop.
+
+**Also irreversible but a TELEPORT, not a drop** (handle under event/warp modeling, already directional): S_1013 → S_1009 (Wailing Blue 3F transfer); the Levinstrike exit teleport.
+
+Net: ~4 high-confidence + ~4 medium one-way drops tower-wide. The medium ones (S_3012 landing, S_4009 outbound, S_6010→S_6080 split/gate) need a live/map confirm before the bidirectional edge is finalized.
