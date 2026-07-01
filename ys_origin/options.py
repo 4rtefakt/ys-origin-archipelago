@@ -212,6 +212,13 @@ class ExpCatchupMargin(Range):
     default = 5
 
 
+class ShopHints(DefaultOnToggle):
+    """Show what each Divine Blessing purchase actually gives (the multiworld
+    item scouted at that shop slot) on the in-game overlay while you're at a
+    goddess statue. Off = blessings are blind buys."""
+    display_name = "Blessing shop hints"
+
+
 class ProgressiveArmor(DefaultOnToggle):
     """Make defensive gear progressive. Ys Origin has two gear slots — Armor and
     Boots — each a strict tier ladder per character. When on, every gear chest
@@ -254,5 +261,6 @@ class YsOriginOptions(PerGameCommonOptions):
     exp_multiplier_catchup: ExpMultiplierCatchup
     exp_catchup_margin: ExpCatchupMargin
     progressive_armor: ProgressiveArmor
+    shop_hints: ShopHints
     weapon_requirements: WeaponRequirements
     death_link: DeathLink

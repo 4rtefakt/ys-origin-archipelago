@@ -258,6 +258,16 @@ class YsOriginWorld(World):
             # scene leaf number -> room name, for the in-game overlay's current
             # room line (and scene-method check display).
             "scene_names": dt.scene_names(),
+            # Overlay trackers: per-scene / per-floor active location ids (the
+            # "checks here" line + the per-floor remaining list at statues), the
+            # blessing shop-hint names, and whether to show shop hints at all.
+            "scene_locations": dt.scene_locations_map(active, self.location_name_to_id),
+            "floor_locations": dt.floor_locations_map(active, self.location_name_to_id),
+            "blessing_names": dt.blessing_location_names(active, self.location_name_to_id),
+            "shop_hints": bool(self.options.shop_hints.value),
+            # All statue scenes (panel trigger; statue_unlocks only ships with
+            # warp locks on).
+            "statue_scenes": dt.statue_scenes(),
             # g_flags indices of the vanilla content of active chest/event
             # locations — the in-game mod suppresses these (player gets the AP
             # item over the network instead).

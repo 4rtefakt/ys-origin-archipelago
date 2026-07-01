@@ -96,6 +96,7 @@ add_library(dinput8 SHARED
     src/hook_bridge.cpp
     src/hook_watch.cpp
     src/hook_input.cpp
+    src/hook_saveredir.cpp
     src/overlay.cpp
     src/menu.cpp
     src/exports.def

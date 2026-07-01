@@ -41,11 +41,16 @@ namespace overlay {
 void push_item(const std::string& text);
 void set_status(const std::string& text);
 void set_room(const std::string& text);
+void set_tracker(const std::string& text);
+void set_panel(const std::string& text);
 }
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
 extern bool g_loc_flag[0x200];    // location flags that are checks
+// Seed-scoped save redirection (hook_saveredir.cpp).
+extern "C" void saveredir_set_seed(const char* seed);
+extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
 static const char* AP_GAME = "Ys Origin";
@@ -79,7 +84,11 @@ static void load_config() {
                   "# (ws:// for local, wss:// for archipelago.gg — the menu\n"
                   "# adds wss:// automatically if you omit it).\n"
                   "host=archipelago.gg\nport=38281\nslot=Hugo\npassword=\n"
-                  "# autoconnect=1  # connect at startup with the above (skip the menu)\n",
+                  "# autoconnect=1  # connect at startup with the above (skip the menu)\n"
+                  "# save_redirect=1   # AP runs save into archipelago_<seed>/ next to\n"
+                  "#                   # the normal saves (vanilla saves stay untouched).\n"
+                  "#                   # 0 = write the regular save files as usual.\n"
+                  "# save_pattern=sav  # filename substring that marks a save file\n",
                   w);
             fclose(w);
         }
@@ -102,6 +111,8 @@ static void load_config() {
         else if (!strcmp(key, "hp_ptr")) { g_hp_ptr = (int)strtol(val, nullptr, 0); }
         else if (!strcmp(key, "hp_field")) { g_hp_field = (int)strtol(val, nullptr, 0); }
         else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
+        else if (!strcmp(key, "save_redirect")) { saveredir_config(atoi(val), nullptr); }
+        else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -144,6 +155,17 @@ static std::map<int, std::vector<int64_t>> g_scene_locs;
 static std::map<int, std::string> g_scene_name;
 static std::set<int64_t> g_scene_fired;   // dedupe (each scene loc fires once)
 static int g_last_scene = -1;
+
+// Overlay trackers (slot_data): every ACTIVE location by scene / by floor, the
+// blessing shop-hint names, and the statue scenes that trigger the panel. The
+// checked-set mirrors the server (location_checked handler + our own sends).
+static std::map<int, std::vector<int64_t>> g_scene_locations;  // scene -> locs
+static std::map<int, std::vector<int64_t>> g_floor_locations;  // floor -> locs
+static std::map<int64_t, std::string> g_bless_names;   // blessing loc -> name
+static std::set<int> g_statue_scene_set;
+static std::set<int64_t> g_checked;
+static bool g_shop_hints = false;
+static bool g_panel_toggle = false;       // F7: force the panel anywhere
 
 // Poll-method detection, for signals the VM store hook can't see (they're
 // written natively, not by script opcode 0x64): blessing purchases (a bitfield
@@ -492,6 +514,29 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["scene_names"].items())
             g_scene_name[atoi(kv.key().c_str())] = kv.value().get<std::string>();
     }
+    // Overlay trackers: per-scene / per-floor location lists, shop hints, and
+    // the statue scenes that pop the panel.
+    g_scene_locations.clear();
+    if (sd.contains("scene_locations"))
+        for (auto& kv : sd["scene_locations"].items())
+            for (auto& v : kv.value())
+                g_scene_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
+    g_floor_locations.clear();
+    if (sd.contains("floor_locations"))
+        for (auto& kv : sd["floor_locations"].items())
+            for (auto& v : kv.value())
+                g_floor_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
+    g_bless_names.clear();
+    if (sd.contains("blessing_names"))
+        for (auto& kv : sd["blessing_names"].items())
+            g_bless_names[atoll(kv.key().c_str())] = kv.value().get<std::string>();
+    g_shop_hints = sd.value("shop_hints", false);
+    g_statue_scene_set.clear();
+    if (sd.contains("statue_scenes"))
+        for (auto& v : sd["statue_scenes"])
+            g_statue_scene_set.insert(v.get<int>());
+    // Seed-scoped save redirection: hand the room seed to the file hook.
+    saveredir_set_seed(g_ap->get_seed().c_str());
     int statues = 0;
     if (sd.value("statue_warp_locks", false) && sd.contains("statue_unlocks")) {
         g_statue_locks_on = true;
@@ -762,6 +807,74 @@ static void poll_value_checks() {
     fire_poll_locs(fire);
 }
 
+// -- overlay trackers -------------------------------------------------------- #
+// This TU avoids <windows.h> (see the header comment); declare the one user32
+// import the F7 panel toggle needs.
+extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vk);
+static const int kVkF7 = 0x76;
+
+static int count_done(const std::vector<int64_t>& v) {
+    int n = 0;
+    for (int64_t l : v)
+        if (g_checked.count(l)) n++;
+    return n;
+}
+
+// Rebuild the "Checks here: k/n" line (always, for the current room) and the
+// left panel (per-floor remaining checks + blessing shop hints). The panel
+// auto-shows at goddess statues — that's where the warp menu (floors) and the
+// blessing shop live — and F7 toggles it anywhere. Runs each poll tick; string
+// work only, and the overlay setters are mutex-guarded.
+static void update_trackers() {
+    static bool f7_prev = false;
+    bool f7 = (GetAsyncKeyState(kVkF7) & 0x8000) != 0;
+    if (f7 && !f7_prev) g_panel_toggle = !g_panel_toggle;
+    f7_prev = f7;
+
+    int scene = g_last_scene;
+    std::string tr;
+    auto it = g_scene_locations.find(scene);
+    if (it != g_scene_locations.end() && !it->second.empty()) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "Checks here: %d/%d",
+                 count_done(it->second), (int)it->second.size());
+        tr = buf;
+    }
+    overlay::set_tracker(tr);
+
+    bool at_statue = g_statue_scene_set.count(scene) != 0;
+    if (!at_statue && !g_panel_toggle) {
+        overlay::set_panel("");
+        return;
+    }
+    std::string p = "- Remaining checks -\n";
+    std::string line;
+    int col = 0;
+    for (const auto& kv : g_floor_locations) {
+        int left = (int)kv.second.size() - count_done(kv.second);
+        if (left <= 0) continue;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%2dF:%-3d ", kv.first, left);
+        line += buf;
+        if (++col == 4) { p += line + "\n"; line.clear(); col = 0; }
+    }
+    if (!line.empty()) p += line + "\n";
+    if (g_shop_hints && at_statue && !g_bless_names.empty()) {
+        p += "- Blessing shop -\n";
+        for (const auto& kv : g_bless_names) {
+            if (g_checked.count(kv.first)) continue;   // already bought
+            std::string what = "?";
+            {
+                std::lock_guard<std::mutex> lk(g_scout_mtx);
+                auto f = g_loc_found.find(kv.first);
+                if (f != g_loc_found.end()) what = f->second;
+            }
+            p += kv.second + " = " + what + "\n";
+        }
+    }
+    overlay::set_panel(p);
+}
+
 // Clear the warp-registry byte of every currently-locked statue. The game writes
 // it natively when you interact with a statue (we can't catch that at the VM
 // grant store), so we revert it here each tick. Unlocked + start statues keep
@@ -960,8 +1073,10 @@ static void poll_loop() {
             if (!pending.empty()) {
                 std::list<int64_t> locs(pending.begin(), pending.end());
                 g_ap->LocationChecks(locs);
+                g_checked.insert(pending.begin(), pending.end());
                 mod_log("ap: sent %d LocationCheck(s)", (int)locs.size());
             }
+            update_trackers();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -999,6 +1114,11 @@ static void create_client() {
     g_ap->set_slot_connected_handler(on_slot_connected);
     g_ap->set_items_received_handler(on_items_received);
     g_ap->set_location_info_handler(on_location_info);
+    // Server-known checked locations (sent on connect + after each check):
+    // feeds the overlay trackers so counts survive reconnects/co-op checks.
+    g_ap->set_location_checked_handler([](const std::list<int64_t>& locs) {
+        for (int64_t l : locs) g_checked.insert(l);
+    });
     g_ap->set_bounced_handler([](const nlohmann::json& packet) {
         if (!g_death_link || !packet.contains("tags")) return;
         bool dl = false;
