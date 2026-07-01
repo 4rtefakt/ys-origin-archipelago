@@ -98,7 +98,10 @@ overlay.
   cutscenes, for every character) and warps you straight there with a
   floor-appropriate level + weapon so you're playable wherever you land;
   reachability uses a bidirectional warp-network logic so the seed stays beatable
-  from any spawn. Needs `statue_warp_locks`. Normal seeds are unaffected.
+  from any spawn. Needs `statue_warp_locks`. Normal seeds are unaffected. Two knobs
+  tame it: `max_starting_floor` caps how deep the spawn can be (no more waking up on
+  25F with nothing behind you), and `max_warp_floors_skip` limits how far ahead a
+  single warp unlock can fling you (progress climbs in steps, not lucky leaps).
 - **Catch-up level scaling** — so warping to a far-off floor isn't a grind wall:
   the mod can bump an under-leveled character toward the floor's expected level
   and/or grant scaled bonus EXP, tapering to nothing once you're on level. On by
@@ -125,6 +128,8 @@ overlay.
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | **Start anywhere.** With `statue_warp_locks` on, New Game spawns you at a random statue: the mod skips the whole intro (movies + cutscenes, every character) and warps you there geared for the floor; bidirectional warp-network logic keeps the seed beatable from any spawn |
+| `max_starting_floor` | `1`–`25` | `10` | Cap the `random_start` spawn to statues on this floor or below, so New Game never drops you on the brutal deep floors with no gear behind you. Lower = gentler openings; raise for more variety. No effect unless `random_start` is on |
+| `max_warp_floors_skip` | `0`–`25` | `5` | How many floors ahead of your current reach a warp may jump (`0` = unlimited). With N > 0 a statue's warp only enters logic once you can reach a floor within N of it, so a single unlock can't teleport you across the tower. Everything still stays reachable on foot; this only paces the warp shortcuts. No effect unless `random_start` is on |
 | `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
 | `level_margin` | `0`–`10` | `0` | How many levels under a floor's expected level the floor-bump leaves you (0 = right at the expected level); raise for more challenge |
 | `exp_multiplier_max` | `1`–`20` | `8` | Cap for the catch-up EXP multiplier (scales with how under-level you are) |

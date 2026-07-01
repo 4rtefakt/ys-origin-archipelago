@@ -85,7 +85,10 @@ class YsOriginWorld(World):
         o = self.options
         self.open_mode = bool(o.random_start.value)
         if o.random_start.value:
-            self.start_statue_scene = self.random.choice(dt.statue_scenes())
+            # Cap the spawn to a survivable floor (max_starting_floor); a 25F start
+            # drops the player into brutal rooms with no gear behind them.
+            candidates = dt.start_statue_candidates(int(o.max_starting_floor.value))
+            self.start_statue_scene = self.random.choice(candidates)
         elif o.statue_warp_locks.value:
             self.start_statue_scene = 1000          # 1F starting statue
         else:

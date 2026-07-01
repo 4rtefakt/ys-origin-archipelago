@@ -322,6 +322,19 @@ def statue_scenes() -> List[int]:
     return sorted({v["scene"] for v in STATUE_UNLOCKS.values()})
 
 
+def start_statue_candidates(max_floor: int) -> List[int]:
+    """Statue scene leaves eligible as a Random-start spawn under ``max_floor``:
+    only statues on a tower floor <= max_floor. Never empty — if the cap excludes
+    every statue (or a floor can't be resolved), the lowest-floor statue is used so
+    a spawn is always available."""
+    scenes = statue_scenes()
+    eligible = [s for s in scenes if (scene_floor(s) or 1) <= max_floor]
+    if eligible:
+        return eligible
+    lowest = min(scenes, key=lambda s: (scene_floor(s) or 1, s))
+    return [lowest]
+
+
 # Expected character level per tower floor, from the bundled Hugo guide's
 # per-boss "Your Level" recommendations, interpolated for the floors between.
 # Used by the mod's catch-up level scaling (level floor + EXP multiplier) so
@@ -746,20 +759,55 @@ def warp_connections() -> List[Tuple[str, str]]:
     return conns
 
 
-def warp_edge_rules(spawn_scene: int, locks: bool, weapon_on) -> Dict[Tuple[str, str], Tuple[Optional[str], int]]:
-    """(hub,statue) -> (unlock-item or None, ore-count). The spawn statue is free;
-    other statues need their unlock item (when warp locks are on) AND the warped-to
-    zone's Cleria-Ore count (when weapon requirements are on)."""
+def _floor_anchor_regions() -> Dict[int, str]:
+    """tower floor -> a representative scene region present on it (lowest leaf).
+    Used by the warp-skip limit: reaching this region == "you can reach floor N"."""
+    out: Dict[int, str] = {}
+    for sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
+        fl = scene_floor(int(sc[2:]))
+        if fl and fl not in out:
+            out[fl] = scene_region(sc)
+    return out
+
+
+_FLOOR_ANCHOR = _floor_anchor_regions()
+
+
+def warp_skip_anchor(target_floor: Optional[int], max_skip: int) -> Optional[str]:
+    """Region a player must already reach before a warp to ``target_floor`` is in
+    logic, under the ``max_skip`` floors-ahead limit. Returns the anchor region for
+    the lowest floor in ``[target_floor - max_skip, target_floor)`` that exists, or
+    None when the limit doesn't bind (``max_skip <= 0``, unknown floor, or the
+    window reaches the base of the tower so any spawn already qualifies)."""
+    if max_skip <= 0 or not target_floor:
+        return None
+    low = target_floor - max_skip
+    if low <= 1:
+        return None                                  # within reach of a base spawn
+    for f in range(low, target_floor):               # lowest existing floor in window
+        if f in _FLOOR_ANCHOR:
+            return _FLOOR_ANCHOR[f]
+    return None                                      # no scene in window -> don't block
+
+
+def warp_edge_rules(spawn_scene: int, locks: bool, weapon_on, max_skip: int = 0
+                    ) -> Dict[Tuple[str, str], Tuple[Optional[str], int, Optional[str]]]:
+    """(hub,statue) -> (unlock-item or None, ore-count, skip-anchor region or None).
+    The spawn statue is free; other statues need their unlock item (when warp locks
+    are on), the warped-to zone's Cleria-Ore count (when weapon requirements are
+    on), and — under ``max_skip`` > 0 — a reachable floor within ``max_skip`` of the
+    destination so a lone unlock can't teleport you across the tower."""
     ore = zone_ore_requirements(weapon_on)
-    out: Dict[Tuple[str, str], Tuple[Optional[str], int]] = {}
+    out: Dict[Tuple[str, str], Tuple[Optional[str], int, Optional[str]]] = {}
     for nm, info in _statue_targets():
         sc = f"S_{info['scene']}"
         dst = scene_region(sc)
         if info["scene"] == spawn_scene:
-            out[(WARP_HUB, dst)] = (None, 0)            # spawn: always free
+            out[(WARP_HUB, dst)] = (None, 0, None)      # spawn: always free
         else:
             unlock = nm if locks else None
-            out[(WARP_HUB, dst)] = (unlock, ore.get(SCENE_ZONE.get(sc, ""), 0))
+            anchor = warp_skip_anchor(scene_floor(info["scene"]), max_skip)
+            out[(WARP_HUB, dst)] = (unlock, ore.get(SCENE_ZONE.get(sc, ""), 0), anchor)
     return out
 
 
