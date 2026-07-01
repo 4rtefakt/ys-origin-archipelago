@@ -134,14 +134,31 @@ static char g_req_slot[128] = "";
 static char g_req_pass[128] = "";
 static void create_client();  // defined below; builds g_ap on the poll thread
 
-// flag index -> AP location id (set in slot_connected, read in ap_on_check).
-static int64_t g_flag_to_loc[0x200];
+// flag index -> AP location ids (set in slot_connected, read in ap_on_check).
+// A VECTOR per flag: one event flag can be several AP locations (the elemental
+// altars grant two items — weapon + bracelet — on a single script flag).
+static std::vector<int64_t> g_flag_to_loc[0x200];
 // scene-method detection: scene number -> AP location ids fired on entering it
 // (boss arenas, room-sanity checks); scene number -> room name for the overlay.
 static std::map<int, std::vector<int64_t>> g_scene_locs;
 static std::map<int, std::string> g_scene_name;
 static std::set<int64_t> g_scene_fired;   // dedupe (each scene loc fires once)
 static int g_last_scene = -1;
+
+// Poll-method detection, for signals the VM store hook can't see (they're
+// written natively, not by script opcode 0x64): blessing purchases (a bitfield
+// cell + the armor cell outside g_flags) and the current-floor "Reach NF"
+// checks. Polled every client tick; each location fires once (g_poll_fired) and
+// already-satisfied signals fire on connect (the AP server dedupes re-sends, so
+// this doubles as catch-up for purchases made while disconnected).
+static const uintptr_t kImageBase = 0x00400000;  // kGFlagsAbs - kGFlagsRel
+struct PollBit   { uintptr_t abs; int bit;     int64_t loc; };  // (cell>>bit)&1
+struct PollVal   { uintptr_t abs;              int64_t loc; };  // cell >= 1
+struct PollFloor { uintptr_t abs; int floor_n; int64_t loc; };  // cell >= N
+static std::vector<PollBit>   g_poll_bits;
+static std::vector<PollVal>   g_poll_vals;
+static std::vector<PollFloor> g_poll_floors;
+static std::set<int64_t> g_poll_fired;    // dedupe (each poll loc fires once)
 
 // -- DeathLink -------------------------------------------------------------- #
 // Enabled from slot_data (death_link). We add the "DeathLink" tag after connect,
@@ -349,29 +366,31 @@ static void ap_give(int idx, int count) {
 // show what was here (item + owning world), from the scout map.
 void ap_on_check(int flag_idx) {
     if (flag_idx < 0 || flag_idx >= 0x200) return;
-    int64_t loc = g_flag_to_loc[flag_idx];
-    if (loc < 0) return;
-    {
-        std::lock_guard<std::mutex> lk(g_check_mtx);
-        g_checks.push_back(loc);
+    for (int64_t loc : g_flag_to_loc[flag_idx]) {
+        {
+            std::lock_guard<std::mutex> lk(g_check_mtx);
+            g_checks.push_back(loc);
+        }
+        std::string found, name;
+        int local_id = -1;
+        {
+            std::lock_guard<std::mutex> lk(g_scout_mtx);
+            auto it = g_loc_found.find(loc);
+            if (it != g_loc_found.end()) found = it->second;
+            auto il = g_loc_local_id.find(loc);
+            if (il != g_loc_local_id.end()) local_id = il->second;
+            auto in = g_loc_item_name.find(loc);
+            if (in != g_loc_item_name.end()) name = in->second;
+        }
+        if (!found.empty()) overlay::push_item(found);
+        // Stash the actually-placed item so the native "Acquired <item>" box
+        // (the 0xD5 op, which runs just after this check flag) shows the REAL
+        // item: its art (local id, or a generic icon for foreign) and its name.
+        // On a multi-location flag (altar double-grants) the last one wins the
+        // single native box; the overlay above still lists every item.
+        int art = (local_id >= 0) ? local_id : kForeignArtId;
+        set_pending_box(art, name.c_str());
     }
-    std::string found, name;
-    int local_id = -1;
-    {
-        std::lock_guard<std::mutex> lk(g_scout_mtx);
-        auto it = g_loc_found.find(loc);
-        if (it != g_loc_found.end()) found = it->second;
-        auto il = g_loc_local_id.find(loc);
-        if (il != g_loc_local_id.end()) local_id = il->second;
-        auto in = g_loc_item_name.find(loc);
-        if (in != g_loc_item_name.end()) name = in->second;
-    }
-    if (!found.empty()) overlay::push_item(found);
-    // Stash the actually-placed item so the native "Acquired <item>" box (the
-    // 0xD5 op, which runs just after this check flag) shows the REAL item: its
-    // art (local id, or a generic icon for foreign) and its name text.
-    int art = (local_id >= 0) ? local_id : kForeignArtId;
-    set_pending_box(art, name.c_str());
 }
 
 // Reply to LocationScouts: learn the item + recipient at each of our locations.
@@ -412,6 +431,12 @@ static void on_slot_connected(const nlohmann::json& sd) {
     }
     std::list<int64_t> scout;
     int scenes = 0;
+    // Reset detect registrations (a reconnect re-registers everything; without
+    // this a flag would accumulate duplicate location entries).
+    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+    g_poll_bits.clear();
+    g_poll_vals.clear();
+    g_poll_floors.clear();
     if (sd.contains("location_detect")) {
         const auto& sig = sd.contains("location_signals") ? sd["location_signals"]
                                                           : nlohmann::json::object();
@@ -423,9 +448,29 @@ static void on_slot_connected(const nlohmann::json& sd) {
             if (method == "flag" && d.contains("offset")) {
                 int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
                 int idx = (off - kGFlagsRel) / 4;
-                if (idx < 0 || idx >= 0x200) continue;
-                g_loc_flag[idx] = true;
-                g_flag_to_loc[idx] = loc;
+                if (idx >= 0 && idx < 0x200) {
+                    g_loc_flag[idx] = true;
+                    g_flag_to_loc[idx].push_back(loc);
+                } else {
+                    // Outside g_flags (e.g. the armor blessing cell): the VM
+                    // store hook can't see it — poll for value >= 1 instead.
+                    g_poll_vals.push_back({kImageBase + (uintptr_t)off, loc});
+                }
+                scout.push_back(loc);
+                locs++;
+            } else if (method == "bit" && d.contains("offset") && d.contains("bit")) {
+                // Blessing purchases: one bitfield cell, one bit per blessing.
+                // Written natively by the shop menu -> poll, don't hook.
+                int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                g_poll_bits.push_back({kImageBase + (uintptr_t)off,
+                                       d["bit"].get<int>(), loc});
+                scout.push_back(loc);
+                locs++;
+            } else if (method == "floor" && d.contains("offset") && d.contains("floor")) {
+                // "Reach NF": fires once current_floor reaches N (native write).
+                int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                g_poll_floors.push_back({kImageBase + (uintptr_t)off,
+                                         d["floor"].get<int>(), loc});
                 scout.push_back(loc);
                 locs++;
             } else if (method == "scene" && d.contains("scene")) {
@@ -656,6 +701,58 @@ static void poll_scene() {
     }
 }
 
+// Fire a batch of poll-detected locations: queue the LocationChecks and echo
+// what was found (from the scout map) on the overlay. Same pattern as
+// poll_scene's firing tail.
+static void fire_poll_locs(const std::vector<int64_t>& fire) {
+    if (fire.empty()) return;
+    {
+        std::lock_guard<std::mutex> lk(g_check_mtx);
+        g_checks.insert(g_checks.end(), fire.begin(), fire.end());
+    }
+    for (int64_t loc : fire) {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f != g_loc_found.end()) overlay::push_item(f->second);
+    }
+}
+
+// Poll-method checks (each client tick): blessing bits, out-of-g_flags value
+// cells (armor blessing), and "Reach NF" floors. These are all written natively
+// (shop menu / floor transition), so the VM store hook never sees them. Each
+// location fires once per session. Blessings/values are CUMULATIVE state, so
+// anything already satisfied fires on the first poll after connect (the server
+// dedupes re-sends — clean catch-up for purchases made while disconnected).
+// The floor cell is WHERE YOU ARE, not progress: it uses crossing semantics
+// (prev primed on the first read, mirroring the Python client), so a random-
+// start warp or a mid-run reconnect can't spray Reach-NF checks never earned.
+// Only polled once a scene is loaded, so New-Game/menu garbage can't misfire.
+static std::map<uintptr_t, int> g_floor_prev;   // floor cell -> last seen value
+static void poll_value_checks() {
+    if (read_current_scene() <= 0) return;
+    std::vector<int64_t> fire;
+    for (const auto& pb : g_poll_bits)
+        if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&
+            g_poll_fired.insert(pb.loc).second)
+            fire.push_back(pb.loc);
+    for (const auto& pv : g_poll_vals)
+        if (*(volatile int*)pv.abs >= 1 && g_poll_fired.insert(pv.loc).second)
+            fire.push_back(pv.loc);
+    std::map<uintptr_t, int> cur_floor;
+    for (const auto& pf : g_poll_floors)
+        cur_floor[pf.abs] = *(volatile int*)pf.abs;
+    for (const auto& pf : g_poll_floors) {
+        int cur = cur_floor[pf.abs];
+        auto pit = g_floor_prev.find(pf.abs);
+        int prev = (pit != g_floor_prev.end()) ? pit->second : cur;  // prime
+        if (cur >= pf.floor_n && pf.floor_n > prev &&
+            g_poll_fired.insert(pf.loc).second)
+            fire.push_back(pf.loc);
+    }
+    for (const auto& kv : cur_floor) g_floor_prev[kv.first] = kv.second;
+    fire_poll_locs(fire);
+}
+
 // Clear the warp-registry byte of every currently-locked statue. The game writes
 // it natively when you interact with a statue (we can't catch that at the VM
 // grant store), so we revert it here each tick. Unlocked + start statues keep
@@ -837,6 +934,7 @@ static void poll_loop() {
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
+            poll_value_checks();
             poll_deathlink();
             poll_statue_warp();
             exp_scaling_poll();
@@ -929,7 +1027,7 @@ const char* ap_cfg_slot() { return g_slot; }
 const char* ap_cfg_pass() { return g_pass; }
 
 void ap_install() {
-    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i] = -1;
+    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
     load_config();               // prefill defaults for the in-game menu
     overlay::set_status("not connected - open the Archipelago menu");
 
