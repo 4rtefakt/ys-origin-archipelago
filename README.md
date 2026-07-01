@@ -130,6 +130,16 @@ overlay.
   AP runs never touch your vanilla saves, and each multiworld keeps its own
   save set. Vanilla/offline play is unaffected (`save_redirect=0` in
   `yso_ap.cfg` disables it).
+- **AP chat overlay (F6)** — the room's live feed (items found by/for you,
+  hints, joins, chat) bottom-left in the game's HUD style. Press Enter to type:
+  regular chat or server commands (`!hint <item>`, `!help`, ...). The game's
+  input is frozen while typing. `chat=1` in `yso_ap.cfg` shows it at boot.
+  Shop-hint lines are color-coded (gold = progression, red = trap), and a
+  release/collect flood collapses to one "Received N items" line instead of
+  spamming the feed.
+- **Goal reporting** — entering the ending scene sends your GOAL status to the
+  server (releases your remaining items / completes the seed). Needs the ending
+  scene id captured once live (`goal_scene=` in `yso_ap.cfg`).
 - **Goal:** defeat Darm (the final boss), or optionally all bosses.
 
 ## ⚙️ Options (in your yaml)
