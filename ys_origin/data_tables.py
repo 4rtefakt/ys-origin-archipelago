@@ -413,6 +413,18 @@ def floor_levels() -> Dict[str, int]:
     return {str(k): v for k, v in FLOOR_LEVELS.items()}
 
 
+# Displayed weapon level (1-6) -> g_flags[0x94] record value. Mirrors the mod's
+# kWeaponTier ladder (ore N -> value {1,2,4,6,8} = Lv2..Lv6); Lv1 = starter = 0.
+_WEAPON_LEVEL_VALUE: Dict[int, int] = {1: 0, 2: 1, 3: 2, 4: 4, 5: 6, 6: 8}
+
+
+def weapon_value_for_level(level: int) -> int:
+    """g_flags[0x94] weapon record value for a displayed weapon level (1-6),
+    clamped into range. Used to publish the starting-weapon floor in slot data."""
+    lvl = max(1, min(6, int(level)))
+    return _WEAPON_LEVEL_VALUE[lvl]
+
+
 CLERIA_ORE = "Cleria Ore"
 
 # Cleria Ore (= weapon-upgrade) count required to ENTER each zone, per the
@@ -568,6 +580,21 @@ def is_excluded(loc_name: str) -> bool:
 # item name -> g_flags item index (== INVINFO id); the client grants by writing
 # that array entry. Published in slot_data so the client needs no local table.
 item_index: Dict[str, int] = json.loads(_read_data("data/items.json"))
+
+
+def start_item_indices(names) -> List[int]:
+    """g_flags indices for the named starting items (resolved via item_index).
+    Unknown names are skipped (so a typo can't break generation); order preserved,
+    deduped. Published in slot data for the mod/client to grant at New Game."""
+    out: List[int] = []
+    seen: Set[int] = set()
+    for nm in names:
+        idx = item_index.get(str(nm).strip())
+        if idx is None or int(idx) in seen:
+            continue
+        seen.add(int(idx))
+        out.append(int(idx))
+    return out
 
 
 def vanilla_items(enabled: Set[str], char: str = "hugo") -> List[str]:

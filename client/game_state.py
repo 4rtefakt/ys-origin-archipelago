@@ -386,3 +386,33 @@ def apply_item(memory: ProcessMemory, item_name: str,
 
     log.warning("apply_item: no mapping for item %r", name)
     return False
+
+
+def apply_start_loadout(memory: ProcessMemory, *, level: int = 0,
+                        item_names: "Optional[List[str]]" = None,
+                        offsets: Offsets = OFFSETS,
+                        suppressor: "Optional[Suppressor]" = None) -> List[str]:
+    """Enforce the New-Game starting loadout as a floor (idempotent, only-raises):
+
+      * grant each named starting item (marked owned) if not already held;
+      * raise the character level to ``level`` if currently below it.
+
+    Weapon level is intentionally NOT written here — the in-game mod owns the
+    weapon record + entity stat sync (see ``start_weapon`` slot data); a bare
+    record write from the client wouldn't affect combat. Returns the human labels
+    of what actually changed (empty when everything already met the floor), so the
+    caller can surface it once and skip logging on subsequent idempotent passes.
+    """
+    changed: List[str] = []
+    for name in (item_names or ()):
+        off = ITEM_OFFSETS.get(name)
+        if off is None:
+            continue                       # not a known g_flags item — skip
+        if memory.read_offset_int32(off) < 1:
+            apply_item(memory, name, offsets=offsets, suppressor=suppressor)
+            changed.append(f"Start item: {name}")
+    if level and level > 1 and offsets.current_level is not None:
+        if memory.read_offset_int32(offsets.current_level) < level:
+            memory.write_offset_int32(offsets.current_level, level)
+            changed.append(f"Start level {level}")
+    return changed
