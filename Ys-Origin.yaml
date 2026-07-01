@@ -26,6 +26,17 @@ Ys Origin:
                          #   gives (scouted) while you're at a goddess statue;
                          #   false = blind buys
 
+  # --- blessing shop economy (the mod's own F5 shop overlay) ---
+  blessing_costs: vanilla # vanilla | random
+                          #   vanilla = buy from the game's statue menu as usual
+                          #   random  = the mod's F5 shop sells blessings at
+                          #             seed-randomized SP prices (min/max below)
+  blessing_cost_min: 100  # cheapest possible randomized price (SP)
+  blessing_cost_max: 800  # priciest possible randomized price (SP)
+  blessing_shop_unlock: all # all | one_per_floor
+                            #   one_per_floor = one more shop slot (cheapest
+                            #   first) unlocks per distinct tower floor visited
+
   # --- goddess statue warp locks ---
   statue_warp_locks: false # when on, every goddess statue starts locked (dark:
                            #   no warp/heal/save) until you receive its unlock

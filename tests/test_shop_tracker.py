@@ -69,6 +69,18 @@ def test_blessing_names_map():
     assert "Increase SP gain" in m.values()
 
 
+def test_blessing_bit_location_ids():
+    ids = dt.blessing_bit_location_ids(ALL_ACTIVE, IDS)
+    # 23 bit-method blessings (the armor blessing is flag-method -> excluded,
+    # it stays vanilla-menu-only)
+    assert len(ids) == 23
+    armor = IDS["Divine Blessing: Strengthen current armor"]
+    assert armor not in ids
+    assert ids == sorted(ids, key=lambda i: {v: k for k, v in IDS.items()}[i])
+    # deterministic: same call, same order
+    assert ids == dt.blessing_bit_location_ids(ALL_ACTIVE, IDS)
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

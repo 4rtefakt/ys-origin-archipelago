@@ -17,8 +17,10 @@
 void mod_log(const char* fmt, ...);
 namespace apmenu { bool is_capturing(); }
 namespace apchat { bool is_capturing(); }
+namespace apshop { bool is_capturing(); }
 static inline bool ap_capturing() {
-    return apmenu::is_capturing() || apchat::is_capturing();
+    return apmenu::is_capturing() || apchat::is_capturing() ||
+           apshop::is_capturing();
 }
 
 // ---- race-safe MinHook init (D3D hook, input hooks and the DirectInput proxy
