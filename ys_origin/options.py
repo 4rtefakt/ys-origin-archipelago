@@ -79,6 +79,36 @@ class RandomStart(Toggle):
     display_name = "Random start statue"
 
 
+class MaxStartingFloor(Range):
+    """Highest tower floor a Random start may spawn you on. Random start picks a
+    goddess statue uniformly at random, and the deep statues (a 25F spawn) drop you
+    into brutal rooms with no gear history behind you. This caps the draw to statues
+    on floor <= this value, so New Game always begins somewhere survivable while
+    still landing you *somewhere* rather than 1F. Only affects ``random_start``;
+    lower = gentler openings, raise it (up to 25 = the summit) for more variety.
+    Ignored when ``random_start`` is off. If no statue exists at or below the cap,
+    the lowest-floor statue is used."""
+    display_name = "Random start max floor"
+    range_start = 1
+    range_end = 25
+    default = 10
+
+
+class MaxWarpFloorsSkip(Range):
+    """How many tower floors ahead of your current reach a warp may jump, in the
+    random-spawn warp network. With 0 the warp network is unrestricted (a single
+    received unlock can send you 15 floors up into rooms you have no business in
+    yet). With N > 0 the generator only puts a statue's warp in logic once you can
+    already reach a floor within N of it — so progress climbs in steps of at most N
+    floors instead of one lucky unlock teleporting you across the tower. Everything
+    still stays reachable on foot; this only paces the warp shortcuts. Only affects
+    ``random_start``; 0 = unlimited (old behaviour)."""
+    display_name = "Max warp floors skipped"
+    range_start = 0
+    range_end = 25
+    default = 5
+
+
 class LevelScaling(Choice):
     """Catch-up leveling so the statue warp network never means a grind wall.
     Compares your level to the floor you're on (per the game's own level curve):
@@ -143,6 +173,8 @@ class YsOriginOptions(PerGameCommonOptions):
     room_checks: RoomChecks
     statue_warp_locks: StatueWarpLocks
     random_start: RandomStart
+    max_starting_floor: MaxStartingFloor
+    max_warp_floors_skip: MaxWarpFloorsSkip
     level_scaling: LevelScaling
     level_margin: LevelMargin
     exp_multiplier_max: ExpMultiplierMax

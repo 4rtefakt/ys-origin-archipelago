@@ -33,6 +33,16 @@ Ys Origin:
                            #   warps you there geared for the floor (level +
                            #   weapon). Beatable from any spawn. Normal seeds
                            #   are unaffected.
+  max_starting_floor: 10   # cap the random-start spawn to statues on floor <= this
+                           #   (1-25). Keeps New Game off the brutal deep floors (a
+                           #   25F start with no gear behind you); lower = gentler
+                           #   openings, raise for more variety. random_start only.
+  max_warp_floors_skip: 5  # how many floors ahead of your current reach a warp may
+                           #   jump (0 = unlimited). With N>0 a statue's warp only
+                           #   enters logic once you can reach a floor within N of it,
+                           #   so one lucky unlock can't fling you 15 floors up into
+                           #   rooms you're not ready for. On foot everything still
+                           #   stays reachable; this only paces warps. random_start only.
 
   # --- catch-up level scaling (so warping far ahead isn't a grind wall) ---
   level_scaling: both    # off | level_floor | exp_multiplier | both
