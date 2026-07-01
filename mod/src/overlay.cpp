@@ -117,13 +117,20 @@ void draw() {
             std::string line = g_panel.substr(
                 start, end == std::string::npos ? std::string::npos : end - start);
             if (!line.empty()) {
+                // Leading marker selects the color: '-' section header (gold),
+                // '*' progression (gold), '!' trap (red); marker chars other
+                // than '-' are stripped before drawing.
+                ImU32 col = white;
+                if (line[0] == '-') col = gold;
+                else if (line[0] == '*') { col = gold; line.erase(0, 1); }
+                else if (line[0] == '!') { col = IM_COL32(235, 110, 110, 255); line.erase(0, 1); }
+                else if (line[0] == ' ') line.erase(0, 1);
                 ImVec2 p(18.0f, py);
                 dl->AddText(small, ssz, ImVec2(p.x - 1, p.y), shadow, line.c_str());
                 dl->AddText(small, ssz, ImVec2(p.x + 1, p.y), shadow, line.c_str());
                 dl->AddText(small, ssz, ImVec2(p.x, p.y - 1), shadow, line.c_str());
                 dl->AddText(small, ssz, ImVec2(p.x, p.y + 1), shadow, line.c_str());
-                dl->AddText(small, ssz, p, (line[0] == '-') ? gold : white,
-                            line.c_str());
+                dl->AddText(small, ssz, p, col, line.c_str());
             }
             py += slh;
             if (end == std::string::npos) break;

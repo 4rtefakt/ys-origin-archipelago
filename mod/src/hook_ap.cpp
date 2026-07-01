@@ -44,6 +44,10 @@ void set_room(const std::string& text);
 void set_tracker(const std::string& text);
 void set_panel(const std::string& text);
 }
+namespace apchat {
+void push(const std::string& line);
+void set_visible(bool v);
+}
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
@@ -88,7 +92,12 @@ static void load_config() {
                   "# save_redirect=1   # AP runs save into archipelago_<seed>/ next to\n"
                   "#                   # the normal saves (vanilla saves stay untouched).\n"
                   "#                   # 0 = write the regular save files as usual.\n"
-                  "# save_pattern=sav  # filename substring that marks a save file\n",
+                  "# save_pattern=sav  # filename substring that marks a save file\n"
+                  "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
+                  "#                   # Enter types, e.g. !hint <item>)\n"
+                  "# goal_scene=0      # ending-scene number; entering it reports your\n"
+                  "#                   # goal to the server (capture it live: beat the\n"
+                  "#                   # game once and read the scene id off the log)\n",
                   w);
             fclose(w);
         }
@@ -113,6 +122,8 @@ static void load_config() {
         else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
         else if (!strcmp(key, "save_redirect")) { saveredir_config(atoi(val), nullptr); }
         else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
+        else if (!strcmp(key, "goal_scene")) { g_goal_scene = atoi(val); }
+        else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -166,6 +177,22 @@ static std::set<int> g_statue_scene_set;
 static std::set<int64_t> g_checked;
 static bool g_shop_hints = false;
 static bool g_panel_toggle = false;       // F7: force the panel anywhere
+// Item classification per scouted location (AP NetworkItem.flags: 1 progression,
+// 2 useful, 4 trap) — colors the shop-hint lines.
+static std::map<int64_t, int> g_loc_flags;
+// Goal reporting: entering the ending scene sends StatusUpdate(GOAL) once. The
+// ending scene id is not RE'd yet — set goal_scene= in yso_ap.cfg after one
+// live capture (kill Darm, read the scene number off the log/overlay).
+static int g_goal_scene = 0;              // cfg goal_scene= (0 = not configured)
+static bool g_goal_sent = false;
+// Chat send queue (chat.cpp input -> poll thread -> g_ap->Say).
+static std::mutex g_say_mtx;
+static std::vector<std::string> g_say_queue;
+
+extern "C" void ap_request_say(const char* text) {
+    std::lock_guard<std::mutex> lk(g_say_mtx);
+    g_say_queue.push_back(text);
+}
 
 // Poll-method detection, for signals the VM store hook can't see (they're
 // written natively, not by script opcode 0x64): blessing purchases (a bitfield
@@ -437,6 +464,7 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
         }
         g_loc_local_id[it.location] = lid;
         g_loc_item_name[it.location] = item;
+        g_loc_flags[it.location] = it.flags;   // 1 prog / 2 useful / 4 trap
     }
     mod_log("ap: scouted %d location(s)", (int)items.size());
 }
@@ -618,6 +646,13 @@ static void on_slot_connected(const nlohmann::json& sd) {
 }
 
 static void on_items_received(const std::list<APClient::NetworkItem>& items) {
+    // A release/collect flood arrives as one big batch: apply everything, but
+    // collapse the overlay feed to a single summary line (the chat overlay
+    // still carries the full detail via PrintJSON).
+    int fresh = 0;
+    for (const auto& it : items)
+        if (it.index > g_applied_through) fresh++;
+    bool batch = fresh > 6;
     for (const auto& it : items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
@@ -666,9 +701,14 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         // Your own items already print as "Found: X (yours)" when their location
         // fires (ap_on_check), so only surface items coming FROM another player
         // (or the server) here — avoids showing every self-item twice.
-        if (from != g_slot)
+        if (!batch && from != g_slot)
             overlay::push_item(from.empty() ? name : (name + "  <- " + from));
         g_applied_through = it.index;
+    }
+    if (batch) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Received %d items", fresh);
+        overlay::push_item(buf);
     }
 }
 
@@ -725,6 +765,18 @@ static void poll_scene() {
     if (scene == 2 || (scene >= 7000 && scene < 8000)) {
         g_saw_intro.store(true);
         g_expected_hi = 0;   // New Game: forget the last run's deepest floor
+    }
+
+    // Goal: entering the ending scene (goal_scene= in yso_ap.cfg, from a live
+    // capture — kill Darm once and read the scene number off the log) marks the
+    // slot as GOALed so the multiworld releases/completes properly.
+    if (g_goal_scene > 0 && scene == g_goal_scene && !g_goal_sent && g_ap) {
+        g_goal_sent = true;
+        try {
+            g_ap->StatusUpdate(APClient::ClientStatus::GOAL);
+            overlay::push_item("GOAL complete!");
+            mod_log("ap: goal scene %d reached — StatusUpdate(GOAL) sent", scene);
+        } catch (...) {}
     }
 
     auto it = g_scene_name.find(scene);
@@ -869,7 +921,11 @@ static void update_trackers() {
                 auto f = g_loc_found.find(kv.first);
                 if (f != g_loc_found.end()) what = f->second;
             }
-            p += kv.second + " = " + what + "\n";
+            // Leading marker = item classification (colored by overlay.cpp):
+            // '*' progression (gold), '!' trap (red), ' ' filler/useful.
+            int fl = g_loc_flags.count(kv.first) ? g_loc_flags[kv.first] : 0;
+            const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
+            p += mark + kv.second + " = " + what + "\n";
         }
     }
     overlay::set_panel(p);
@@ -1076,6 +1132,16 @@ static void poll_loop() {
                 g_checked.insert(pending.begin(), pending.end());
                 mod_log("ap: sent %d LocationCheck(s)", (int)locs.size());
             }
+            // Outgoing chat (typed in the F6 overlay; also server commands
+            // like !hint).
+            std::vector<std::string> says;
+            {
+                std::lock_guard<std::mutex> lk(g_say_mtx);
+                says.swap(g_say_queue);
+            }
+            for (const auto& s : says) {
+                try { g_ap->Say(s); } catch (...) {}
+            }
             update_trackers();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -1118,6 +1184,13 @@ static void create_client() {
     // feeds the overlay trackers so counts survive reconnects/co-op checks.
     g_ap->set_location_checked_handler([](const std::list<int64_t>& locs) {
         for (int64_t l : locs) g_checked.insert(l);
+    });
+    // Room chat / item log -> the F6 chat overlay (rendered to plain text).
+    g_ap->set_print_json_handler([](const APClient::PrintJSONArgs& args) {
+        if (!g_ap) return;
+        try {
+            apchat::push(g_ap->render_json(args.data, APClient::RenderFormat::TEXT));
+        } catch (...) {}
     });
     g_ap->set_bounced_handler([](const nlohmann::json& packet) {
         if (!g_death_link || !packet.contains("tags")) return;

@@ -16,6 +16,10 @@
 
 void mod_log(const char* fmt, ...);
 namespace apmenu { bool is_capturing(); }
+namespace apchat { bool is_capturing(); }
+static inline bool ap_capturing() {
+    return apmenu::is_capturing() || apchat::is_capturing();
+}
 
 // ---- race-safe MinHook init (D3D hook, input hooks and the DirectInput proxy
 // can all reach MinHook from different threads) ------------------------------
@@ -36,11 +40,11 @@ static GAKS_t o_GetAsyncKeyState = nullptr;
 static GKS_t  o_GetKeyState = nullptr;
 
 static SHORT WINAPI hk_GetAsyncKeyState(int vk) {
-    if (apmenu::is_capturing()) return 0;
+    if (ap_capturing()) return 0;
     return o_GetAsyncKeyState(vk);
 }
 static SHORT WINAPI hk_GetKeyState(int vk) {
-    if (apmenu::is_capturing()) return 0;
+    if (ap_capturing()) return 0;
     return o_GetKeyState(vk);
 }
 
@@ -59,7 +63,7 @@ static HRESULT WINAPI hk_GetDeviceState(void* self, DWORD cb, void* data) {
     // Freeze ONLY the keyboard (its DI state is a 256-byte DIK array; 0 == no key
     // down). Do NOT blank joystick/mouse buffers: an analog stick's neutral is a
     // mid-range value, so zeroing it reads as "full up" and scrolls the menu.
-    if (apmenu::is_capturing() && data && cb == 256) memset(data, 0, cb);
+    if (ap_capturing() && data && cb == 256) memset(data, 0, cb);
     return hr;
 }
 
