@@ -188,6 +188,16 @@ class ExpMultiplierMax(Range):
     default = 8
 
 
+class ProgressiveArmor(DefaultOnToggle):
+    """Make defensive gear progressive. Ys Origin has two gear slots — Armor and
+    Boots — each a strict tier ladder per character. When on, every gear chest
+    puts a "Progressive Armor" / "Progressive Boots" in the pool instead of a
+    specific piece: receiving one grants your character's NEXT tier, so you can't
+    get the 22F armor before the 7F one (pickups never skip ahead). Off = raw
+    pieces are shuffled as-is (you can find endgame armor first)."""
+    display_name = "Progressive armor & boots"
+
+
 class WeaponRequirements(DefaultOnToggle):
     """Gate each tower zone behind enough Cleria Ore (= weapon upgrades) to fight
     there, so the warp network can't strand you somewhere your weapon can't dent.
@@ -217,5 +227,6 @@ class YsOriginOptions(PerGameCommonOptions):
     level_scaling: LevelScaling
     level_margin: LevelMargin
     exp_multiplier_max: ExpMultiplierMax
+    progressive_armor: ProgressiveArmor
     weapon_requirements: WeaponRequirements
     death_link: DeathLink

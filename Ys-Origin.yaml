@@ -68,6 +68,13 @@ Ys Origin:
                          #   (0 = right at the expected level; raise for challenge)
   exp_multiplier_max: 8  # cap for the catch-up EXP multiplier
 
+  # --- gear ---
+  progressive_armor: true # armor & boots become progressive: every gear chest
+                          #   holds a "Progressive Armor"/"Progressive Boots";
+                          #   receiving one grants your character's NEXT tier, so
+                          #   pickups never skip ahead. Off = raw pieces shuffled
+                          #   (you can find endgame armor first).
+
   # --- weapon gating (so warping far ahead isn't a 1-damage wall) ---
   weapon_requirements: true # gate each zone behind enough Cleria Ore that the
                             #   vanilla weapon level for that floor is obtainable

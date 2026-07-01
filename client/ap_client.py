@@ -29,6 +29,8 @@ from .game_state import (
     apply_item,
     apply_start_loadout,
     detect_checks,
+    grant_progressive,
+    grant_sp,
     poll,
 )
 from .memory import ProcessMemory, MemoryError_
@@ -124,6 +126,10 @@ def build_context_class():
             self.start_level: int = 0
             self.start_item_names: list[str] = []
             self._start_loadout_applied: bool = False
+            # SP fillers + progressive gear (from slot data).
+            self.sp_items: Dict[str, int] = {}
+            self.sp_flag_idx: int = 0xD8
+            self.progressive_gear: Dict[str, list[int]] = {}
 
         # -- AP auth ------------------------------------------------------- #
 
@@ -160,6 +166,13 @@ def build_context_class():
                     if int(i) in idx_to_name
                 ]
                 self._start_loadout_applied = False
+                self.sp_items = {str(k): int(v) for k, v
+                                 in (slot_data.get("sp_items") or {}).items()}
+                self.sp_flag_idx = int(slot_data.get("sp_flag_idx", 0xD8))
+                self.progressive_gear = {
+                    str(k): [int(i) for i in v] for k, v
+                    in (slot_data.get("progressive_gear") or {}).items()
+                }
                 self.prev_state = None
                 self.suppressor.reset()
                 log.info("connected to slot %s — %d locations, %d items mapped",
@@ -178,8 +191,17 @@ def build_context_class():
                 item_name = self.item_names.lookup_in_game(net_item.item) \
                     if hasattr(self, "item_names") else str(net_item.item)
                 try:
-                    did = apply_item(self.mem, item_name,
-                                     suppressor=self.suppressor)
+                    if item_name in self.sp_items:
+                        grant_sp(self.mem, self.sp_items[item_name],
+                                 self.sp_flag_idx)
+                        did = True
+                    elif item_name in self.progressive_gear:
+                        did = grant_progressive(
+                            self.mem, self.progressive_gear[item_name],
+                            suppressor=self.suppressor) is not None
+                    else:
+                        did = apply_item(self.mem, item_name,
+                                         suppressor=self.suppressor)
                     log.info("applied item #%d %r (write=%s)",
                              self.applied_item_index, item_name, did)
                     src = ""

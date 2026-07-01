@@ -122,7 +122,8 @@ class YsOriginWorld(World):
         # One real (vanilla) item per enabled chest/event location; pad the rest
         # (boss/floor/room sanity checks) with varied filler.
         char = dt.char_name(self.options)
-        pool = [self.create_item(n) for n in dt.vanilla_items(enabled, char)]
+        pool = [self.create_item(n) for n in dt.vanilla_items(
+            enabled, char, bool(self.options.progressive_armor.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
@@ -219,6 +220,17 @@ class YsOriginWorld(World):
             "start_level": int(self.options.starting_level.value),
             "start_items": dt.start_item_indices(
                 list(self.options.starting_items.value)
+            ),
+            # SP filler grants: item name -> amount added to the SP currency cell
+            # (g_flags[0xD8]); SP is a stat, not an inventory item, so the mod
+            # needs the explicit map rather than a g_flags item index.
+            "sp_items": dict(dt.SP_FILLER),
+            "sp_flag_idx": dt.SP_FLAG_IDX,
+            # Progressive gear: item name -> the selected character's tier ladder
+            # as g_flags indices; receiving one grants the first unowned tier.
+            "progressive_gear": (
+                dt.progressive_gear_slot_data(dt.char_name(self.options))
+                if self.options.progressive_armor.value else {}
             ),
             # catch-up level scaling: mode + tuning + the floor->expected-level
             # curve, so the mod can bump under-leveled players / boost their EXP
