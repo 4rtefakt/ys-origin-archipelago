@@ -222,7 +222,11 @@ typedef void(__fastcall* SetLevelFn)(unsigned);
 static const SetLevelFn kSetLevel = (SetLevelFn)0x004200F0;
 static int g_level_scaling = 0;        // 0 off, 1 level_floor, 2 exp_mult, 3 both
 static int g_level_margin = 3;
-static int g_exp_mult_max = 8;
+static int g_exp_base_mult = 3;        // flat EXP multiplier (exp modes)
+static int g_exp_catchup_mult = 5;     // while level <= deepest expected + margin
+static int g_exp_catchup_margin = 5;
+static int g_expected_hi = 0;          // deepest visited floor's expected level
+                                       // (session high-water; reset on New Game)
 static std::map<int, int> g_scene_levels;  // scene number -> expected level
 static std::atomic<int> g_pending_level{0};  // bump requested; applied on the main thread
 static inline int read_level() { return *(volatile int*)kLevelAbs; }
@@ -546,14 +550,17 @@ static void on_slot_connected(const nlohmann::json& sd) {
     g_character = sd.value("character", 1);         // 0 Yunica / 1 Hugo / 2 Toal
     g_level_scaling = sd.value("level_scaling", 0);
     g_level_margin = sd.value("level_margin", 3);
-    g_exp_mult_max = sd.value("exp_multiplier_max", 8);
+    g_exp_base_mult = sd.value("exp_base_mult", 3);
+    g_exp_catchup_mult = sd.value("exp_catchup_mult", 5);
+    g_exp_catchup_margin = sd.value("exp_catchup_margin", 5);
     if (sd.contains("scene_levels")) {
         for (auto& kv : sd["scene_levels"].items())
             g_scene_levels[atoi(kv.key().c_str())] = kv.value().get<int>();
     }
     if (g_level_scaling)
-        mod_log("ap: level scaling mode=%d (margin %d, exp x<=%d)",
-                g_level_scaling, g_level_margin, g_exp_mult_max);
+        mod_log("ap: level scaling mode=%d (margin %d, exp x%d base / x%d catch-up +%d)",
+                g_level_scaling, g_level_margin, g_exp_base_mult,
+                g_exp_catchup_mult, g_exp_catchup_margin);
     if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
     if (g_death_link) {
         g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
@@ -670,8 +677,10 @@ static void poll_scene() {
     // main thread as soon as a player entity exists (skipping the rest). Fires once
     // per session (g_force_spawn_done not re-armed here, so a 7xxx cutscene playing
     // again mid-game can't re-warp the player).
-    if (scene == 2 || (scene >= 7000 && scene < 8000))
+    if (scene == 2 || (scene >= 7000 && scene < 8000)) {
         g_saw_intro.store(true);
+        g_expected_hi = 0;   // New Game: forget the last run's deepest floor
+    }
 
     auto it = g_scene_name.find(scene);
     char room[160];
@@ -789,18 +798,22 @@ static void exp_scaling_poll() {
     auto it = g_scene_levels.find(read_current_scene());
     int explv = (it != g_scene_levels.end()) ? it->second : 0;
     int lv = read_level();
-    if (explv <= 0 || lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game / unknown room
-    int gap = explv - lv;
-    // EXP multiplier (modes 2 + 3): scale with how far under-level you are.
+    if (lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game
+    if (explv > g_expected_hi) g_expected_hi = explv;  // deepest floor visited
+    // EXP multiplier (modes 2 + 3): the base multiplier everywhere; the catch-up
+    // multiplier while at/under the deepest visited floor's expected level +
+    // margin. Keyed to your furthest PROGRESS (not the current room), so you can
+    // catch up by fighting anywhere — including easy floors below you.
     if (g_level_scaling == 2 || g_level_scaling == 3) {
-        float f = (gap > 0) ? (1.0f + (float)gap) : 1.0f;
-        if (f > (float)g_exp_mult_max) f = (float)g_exp_mult_max;
-        g_exp_factor = f;
+        bool catching_up = g_expected_hi > 0 &&
+                           lv <= g_expected_hi + g_exp_catchup_margin;
+        g_exp_factor = (float)(catching_up ? g_exp_catchup_mult
+                                           : g_exp_base_mult);
     } else {
         g_exp_factor = 1.0f;
     }
     // Level floor (modes 1 + 3): bump up to (expected - margin) if below.
-    if (g_level_scaling == 1 || g_level_scaling == 3) {
+    if ((g_level_scaling == 1 || g_level_scaling == 3) && explv > 0) {
         int target = explv - g_level_margin;
         if (target > lv && target > 1) g_pending_level.store(target);
     }
