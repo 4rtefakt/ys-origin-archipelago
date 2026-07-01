@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from Options import (
-    Choice, DeathLink, DefaultOnToggle, PerGameCommonOptions, Range, Toggle,
+    Choice, DeathLink, DefaultOnToggle, OptionList, PerGameCommonOptions, Range,
+    Toggle,
 )
 
 
@@ -109,6 +110,41 @@ class MaxWarpFloorsSkip(Range):
     default = 5
 
 
+class StartingItems(OptionList):
+    """Items to grant at the start of every New Game, as a floor (they're simply
+    marked owned — good for key items). Defaults to the two warp Crystals the
+    opening cutscene normally hands you (Crystal, and Toal's Dark Crystal), so a
+    Random start — which skips that intro — still begins with them. Add any item
+    names here (e.g. ``Mask of Eyes``) to start with them; unknown names are
+    ignored. Names must match the game's item names exactly."""
+    display_name = "Starting items"
+    default = ["Crystal", "Dark Crystal"]
+
+
+class StartingLevel(Range):
+    """Character level to start every New Game at, applied as a floor (only ever
+    raises you — never below your real level). Default 1 = vanilla. Raise it for a
+    gentler opening, especially with Random start dropping you on a higher floor.
+    Stacks with catch-up level scaling: you end up at the higher of this and the
+    floor's expected level."""
+    display_name = "Starting level"
+    range_start = 1
+    range_end = 60
+    default = 1
+
+
+class StartingWeaponLevel(Range):
+    """Displayed weapon level (1-6) to start every New Game with, applied as a
+    floor. Default 1 = the vanilla starter weapon. The in-game mod owns the weapon
+    (it upgrades on Cleria Ore and re-applies the floor-appropriate weapon on a
+    Random-start spawn), so this raises the *minimum*: you begin with at least this
+    level, and Cleria Ore / floor-appropriate gear can take you higher."""
+    display_name = "Starting weapon level"
+    range_start = 1
+    range_end = 6
+    default = 1
+
+
 class LevelScaling(Choice):
     """Catch-up leveling so the statue warp network never means a grind wall.
     Compares your level to the floor you're on (per the game's own level curve):
@@ -175,6 +211,9 @@ class YsOriginOptions(PerGameCommonOptions):
     random_start: RandomStart
     max_starting_floor: MaxStartingFloor
     max_warp_floors_skip: MaxWarpFloorsSkip
+    starting_items: StartingItems
+    starting_level: StartingLevel
+    starting_weapon_level: StartingWeaponLevel
     level_scaling: LevelScaling
     level_margin: LevelMargin
     exp_multiplier_max: ExpMultiplierMax

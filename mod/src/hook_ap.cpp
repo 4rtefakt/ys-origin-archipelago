@@ -244,6 +244,8 @@ static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byt
 // statue index at 0x76BB40, then run the menu's warp-confirm sequence.
 static int g_start_statue_scene = 0;     // slot_data start_statue_scene (0/1000 = no warp)
 static int g_start_weapon = 0;           // slot_data start_weapon (g_flags[0x94] value)
+static int g_start_level = 0;            // slot_data start_level (New-Game level floor)
+static std::vector<int> g_start_items;   // slot_data start_items (g_flags indices to own)
 static int g_character = 1;              // 0=Yunica 1=Hugo 2=Toal (slot_data character)
 static int g_spawn_reg_idx = -1;         // warp-registry index of the spawn statue
 static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statue
@@ -471,6 +473,12 @@ static void on_slot_connected(const nlohmann::json& sd) {
                 statues, start_scene, g_spawn_reg_idx);
     }
     g_start_weapon = sd.value("start_weapon", 0);   // spawn loadout weapon value
+    // New-Game starting loadout floor: minimum level + items to mark owned.
+    g_start_level = sd.value("start_level", 0);
+    g_start_items.clear();
+    if (sd.contains("start_items"))
+        for (auto& v : sd["start_items"])
+            g_start_items.push_back(v.get<int>());
     g_character = sd.value("character", 1);         // 0 Yunica / 1 Hugo / 2 Toal
     g_level_scaling = sd.value("level_scaling", 0);
     g_level_margin = sd.value("level_margin", 3);
@@ -726,6 +734,22 @@ extern "C" void exp_scaling_on_frame() {
     if (spawn_seed && (manual || auto_intro)) {
         g_force_spawn_done.store(true);
         force_spawn();
+    }
+
+    // New-Game starting loadout (start_level / start_weapon / start_items): a floor
+    // applied continuously once a player entity + loaded scene exist, so it's
+    // idempotent (only ever raises), survives new-game init / save reload, and
+    // composes with Cleria-Ore weapon upgrades and catch-up level scaling. Only
+    // writes when below the floor, so it self-heals without spamming.
+    if (*kPlayerEntPtr != nullptr && read_current_scene() > 0) {
+        if (g_start_weapon > g_weapon_applied)
+            g_pending_weapon.store(g_start_weapon);   // -> weapon section below
+        if (g_start_level > 1 && read_level() < g_start_level)
+            g_pending_level.store(g_start_level);      // -> level section below
+        for (int idx : g_start_items)
+            if (idx >= 0 && idx < 0x200 &&
+                *(volatile int*)(kGFlagsAbs + idx * 4) < 1)
+                *(volatile int*)(kGFlagsAbs + idx * 4) = 1;
     }
 
     // Weapon upgrade (Cleria Ore). Re-enforce if a save load reset g_flags[0x94]

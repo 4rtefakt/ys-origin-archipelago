@@ -27,6 +27,7 @@ from .game_state import (
     GameState,
     POLL_INTERVAL_S,
     apply_item,
+    apply_start_loadout,
     detect_checks,
     poll,
 )
@@ -119,6 +120,10 @@ def build_context_class():
             self.overlay.start()
             # signal-string -> AP location id; filled from slot data / datapackage
             self.location_signal_to_id: Dict[str, int] = {}
+            # New-Game starting loadout (from slot data): a floor applied each poll.
+            self.start_level: int = 0
+            self.start_item_names: list[str] = []
+            self._start_loadout_applied: bool = False
 
         # -- AP auth ------------------------------------------------------- #
 
@@ -144,6 +149,17 @@ def build_context_class():
                 from .offsets import apply_slot_data
                 apply_slot_data(slot_data.get("location_detect"),
                                 slot_data.get("item_index"))
+                # New-Game starting loadout: level floor + items to mark owned.
+                # start_items ships as g_flags indices; map them back to names via
+                # item_index so we can grant through the suppressor-aware path.
+                self.start_level = int(slot_data.get("start_level", 0) or 0)
+                idx_to_name = {int(v): k for k, v
+                               in (slot_data.get("item_index") or {}).items()}
+                self.start_item_names = [
+                    idx_to_name[int(i)] for i in slot_data.get("start_items", [])
+                    if int(i) in idx_to_name
+                ]
+                self._start_loadout_applied = False
                 self.prev_state = None
                 self.suppressor.reset()
                 log.info("connected to slot %s — %d locations, %d items mapped",
@@ -254,6 +270,21 @@ async def game_watcher(ctx) -> None:
         ctx.prev_state = state
         # Re-apply received items in case we just (re)attached after a restart.
         await ctx._apply_received_items()
+        # Enforce the New-Game starting loadout as a floor (idempotent: only writes
+        # when below the floor, so a fresh game gets bumped and later polls no-op).
+        if ctx.start_level > 1 or ctx.start_item_names:
+            try:
+                changed = apply_start_loadout(
+                    ctx.mem, level=ctx.start_level,
+                    item_names=ctx.start_item_names, suppressor=ctx.suppressor)
+                for label in changed:
+                    log.info("start loadout: %s", label)
+                    if not ctx._start_loadout_applied:
+                        ctx.overlay.push(label)
+                if changed:
+                    ctx._start_loadout_applied = True
+            except MemoryError_ as e:
+                log.debug("start loadout deferred: %s", e)
 
 
 # --------------------------------------------------------------------------- #

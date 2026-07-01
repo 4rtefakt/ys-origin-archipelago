@@ -202,14 +202,23 @@ class YsOriginWorld(World):
             "statue_unlocks": (dt.statue_unlock_slot_data() if locks else {}),
             "random_start": bool(self.options.random_start.value),
             "start_statue_scene": start_statue,
-            # Spawn loadout for random start: the vanilla weapon record value for
-            # the spawn floor, so force-spawn at a high floor isn't a Lv1-weapon
-            # death (the mod grants it once on spawn; the level-floor handles the
-            # level via scene_levels). 0 = no grant (1F start / random off).
-            "start_weapon": (
-                dt.floor_weapon_value(dt.scene_floor(start_statue) or 1)
-                if self.options.random_start.value and start_statue not in (0, 1000)
-                else 0
+            # Spawn loadout weapon record value (g_flags[0x94]), applied by the mod
+            # as a floor at New Game. The higher of: the vanilla weapon for a
+            # random-start spawn floor (so force-spawn ahead isn't a Lv1-weapon
+            # death) and the player's configured starting_weapon_level. 0 = starter.
+            "start_weapon": max(
+                (dt.floor_weapon_value(dt.scene_floor(start_statue) or 1)
+                 if self.options.random_start.value and start_statue not in (0, 1000)
+                 else 0),
+                dt.weapon_value_for_level(int(self.options.starting_weapon_level.value)),
+            ),
+            # New-Game starting loadout (applied as a floor by the mod/client):
+            #   start_level : minimum character level (1 = vanilla, only raises).
+            #   start_items : g_flags indices to mark owned (default = warp Crystals
+            #                 the skipped intro would grant). Unknown names dropped.
+            "start_level": int(self.options.starting_level.value),
+            "start_items": dt.start_item_indices(
+                list(self.options.starting_items.value)
             ),
             # catch-up level scaling: mode + tuning + the floor->expected-level
             # curve, so the mod can bump under-leveled players / boost their EXP

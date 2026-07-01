@@ -44,6 +44,19 @@ Ys Origin:
                            #   rooms you're not ready for. On foot everything still
                            #   stays reachable; this only paces warps. random_start only.
 
+  # --- New Game starting loadout (applied as a floor: only ever raises) ---
+  starting_items:        # items to begin every New Game owning. Defaults to the
+    - Crystal            #   warp Crystals the intro normally grants (Toal uses the
+    - Dark Crystal       #   Dark Crystal) so a random_start — which skips the intro
+                         #   — still has them. Add any exact item names; unknowns
+                         #   are ignored. Leave empty ([]) to start with nothing.
+  starting_level: 1      # minimum character level at New Game (1 = vanilla). Raise
+                         #   for a gentler opening; stacks with level_scaling (you
+                         #   get the higher of this and the floor's expected level).
+  starting_weapon_level: 1 # minimum displayed weapon level 1-6 at New Game (1 =
+                           #   vanilla starter). The mod still upgrades it via Cleria
+                           #   Ore / floor-appropriate gear; this only sets the floor.
+
   # --- catch-up level scaling (so warping far ahead isn't a grind wall) ---
   level_scaling: both    # off | level_floor | exp_multiplier | both
                          #   level_floor    = entering a floor far above your
