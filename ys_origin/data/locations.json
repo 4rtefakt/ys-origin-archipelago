@@ -281,25 +281,6 @@
   ]
  },
  {
-  "id": "S_2005/S_BOX03",
-  "type": "chest",
-  "zone": "Flooded Prison",
-  "floor": "",
-  "room": "Water Dragon Protect",
-  "name": "Flooded Prison: Water Dragon Protect #3",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BE48"
-  },
-  "items": [
-   {
-    "id": "0x61",
-    "name": "Water Dragon's Scales",
-    "class": "filler"
-   }
-  ]
- },
- {
   "id": "S_2006/S_BOX01",
   "type": "chest",
   "zone": "Flooded Prison",
@@ -1312,51 +1293,7 @@
    "method": "flag",
    "offset": "0x36BE7C"
   },
-  "items": [
-   {
-    "id": "0x5C",
-    "name": "Red Moon Crest",
-    "class": "progression"
-   }
-  ]
- },
- {
-  "id": "S_3002/EVNT_3002_YUNICA02/0x5C",
-  "type": "event",
-  "zone": "Flames of Guilt",
-  "floor": "",
-  "room": "Mark Treasure",
-  "name": "Flames of Guilt: Mark Treasure — Red Moon Crest #2",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BE7C"
-  },
-  "items": [
-   {
-    "id": "0x5C",
-    "name": "Red Moon Crest",
-    "class": "progression"
-   }
-  ]
- },
- {
-  "id": "S_3002/KEKKAIZAKO_02/0x5C",
-  "type": "event",
-  "zone": "Flames of Guilt",
-  "floor": "",
-  "room": "Mark Treasure",
-  "name": "Flames of Guilt: Mark Treasure — Red Moon Crest #3",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BE7C"
-  },
-  "items": [
-   {
-    "id": "0x5C",
-    "name": "Red Moon Crest",
-    "class": "progression"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_3007/TALKSAUL/0x6D",
@@ -1384,44 +1321,6 @@
   "floor": "",
   "room": "Fire Altar",
   "name": "Flames of Guilt: Fire Altar — Ignis Bracelet",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BBFC"
-  },
-  "items": [
-   {
-    "id": "0x76",
-    "name": "Ignis Bracelet",
-    "class": "progression"
-   }
-  ]
- },
- {
-  "id": "S_3007/TALKSAUL_THOR/0x6D",
-  "type": "event",
-  "zone": "Flames of Guilt",
-  "floor": "",
-  "room": "Fire Altar",
-  "name": "Flames of Guilt: Fire Altar — Crimson Lotusblade #2",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BBFC"
-  },
-  "items": [
-   {
-    "id": "0x6D",
-    "name": "Crimson Lotusblade",
-    "class": "progression"
-   }
-  ]
- },
- {
-  "id": "S_3007/TALKSAUL_THOR/0x76",
-  "type": "event",
-  "zone": "Flames of Guilt",
-  "floor": "",
-  "room": "Fire Altar",
-  "name": "Flames of Guilt: Fire Altar — Ignis Bracelet #2",
   "detect": {
    "method": "flag",
    "offset": "0x36BBFC"
