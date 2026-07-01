@@ -265,6 +265,22 @@ class YsOriginWorld(World):
             "floor_locations": dt.floor_locations_map(active, self.location_name_to_id),
             "blessing_names": dt.blessing_location_names(active, self.location_name_to_id),
             "shop_hints": bool(self.options.shop_hints.value),
+            # Overlay blessing shop (blessing_costs: random): loc id -> SP price,
+            # rolled seed-deterministically in [min, max] (rounded to 10s); empty
+            # in vanilla mode (RNG untouched -> vanilla seeds stay identical).
+            # blessing_shop_unlock paces the shop inventory (0 all, 1 per-floor).
+            "blessing_costs": (
+                {
+                    str(loc): 10 * self.random.randint(
+                        int(self.options.blessing_cost_min.value) // 10,
+                        max(int(self.options.blessing_cost_min.value) // 10,
+                            int(self.options.blessing_cost_max.value) // 10))
+                    for loc in dt.blessing_bit_location_ids(
+                        active, self.location_name_to_id)
+                }
+                if self.options.blessing_costs.value else {}
+            ),
+            "blessing_shop_unlock": int(self.options.blessing_shop_unlock.value),
             # All statue scenes (panel trigger; statue_unlocks only ships with
             # warp locks on).
             "statue_scenes": dt.statue_scenes(),

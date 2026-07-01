@@ -124,6 +124,10 @@ static void load_config() {
         else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
         else if (!strcmp(key, "goal_scene")) { g_goal_scene = atoi(val); }
         else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
+        else if (!strncmp(key, "bless_idx_", 10)) {
+            int bit = atoi(key + 10);
+            if (bit >= 0 && bit < 32) g_bless_arr_idx[bit] = atoi(val);
+        }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -180,6 +184,27 @@ static bool g_panel_toggle = false;       // F7: force the panel anywhere
 // Item classification per scouted location (AP NetworkItem.flags: 1 progression,
 // 2 useful, 4 trap) — colors the shop-hint lines.
 static std::map<int64_t, int> g_loc_flags;
+
+// -- overlay blessing shop (blessing_costs: random) --------------------------- #
+// Our OWN shop UI (shop.cpp, F5): sells the bit-method blessings at the seed's
+// randomized prices, deducting SP and granting the blessing directly — no
+// dependency on the game's cost table. Buying sets the purchase bit (the bit
+// poll then fires the check), writes the blessing state-array level, and
+// requests the effect recompute (BLESSING_DIRTY). The state-array INDEX per
+// blessing is the one un-RE'd piece: map them via `bless_idx_<bit>=<idx>` lines
+// in yso_ap.cfg (captured once with tools/flaglog.py --bless); until a bit is
+// mapped, its purchase still registers (bit + check + SP) and the effect
+// applies after the next save+reload (g_flags persists the bit).
+struct BlessShopItem { int64_t loc; std::string name; int bit; int cost; };
+static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap first
+static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
+static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
+static std::set<int> g_floors_seen;                  // distinct floors visited
+static int g_bless_arr_idx[32];                      // bit -> state-array idx (-1 unmapped)
+static const uintptr_t kSpAbs = kGFlagsAbs + 0xD8 * 4;         // SP currency
+static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
+static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
+static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
 // Goal reporting: entering the ending scene sends StatusUpdate(GOAL) once. The
 // ending scene id is not RE'd yet — set goal_scene= in yso_ap.cfg after one
 // live capture (kill Darm, read the scene number off the log/overlay).
@@ -518,6 +543,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
                 int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
                 g_poll_bits.push_back({kImageBase + (uintptr_t)off,
                                        d["bit"].get<int>(), loc});
+                g_loc_bitmap[loc] = d["bit"].get<int>();
                 scout.push_back(loc);
                 locs++;
             } else if (method == "floor" && d.contains("offset") && d.contains("floor")) {
@@ -563,6 +589,25 @@ static void on_slot_connected(const nlohmann::json& sd) {
     if (sd.contains("statue_scenes"))
         for (auto& v : sd["statue_scenes"])
             g_statue_scene_set.insert(v.get<int>());
+    // Overlay blessing shop: randomized prices (empty = vanilla mode, no shop).
+    g_shop_items.clear();
+    g_shop_unlock_mode = sd.value("blessing_shop_unlock", 0);
+    if (sd.contains("blessing_costs")) {
+        for (auto& kv : sd["blessing_costs"].items()) {
+            int64_t loc = atoll(kv.key().c_str());
+            auto nm = g_bless_names.find(loc);
+            auto bt = g_loc_bitmap.find(loc);
+            if (nm == g_bless_names.end() || bt == g_loc_bitmap.end()) continue;
+            g_shop_items.push_back({loc, nm->second, bt->second,
+                                    kv.value().get<int>()});
+        }
+        std::sort(g_shop_items.begin(), g_shop_items.end(),
+                  [](const BlessShopItem& a, const BlessShopItem& b) {
+                      return a.cost < b.cost;
+                  });
+        mod_log("ap: blessing shop — %d items, unlock mode %d",
+                (int)g_shop_items.size(), g_shop_unlock_mode);
+    }
     // Seed-scoped save redirection: hand the room seed to the file hook.
     saveredir_set_seed(g_ap->get_seed().c_str());
     int statues = 0;
@@ -849,6 +894,8 @@ static void poll_value_checks() {
         cur_floor[pf.abs] = *(volatile int*)pf.abs;
     for (const auto& pf : g_poll_floors) {
         int cur = cur_floor[pf.abs];
+        if (cur >= 1 && cur <= 26)
+            g_floors_seen.insert(cur);    // shop unlock pacing (one-per-floor)
         auto pit = g_floor_prev.find(pf.abs);
         int prev = (pit != g_floor_prev.end()) ? pit->second : cur;  // prime
         if (cur >= pf.floor_n && pf.floor_n > prev &&
@@ -929,6 +976,80 @@ static void update_trackers() {
         }
     }
     overlay::set_panel(p);
+}
+
+// -- overlay blessing shop accessors (UI in shop.cpp) ------------------------- #
+
+static bool shop_item_owned(const BlessShopItem& it) {
+    return ((*(volatile int*)kBlessBitsAbs >> it.bit) & 1) ||
+           g_checked.count(it.loc) != 0;
+}
+
+static bool shop_item_unlocked(int i) {
+    if (g_shop_unlock_mode != 1) return true;
+    return i < (int)g_floors_seen.size();   // one slot per distinct floor visited
+}
+
+bool ap_shop_available() { return !g_shop_items.empty() && g_ap != nullptr; }
+int ap_shop_count() { return (int)g_shop_items.size(); }
+
+std::string ap_shop_status() {
+    char buf[96];
+    int unlocked = 0;
+    for (int i = 0; i < (int)g_shop_items.size(); i++)
+        if (shop_item_unlocked(i)) unlocked++;
+    snprintf(buf, sizeof(buf), "SP: %d   (%d/%d slots unlocked)",
+             *(volatile int*)kSpAbs, unlocked, (int)g_shop_items.size());
+    return buf;
+}
+
+// One display line; first char is the classification/color marker the overlay
+// scheme uses ('*' progression gold, '!' trap red, ' ' plain).
+std::string ap_shop_line(int i) {
+    if (i < 0 || i >= (int)g_shop_items.size()) return "";
+    const BlessShopItem& it = g_shop_items[i];
+    std::string found = "?";
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(it.loc);
+        if (f != g_loc_found.end()) found = f->second;
+    }
+    int fl = g_loc_flags.count(it.loc) ? g_loc_flags[it.loc] : 0;
+    const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
+    char buf[256];
+    if (shop_item_owned(it))
+        snprintf(buf, sizeof(buf), " %s  (bought)", it.name.c_str());
+    else if (!shop_item_unlocked(i))
+        snprintf(buf, sizeof(buf), " %s  (locked - visit more floors)",
+                 it.name.c_str());
+    else
+        snprintf(buf, sizeof(buf), "%s%s  %d SP  =  %s", mark, it.name.c_str(),
+                 it.cost, found.c_str());
+    return buf;
+}
+
+// Buy slot i: deduct SP, set the purchase bit (the bit poll fires the check),
+// grant the effect (state array + recompute) when the array index is mapped.
+bool ap_shop_buy(int i) {
+    if (i < 0 || i >= (int)g_shop_items.size()) return false;
+    const BlessShopItem& it = g_shop_items[i];
+    if (shop_item_owned(it) || !shop_item_unlocked(i)) return false;
+    volatile int* sp = (volatile int*)kSpAbs;
+    if (*sp < it.cost) return false;
+    *sp = *sp - it.cost;
+    *(volatile int*)kBlessBitsAbs |= (1 << it.bit);      // purchase bit -> check
+    int idx = (it.bit >= 0 && it.bit < 32) ? g_bless_arr_idx[it.bit] : -1;
+    if (idx >= 0) {
+        *(volatile int*)(kBlessBaseAbs + (uintptr_t)idx * 8) = 1;  // level/owned
+        *(volatile int*)kBlessDirtyAbs |= 0x10;                    // recompute
+    } else {
+        mod_log("ap: shop — bit %d has no bless_idx_%d mapping; effect applies "
+                "after save+reload", it.bit, it.bit);
+    }
+    overlay::push_item("Bought: " + it.name);
+    mod_log("ap: shop bought '%s' (bit %d, %d SP, arr idx %d)",
+            it.name.c_str(), it.bit, it.cost, idx);
+    return true;
 }
 
 // Clear the warp-registry byte of every currently-locked statue. The game writes
@@ -1234,6 +1355,7 @@ const char* ap_cfg_pass() { return g_pass; }
 
 void ap_install() {
     for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+    for (int i = 0; i < 32; i++) g_bless_arr_idx[i] = -1;   // cfg bless_idx_N maps
     load_config();               // prefill defaults for the in-game menu
     overlay::set_status("not connected - open the Archipelago menu");
 

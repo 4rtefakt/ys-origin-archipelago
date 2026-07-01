@@ -130,6 +130,13 @@ overlay.
   AP runs never touch your vanilla saves, and each multiworld keeps its own
   save set. Vanilla/offline play is unaffected (`save_redirect=0` in
   `yso_ap.cfg` disables it).
+- **Blessing cost rando + F5 shop** — with `blessing_costs: random`, the mod
+  runs its OWN shop overlay (F5): blessings at seed-randomized SP prices, each
+  listed with the multiworld item it holds. Buying deducts SP and grants the
+  blessing + check directly — no dependency on the game's price table. Optional
+  `one_per_floor` pacing unlocks one shop slot per tower floor visited. (One
+  live capture — `tools/flaglog.py --bless` — fills the `bless_idx_*` cfg map
+  so effects apply instantly; unmapped effects apply after a save+reload.)
 - **AP chat overlay (F6)** — the room's live feed (items found by/for you,
   hints, joins, chat) bottom-left in the game's HUD style. Press Enter to type:
   regular chat or server commands (`!hint <item>`, `!help`, ...). The game's
@@ -154,6 +161,10 @@ overlay.
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
 | `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
+| `blessing_costs` | `vanilla` / `random` | `vanilla` | `random` = the mod's own F5 shop overlay sells blessings at seed-randomized SP prices (the game's menu still works at vanilla prices) |
+| `blessing_cost_min` | `10`–`2000` | `100` | Cheapest possible randomized blessing price |
+| `blessing_cost_max` | `10`–`5000` | `800` | Priciest possible randomized blessing price |
+| `blessing_shop_unlock` | `all` / `one_per_floor` | `all` | `one_per_floor` = one more F5-shop slot (cheapest first) unlocks per distinct tower floor visited |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | **Start anywhere.** With `statue_warp_locks` on, New Game spawns you at a random statue: the mod skips the whole intro (movies + cutscenes, every character) and warps you there geared for the floor; bidirectional warp-network logic keeps the seed beatable from any spawn |
 | `max_starting_floor` | `1`–`25` | `10` | Cap the `random_start` spawn to statues on this floor or below, so New Game never drops you on the brutal deep floors with no gear behind you. Lower = gentler openings; raise for more variety. No effect unless `random_start` is on |

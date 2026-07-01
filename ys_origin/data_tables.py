@@ -668,6 +668,17 @@ def blessing_location_names(active: Set[str], name_to_id: Dict[str, int]
     return out
 
 
+def blessing_bit_location_ids(active: Set[str], name_to_id: Dict[str, int]
+                              ) -> List[int]:
+    """AP location ids of the ACTIVE bit-method blessing locations (the 23 the
+    overlay shop can sell), sorted by location name for deterministic cost
+    rolls. The armor blessing (flag-method; a different grant mechanism) is
+    excluded — it stays vanilla-menu-only."""
+    return [name_to_id[l["name"]] for l in sorted(_LOCS, key=lambda x: x["name"])
+            if l["type"] == "blessing" and l["name"] in active
+            and l.get("detect", {}).get("method") == "bit"]
+
+
 # Detection methods the live client can actually observe today. A location whose
 # method isn't one of these can't be checked in-game yet, so it must stay
 # filler-only regardless of its category (e.g. an event that fell back to

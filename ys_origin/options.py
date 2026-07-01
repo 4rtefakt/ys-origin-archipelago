@@ -212,6 +212,46 @@ class ExpCatchupMargin(Range):
     default = 5
 
 
+class BlessingCosts(Choice):
+    """Blessing shop economy. ``vanilla`` = buy from the game's own statue menu
+    at its normal prices. ``random`` = the mod's OWN shop overlay (F5) sells the
+    blessings at seed-randomized SP prices (between the min/max below) — the
+    vanilla menu still works at vanilla prices, but the overlay shop is where
+    the deals (and ripoffs) are. Purchases either way grant the blessing effect
+    AND the multiworld check."""
+    display_name = "Blessing costs"
+    option_vanilla = 0
+    option_random = 1
+    default = 0
+
+
+class BlessingCostMin(Range):
+    """Lowest possible randomized blessing price (SP)."""
+    display_name = "Blessing cost min"
+    range_start = 10
+    range_end = 2000
+    default = 100
+
+
+class BlessingCostMax(Range):
+    """Highest possible randomized blessing price (SP)."""
+    display_name = "Blessing cost max"
+    range_start = 10
+    range_end = 5000
+    default = 800
+
+
+class BlessingShopUnlock(Choice):
+    """How the overlay shop's inventory unlocks. ``all`` = every blessing is
+    purchasable from the start. ``one_per_floor`` = one more shop slot (cheapest
+    first) unlocks for each distinct tower floor you visit — pace your power to
+    your exploration."""
+    display_name = "Blessing shop unlock"
+    option_all = 0
+    option_one_per_floor = 1
+    default = 0
+
+
 class ShopHints(DefaultOnToggle):
     """Show what each Divine Blessing purchase actually gives (the multiworld
     item scouted at that shop slot) on the in-game overlay while you're at a
@@ -262,5 +302,9 @@ class YsOriginOptions(PerGameCommonOptions):
     exp_catchup_margin: ExpCatchupMargin
     progressive_armor: ProgressiveArmor
     shop_hints: ShopHints
+    blessing_costs: BlessingCosts
+    blessing_cost_min: BlessingCostMin
+    blessing_cost_max: BlessingCostMax
+    blessing_shop_unlock: BlessingShopUnlock
     weapon_requirements: WeaponRequirements
     death_link: DeathLink

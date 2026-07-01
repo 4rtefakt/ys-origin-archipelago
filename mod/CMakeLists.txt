@@ -99,6 +99,7 @@ add_library(dinput8 SHARED
     src/hook_saveredir.cpp
     src/overlay.cpp
     src/chat.cpp
+    src/shop.cpp
     src/menu.cpp
     src/exports.def
     ${IMGUI_DIR}/imgui.cpp
