@@ -246,6 +246,13 @@ static int g_start_statue_scene = 0;     // slot_data start_statue_scene (0/1000
 static int g_start_weapon = 0;           // slot_data start_weapon (g_flags[0x94] value)
 static int g_start_level = 0;            // slot_data start_level (New-Game level floor)
 static std::vector<int> g_start_items;   // slot_data start_items (g_flags indices to own)
+// SP fillers: item name -> SP amount, added to the currency cell g_flags[0xD8]
+// (slot_data sp_items / sp_flag_idx; SP is a stat, not an inventory item).
+static std::map<std::string, int> g_sp_items;
+static int g_sp_flag_idx = 0xD8;
+// Progressive gear: item name -> the character's tier ladder (g_flags indices in
+// tier order); receiving one grants the first unowned tier (never skips ahead).
+static std::map<std::string, std::vector<int>> g_prog_gear;
 static int g_character = 1;              // 0=Yunica 1=Hugo 2=Toal (slot_data character)
 static int g_spawn_reg_idx = -1;         // warp-registry index of the spawn statue
 static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statue
@@ -479,6 +486,18 @@ static void on_slot_connected(const nlohmann::json& sd) {
     if (sd.contains("start_items"))
         for (auto& v : sd["start_items"])
             g_start_items.push_back(v.get<int>());
+    g_sp_items.clear();
+    if (sd.contains("sp_items"))
+        for (auto& kv : sd["sp_items"].items())
+            g_sp_items[kv.key()] = kv.value().get<int>();
+    g_sp_flag_idx = sd.value("sp_flag_idx", 0xD8);
+    g_prog_gear.clear();
+    if (sd.contains("progressive_gear"))
+        for (auto& kv : sd["progressive_gear"].items()) {
+            std::vector<int> tiers;
+            for (auto& v : kv.value()) tiers.push_back(v.get<int>());
+            g_prog_gear[kv.key()] = tiers;
+        }
     g_character = sd.value("character", 1);         // 0 Yunica / 1 Hugo / 2 Toal
     g_level_scaling = sd.value("level_scaling", 0);
     g_level_margin = sd.value("level_margin", 3);
@@ -508,7 +527,24 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         std::string from = g_ap->get_player_alias(it.player);
         auto su = g_statue_item_idx.find(name);
         auto f = g_name_to_idx.find(name);
-        if (su != g_statue_item_idx.end()) {
+        auto sp = g_sp_items.find(name);
+        auto pg = g_prog_gear.find(name);
+        if (sp != g_sp_items.end()) {
+            // SP filler: add straight to the SP currency cell (give semantics).
+            ap_give(g_sp_flag_idx, sp->second);
+        } else if (pg != g_prog_gear.end()) {
+            // Progressive gear: grant the first unowned tier in the ladder.
+            bool granted = false;
+            for (int idx : pg->second)
+                if (idx >= 0 && idx < 0x200 &&
+                    *(volatile int*)(kGFlagsAbs + idx * 4) < 1) {
+                    ap_give(idx, 1);
+                    granted = true;
+                    break;
+                }
+            if (!granted)
+                mod_log("ap: '%s' — all tiers owned, no-op", name.c_str());
+        } else if (su != g_statue_item_idx.end()) {
             // Statue warp unlock: fully activate that statue immediately so it's
             // warpable right away (no need to revisit it). Stop clearing its warp
             // byte, set the warp-registry byte, and set the purify/activation flag

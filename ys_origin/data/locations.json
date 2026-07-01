@@ -91,13 +91,7 @@
    "method": "flag",
    "offset": "0x36C038"
   },
-  "items": [
-   {
-    "id": "0x80",
-    "name": "0x80",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_1010/S_BOX01",
@@ -316,13 +310,7 @@
    "method": "flag",
    "offset": "0x36BE3C"
   },
-  "items": [
-   {
-    "id": "0x80",
-    "name": "0x80",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_2008/S_BOX01",
@@ -464,13 +452,7 @@
    "method": "flag",
    "offset": "0x36C074"
   },
-  "items": [
-   {
-    "id": "0x7C",
-    "name": "100G",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_3004/S_BOX01",
@@ -517,13 +499,7 @@
    "method": "flag",
    "offset": "0x36BEAC"
   },
-  "items": [
-   {
-    "id": "0x81",
-    "name": "0x81",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_3008/S_BOX01",
@@ -536,13 +512,7 @@
    "method": "flag",
    "offset": "0x36BEB4"
   },
-  "items": [
-   {
-    "id": "0x82",
-    "name": "0x82",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_3010/S_BOX01",
@@ -703,13 +673,7 @@
    "method": "flag",
    "offset": "0x36BF24"
   },
-  "items": [
-   {
-    "id": "0x82",
-    "name": "0x82",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_4003/S_BOX01",
@@ -779,13 +743,7 @@
    "method": "flag",
    "offset": "0x36BF0C"
   },
-  "items": [
-   {
-    "id": "0x7C",
-    "name": "100G",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_4006/S_BOX01",
@@ -832,13 +790,7 @@
    "method": "flag",
    "offset": "0x36BF5C"
   },
-  "items": [
-   {
-    "id": "0x80",
-    "name": "0x80",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_4006/S_BOX03",
@@ -908,13 +860,7 @@
    "method": "flag",
    "offset": "0x36BF38"
   },
-  "items": [
-   {
-    "id": "0x7C",
-    "name": "100G",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_4015/S_BOX02",
@@ -965,13 +911,7 @@
    "method": "flag",
    "offset": "0x36C018"
   },
-  "items": [
-   {
-    "id": "0x7D",
-    "name": "500G",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_5004/S_BOX01",
@@ -1003,13 +943,7 @@
    "method": "flag",
    "offset": "0x36BFA0"
   },
-  "items": [
-   {
-    "id": "0x81",
-    "name": "0x81",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_5007/S_BOX01",
@@ -1094,13 +1028,7 @@
    "method": "flag",
    "offset": "0x36C03C"
   },
-  "items": [
-   {
-    "id": "0x82",
-    "name": "0x82",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_5080/S_BOX01",
@@ -1189,13 +1117,7 @@
    "method": "flag",
    "offset": "0x36C050"
   },
-  "items": [
-   {
-    "id": "0x7D",
-    "name": "500G",
-    "class": "filler"
-   }
-  ]
+  "items": []
  },
  {
   "id": "S_6014/S_BOX02",

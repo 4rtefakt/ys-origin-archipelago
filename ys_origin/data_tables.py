@@ -67,12 +67,21 @@ EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36
 #   * Roda Fruit and Cleria Ore are count-capped in vanilla; granting extra copies
 #     bugs out / overpowers the player — excluded (they still appear at their
 #     vanilla locations at the correct count).
-#   * Celcetan Panacea and Gold are safe to give in any quantity. (SP would be a
-#     nice filler too but it's a stat, not an item — needs a custom grant path.)
+#   * Celcetan Panacea is safe to give in any quantity.
+#   * SP is the game's only currency (blessings + gear upgrades at statues) —
+#     granted straight into the SP cell g_flags[0xD8] via SP_FILLER below.
+#   * Gold ("50G".."1000G") was removed: the flags exist in the item table but
+#     Ys Origin has no money, so they granted nothing.
 FILLER_POOL: List[str] = [
     "Celcetan Panacea",
-    "50G", "100G", "500G", "1000G",
+    "SP: 50", "SP: 150", "SP: 500",
 ]
+
+# SP filler grants: item name -> amount added to the SP currency (g_flags[0xD8],
+# the cell the blessing/upgrade GROWnn.XSO scripts deduct from). Published in
+# slot_data so the mod/client can apply them (they're stat writes, not items).
+SP_FILLER: Dict[str, int] = {"SP: 50": 50, "SP: 150": 150, "SP: 500": 500}
+SP_FLAG_IDX = 0xD8
 
 
 def _load() -> List[dict]:
@@ -274,6 +283,54 @@ def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
     return variants[0]
 
 
+# -- progressive gear (optional, progressive_armor) -------------------------- #
+# Ys Origin has two defensive slots, Armor and Boots, each a strict tier ladder
+# per character (chests in tower order). With the option on, every gear chest
+# seeds a "Progressive Armor" / "Progressive Boots" instead of the raw piece;
+# receiving one grants your character's NEXT unowned tier, so pickups can't skip
+# ahead (finding the 22F armor first still gives you tier 1). The 4th variant in
+# each gear chest (Chain Mail / Wooden Shield / ...) belongs to the unlockable EX
+# character and is never seeded for Yunica/Hugo/Toal.
+PROGRESSIVE_ARMOR = "Progressive Armor"
+PROGRESSIVE_BOOTS = "Progressive Boots"
+
+GEAR_LADDERS: Dict[str, Dict[str, List[str]]] = {
+    "yunica": {
+        PROGRESSIVE_ARMOR: ["Ring Mail", "Half Plate", "Reflex", "Silver Dress"],
+        PROGRESSIVE_BOOTS: ["Leather Boots", "Hard Leggings", "Leg Guards",
+                            "Battle Guards", "Silver Leggings"],
+    },
+    "hugo": {
+        PROGRESSIVE_ARMOR: ["Ebony Robe", "Chain Cloak", "Elder Robe",
+                            "Cleria Garb"],
+        PROGRESSIVE_BOOTS: ["Leather Greaves", "Ebony Shoes", "Shell Greaves",
+                            "Moon Greaves", "Dark Falcon"],
+    },
+    "toal": {
+        PROGRESSIVE_ARMOR: ["Black Chain", "Banded Mail", "Gothic Suit",
+                            "Brave Armor"],
+        PROGRESSIVE_BOOTS: ["Riveted Boots", "Black Leggings", "Banded Boots",
+                            "Phantom Boots", "Brave Guards"],
+    },
+}
+
+
+def progressive_gear_slot_data(char: str) -> Dict[str, List[int]]:
+    """Progressive item name -> the character's tier ladder as g_flags indices
+    (tier order). The mod/client grants the first index whose cell is unowned."""
+    ladders = GEAR_LADDERS.get(char, GEAR_LADDERS["hugo"])
+    return {nm: [item_index[i] for i in tiers if i in item_index]
+            for nm, tiers in ladders.items()}
+
+
+def _progressive_name_for(item: str, char: str) -> Optional[str]:
+    """The progressive item replacing `item` in the pool (None if not gear)."""
+    for nm, tiers in GEAR_LADDERS.get(char, {}).items():
+        if item in tiers:
+            return nm
+    return None
+
+
 # Goddess-statue warp unlocks (optional, statue_warp_locks). One item per statue;
 # receiving it lets the mod enable warping to that statue. Bonus/useful (not
 # progression) -> they never change reachability (everything stays reachable on
@@ -292,7 +349,8 @@ for _l in _LOCS:
     }
 
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
-    | set(FILLER_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS)
+    | set(FILLER_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
+    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS}
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
@@ -497,7 +555,7 @@ def character_req(req: list, char: str) -> list:
 def item_classification(name: str) -> str:
     if name == GOAL_ITEM or name in GATE_ITEMS:
         return "progression"
-    if name in STATUE_UNLOCKS:
+    if name in STATUE_UNLOCKS or name in (PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS):
         return "useful"
     return _item_class.get(name, "filler")
 
@@ -597,16 +655,24 @@ def start_item_indices(names) -> List[int]:
     return out
 
 
-def vanilla_items(enabled: Set[str], char: str = "hugo") -> List[str]:
+def vanilla_items(enabled: Set[str], char: str = "hugo",
+                  progressive_gear: bool = False) -> List[str]:
     """The real items to seed the pool (one per enabled chest/event location),
-    using the selected character's variant at each location."""
+    using the selected character's variant at each location. With
+    ``progressive_gear`` on, armor/boots pieces seed Progressive Armor/Boots
+    instead (receiving one grants the character's next unowned tier)."""
     out: List[str] = []
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
         it = location_vanilla_item(l["name"], char)
-        if it:
-            out.append(it)
+        if not it:
+            continue
+        if progressive_gear:
+            prog = _progressive_name_for(it, char)
+            if prog:
+                it = prog
+        out.append(it)
     return out
 
 
