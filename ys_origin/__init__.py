@@ -237,7 +237,12 @@ class YsOriginWorld(World):
             # when the warp network drops them somewhere too high.
             "level_scaling": int(self.options.level_scaling.value),
             "level_margin": int(self.options.level_margin.value),
-            "exp_multiplier_max": int(self.options.exp_multiplier_max.value),
+            # EXP scaling: flat base multiplier everywhere; the catch-up
+            # multiplier while level <= (deepest visited floor's expected level
+            # + margin). The mod tracks the deepest-floor high-water mark.
+            "exp_base_mult": int(self.options.exp_multiplier_base.value),
+            "exp_catchup_mult": int(self.options.exp_multiplier_catchup.value),
+            "exp_catchup_margin": int(self.options.exp_catchup_margin.value),
             # weapon gating: Cleria Ore = weapon level (for the eventual mod hook
             # that upgrades the weapon on Cleria Ore receipt instead of granting it).
             "weapon_requirements": int(self.options.weapon_requirements.value),

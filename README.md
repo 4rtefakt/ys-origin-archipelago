@@ -103,9 +103,12 @@ overlay.
   25F with nothing behind you), and `max_warp_floors_skip` limits how far ahead a
   single warp unlock can fling you (progress climbs in steps, not lucky leaps).
 - **Catch-up level scaling** — so warping to a far-off floor isn't a grind wall:
-  the mod can bump an under-leveled character toward the floor's expected level
-  and/or grant scaled bonus EXP, tapering to nothing once you're on level. On by
-  default; tune or disable with `level_scaling`.
+  the mod can bump an under-leveled character toward the floor's expected level,
+  and boosts EXP — a flat base multiplier everywhere (default 3x), raised to a
+  catch-up multiplier (default 5x) while your level is at or under the deepest
+  visited floor's expected level + 5, so falling behind your progress levels you
+  back fast fighting anywhere. On by default; tune or disable with
+  `level_scaling` and the `exp_*` options.
 - **Weapon gating** — your weapon (the dominant damage stat) is upgraded by Cleria
   Ore, which is shuffled into the pool as progression. The generator guarantees
   the **vanilla weapon level for each floor** is obtainable before that zone is in
@@ -135,7 +138,9 @@ overlay.
 | `starting_weapon_level` | `1`–`6` | `1` | Minimum displayed weapon level at New Game (a floor). `1` = vanilla starter. The mod still upgrades weapon via Cleria Ore / floor-appropriate gear on top of this |
 | `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
 | `level_margin` | `0`–`10` | `0` | How many levels under a floor's expected level the floor-bump leaves you (0 = right at the expected level); raise for more challenge |
-| `exp_multiplier_max` | `1`–`20` | `8` | Cap for the catch-up EXP multiplier (scales with how under-level you are) |
+| `exp_multiplier_base` | `1`–`10` | `3` | Flat EXP multiplier applied everywhere while EXP scaling is on (`1` = vanilla rate) |
+| `exp_multiplier_catchup` | `1`–`20` | `5` | EXP multiplier while your level ≤ the deepest visited floor's expected level + margin — catch up by fighting anywhere, easy floors included |
+| `exp_catchup_margin` | `0`–`20` | `5` | Levels above the deepest floor's expected level that still count as catching up |
 | `progressive_armor` | `true` / `false` | `true` | Armor & Boots become progressive: gear chests hold "Progressive Armor"/"Progressive Boots", and receiving one grants your character's next tier (pickups never skip ahead). Off = raw pieces shuffled as-is |
 | `weapon_requirements` | `true` / `false` | `true` | Gate each zone behind enough Cleria Ore that the vanilla weapon level for that floor is obtainable first; Cleria Ore becomes progression and upgrades your weapon on pickup. Pairs with `level_scaling` to keep warped-ahead floors playable |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |

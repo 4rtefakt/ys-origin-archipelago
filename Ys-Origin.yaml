@@ -61,12 +61,19 @@ Ys Origin:
   level_scaling: both    # off | level_floor | exp_multiplier | both
                          #   level_floor    = entering a floor far above your
                          #                    level bumps you up to (floor - margin)
-                         #   exp_multiplier = bonus EXP scaled by how under-level
-                         #                    you are (1x when on level)
+                         #   exp_multiplier = boosted EXP (base everywhere,
+                         #                    catch-up while behind — see below)
                          #   both (default) = bump most of the way, EXP boost the rest
   level_margin: 0        # levels under a floor's expected level the bump leaves you
                          #   (0 = right at the expected level; raise for challenge)
-  exp_multiplier_max: 8  # cap for the catch-up EXP multiplier
+  exp_multiplier_base: 3 # flat EXP multiplier everywhere (rando runs zig-zag the
+                         #   tower, so everyone levels faster than vanilla). 1 = off.
+  exp_multiplier_catchup: 5 # EXP multiplier while your level <= the deepest floor
+                            #   you've visited's expected level + the margin below —
+                            #   falling behind your progress levels you back fast,
+                            #   fighting anywhere you like.
+  exp_catchup_margin: 5  # levels above the deepest floor's expected level that
+                         #   still count as "catching up"
 
   # --- gear ---
   progressive_armor: true # armor & boots become progressive: every gear chest

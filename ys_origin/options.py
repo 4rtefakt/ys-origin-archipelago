@@ -152,9 +152,10 @@ class LevelScaling(Choice):
     - ``off``            : vanilla leveling.
     - ``level_floor``    : entering a floor far above your level bumps you up to
                            (floor level - margin); only ever raises you.
-    - ``exp_multiplier`` : you gain bonus EXP scaled by how far under-level you
-                           are (1x when on level), so fighting catches you up
-                           fast without changing combat.
+    - ``exp_multiplier`` : boosted EXP — the base multiplier everywhere, the
+                           catch-up multiplier while your level is at/under the
+                           deepest visited floor's expected level + margin (see
+                           the EXP options below).
     - ``both``           : the bump gets you most of the way, the EXP boost
                            finishes it through play. Frictionless (default)."""
     display_name = "Level scaling"
@@ -179,13 +180,36 @@ class LevelMargin(Range):
     default = 0
 
 
-class ExpMultiplierMax(Range):
-    """Cap for the catch-up EXP multiplier (it scales with how far under-level you
-    are, up to this much, and is 1x when you're on level)."""
-    display_name = "Catch-up EXP multiplier cap"
+class ExpMultiplierBase(Range):
+    """Flat EXP multiplier applied everywhere while EXP scaling is on (the
+    ``exp_multiplier`` / ``both`` modes). Default 3x: a rando run zig-zags the
+    tower instead of grinding it in vanilla order, so everyone gets a boost.
+    1 = vanilla rate (only the catch-up boost below then applies)."""
+    display_name = "Base EXP multiplier"
+    range_start = 1
+    range_end = 10
+    default = 3
+
+
+class ExpMultiplierCatchup(Range):
+    """EXP multiplier while you're CATCHING UP: your level is at or under the
+    expected level of the deepest floor you've visited, plus the margin below.
+    Replaces the base multiplier whenever the condition holds, so falling behind
+    your furthest progress levels you back fast wherever you choose to fight."""
+    display_name = "Catch-up EXP multiplier"
     range_start = 1
     range_end = 20
-    default = 8
+    default = 5
+
+
+class ExpCatchupMargin(Range):
+    """How many levels ABOVE the deepest-visited floor's expected level still
+    count as catching up (the catch-up multiplier applies while
+    your level <= expected + this). Default 5."""
+    display_name = "Catch-up margin (levels)"
+    range_start = 0
+    range_end = 20
+    default = 5
 
 
 class ProgressiveArmor(DefaultOnToggle):
@@ -226,7 +250,9 @@ class YsOriginOptions(PerGameCommonOptions):
     starting_weapon_level: StartingWeaponLevel
     level_scaling: LevelScaling
     level_margin: LevelMargin
-    exp_multiplier_max: ExpMultiplierMax
+    exp_multiplier_base: ExpMultiplierBase
+    exp_multiplier_catchup: ExpMultiplierCatchup
+    exp_catchup_margin: ExpCatchupMargin
     progressive_armor: ProgressiveArmor
     weapon_requirements: WeaponRequirements
     death_link: DeathLink
