@@ -36,7 +36,13 @@ void mod_log(const char* fmt, ...) {
     fflush(g_logf);
 }
 
+void mh_ensure_init();  // race-safe MinHook init (hook_input.cpp)
 namespace overlay { void draw(); }
+namespace apmenu {
+    void draw();
+    bool on_wm_key(UINT msg, WPARAM wp);
+    bool on_wm_char(WPARAM ch);
+}
 
 // Large font for the overlay's item names (~5x the default), built crisp at its
 // native pixel size. Read by overlay.cpp.
@@ -55,6 +61,12 @@ static bool g_show = true;
 static LRESULT CALLBACK hk_WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_KEYDOWN && wp == VK_INSERT)
         g_show = !g_show;
+    // The Archipelago connect menu gets first crack at keyboard input; it only
+    // consumes keys at the title screen (and while its form is open).
+    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && apmenu::on_wm_key(msg, wp))
+        return 1;
+    if (msg == WM_CHAR && apmenu::on_wm_char(wp))
+        return 1;
     if (g_show && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp))
         return 1;  // ImGui swallowed the input while the overlay is open
     return CallWindowProc(o_WndProc, hwnd, msg, wp, lp);
@@ -114,6 +126,7 @@ static HRESULT WINAPI hk_EndScene(IDirect3DDevice9* dev) {
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
         overlay::draw();
+        apmenu::draw();
         ImGui::EndFrame();
         ImGui::Render();
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
@@ -186,10 +199,7 @@ void hook_d3d9_install() {
         return;
     }
     mod_log("hook_d3d9_install: vtable ok (EndScene=%p Reset=%p)", vt[42], vt[16]);
-    if (MH_Initialize() != MH_OK) {
-        mod_log("hook_d3d9_install: MH_Initialize FAILED");
-        return;
-    }
+    mh_ensure_init();  // race-safe MinHook init shared with input/DI hooks
     MH_STATUS s1 = MH_CreateHook(vt[42], (void*)&hk_EndScene, (void**)&o_EndScene);
     MH_STATUS s2 = MH_CreateHook(vt[16], (void*)&hk_Reset, (void**)&o_Reset);
     MH_STATUS s3 = MH_EnableHook(MH_ALL_HOOKS);

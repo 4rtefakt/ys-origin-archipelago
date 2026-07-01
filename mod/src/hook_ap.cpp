@@ -52,10 +52,11 @@ static const char* AP_GAME = "Ys Origin";
 
 // Connection settings — overridable via `yso_ap.cfg` next to the game exe
 // (key=value lines: host, port, slot, password). Defaults suit local play.
-static char g_host[128] = "127.0.0.1";
+static char g_host[128] = "archipelago.gg";  // menu strips scheme; wss:// implied
 static int  g_port = 38281;
 static char g_slot[128] = "Hugo";
 static char g_pass[128] = "";
+static bool g_autoconnect = false;  // yso_ap.cfg autoconnect=1 -> connect at boot
 static char g_uri[192] = "ws://127.0.0.1:38281";
 // Combat HP = *(module + g_hp_ptr) + g_hp_field, a float (reverse-engineered).
 // g_hp_ptr is a static global holding the player-entity pointer; +0x98 = HP. The
@@ -72,9 +73,14 @@ static void load_config() {
         FILE* w = fopen("yso_ap.cfg", "w");
         if (w) {
             fputs("# Ys Origin Archipelago mod — connection settings.\n"
-                  "# Edit and relaunch the game. host may include a scheme\n"
-                  "# (ws:// or wss://); default is ws:// for local play.\n"
-                  "host=127.0.0.1\nport=38281\nslot=Hugo\npassword=\n", w);
+                  "# These are just DEFAULTS for the in-game connect menu\n"
+                  "# (press F8 at the title screen). No need to edit this file\n"
+                  "# unless you want autoconnect. host may include a scheme\n"
+                  "# (ws:// for local, wss:// for archipelago.gg — the menu\n"
+                  "# adds wss:// automatically if you omit it).\n"
+                  "host=archipelago.gg\nport=38281\nslot=Hugo\npassword=\n"
+                  "# autoconnect=1  # connect at startup with the above (skip the menu)\n",
+                  w);
             fclose(w);
         }
         mod_log("ap: no yso_ap.cfg — wrote a sample; using defaults");
@@ -95,6 +101,7 @@ static void load_config() {
         else if (!strcmp(key, "password")) { strncpy(g_pass, val, sizeof(g_pass) - 1); }
         else if (!strcmp(key, "hp_ptr")) { g_hp_ptr = (int)strtol(val, nullptr, 0); }
         else if (!strcmp(key, "hp_field")) { g_hp_field = (int)strtol(val, nullptr, 0); }
+        else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -113,6 +120,19 @@ static inline int read_current_scene() {
 static APClient* g_ap = nullptr;
 static std::thread g_thread;
 static std::atomic<bool> g_run{false};
+
+// -- runtime (re)connect, driven by the in-game Archipelago menu -------------- #
+// The menu (menu.cpp, main thread) fills these and raises g_conn_req; the poll
+// thread owns the APClient lifecycle, so it does the actual create/teardown
+// (no cross-thread client construction). Startup no longer auto-connects unless
+// `autoconnect=1` is set in yso_ap.cfg — the player connects from the menu.
+static std::mutex g_conn_mtx;
+static std::atomic<bool> g_conn_req{false};
+static char g_req_host[128] = "";
+static int  g_req_port = 0;
+static char g_req_slot[128] = "";
+static char g_req_pass[128] = "";
+static void create_client();  // defined below; builds g_ap on the poll thread
 
 // flag index -> AP location id (set in slot_connected, read in ap_on_check).
 static int64_t g_flag_to_loc[0x200];
@@ -735,6 +755,25 @@ extern "C" void exp_scaling_on_frame() {
 static void poll_loop() {
     while (g_run.load()) {
         cutscene_ff_poll();   // hold-to-fast-forward hotkey (works pre/post connect)
+        // Menu-driven (re)connect: copy the requested settings into the live
+        // config and (re)build the client on THIS thread (it owns g_ap).
+        if (g_conn_req.exchange(false)) {
+            {
+                std::lock_guard<std::mutex> lk(g_conn_mtx);
+                strncpy(g_host, g_req_host, sizeof(g_host) - 1); g_host[sizeof(g_host)-1] = 0;
+                strncpy(g_slot, g_req_slot, sizeof(g_slot) - 1); g_slot[sizeof(g_slot)-1] = 0;
+                strncpy(g_pass, g_req_pass, sizeof(g_pass) - 1); g_pass[sizeof(g_pass)-1] = 0;
+                g_port = g_req_port;
+            }
+            try { create_client(); }
+            catch (const std::exception& e) {
+                mod_log("ap: create_client failed: %s", e.what());
+                overlay::set_status(std::string("connect error: ") + e.what());
+            } catch (...) {
+                mod_log("ap: create_client failed (unknown)");
+                overlay::set_status("connect error");
+            }
+        }
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
@@ -757,14 +796,21 @@ static void poll_loop() {
     }
 }
 
-void ap_install() {
-    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i] = -1;
-    load_config();
+// Build the APClient for the current g_host/g_port/g_slot/g_pass and wire its
+// handlers. MUST run on the poll thread (it owns g_ap's lifecycle). Any existing
+// client is torn down first so this doubles as "reconnect with new settings".
+static void create_client() {
+    if (g_ap) {
+        mod_log("ap: tearing down existing client before reconnect");
+        delete g_ap;
+        g_ap = nullptr;
+    }
     if (strstr(g_host, "://"))
         snprintf(g_uri, sizeof(g_uri), "%s:%d", g_host, g_port);
     else
         snprintf(g_uri, sizeof(g_uri), "ws://%s:%d", g_host, g_port);
-    mod_log("ap: creating client (game=%s uri=%s)", AP_GAME, g_uri);
+    mod_log("ap: creating client (game=%s uri=%s slot=%s)", AP_GAME, g_uri, g_slot);
+    overlay::set_status(std::string("connecting to ") + g_uri + " ...");
     g_ap = new APClient("YsOrigin-Mod", AP_GAME, g_uri);
 
     g_ap->set_socket_connected_handler([]() {
@@ -799,9 +845,39 @@ void ap_install() {
         g_pending_death.store(true);
         mod_log("ap: <- DeathLink (%s)", cause.c_str());
     });
+    // apclientpp drives the socket connection from poll() — no explicit connect.
+}
+
+// -- public API (called from menu.cpp, main thread) ------------------------- #
+
+// Request a (re)connect with the given settings. The poll thread performs it.
+void ap_request_connect(const char* host, int port, const char* slot,
+                        const char* pass) {
+    std::lock_guard<std::mutex> lk(g_conn_mtx);
+    strncpy(g_req_host, host, sizeof(g_req_host) - 1); g_req_host[sizeof(g_req_host)-1] = 0;
+    strncpy(g_req_slot, slot, sizeof(g_req_slot) - 1); g_req_slot[sizeof(g_req_slot)-1] = 0;
+    strncpy(g_req_pass, pass, sizeof(g_req_pass) - 1); g_req_pass[sizeof(g_req_pass)-1] = 0;
+    g_req_port = port;
+    g_conn_req.store(true);
+    mod_log("ap: connect requested from menu (host=%s port=%d slot=%s)", host, port, slot);
+}
+
+// Prefill accessors for the menu (defaults from yso_ap.cfg).
+const char* ap_cfg_host() { return g_host; }
+int         ap_cfg_port() { return g_port; }
+const char* ap_cfg_slot() { return g_slot; }
+const char* ap_cfg_pass() { return g_pass; }
+
+void ap_install() {
+    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i] = -1;
+    load_config();               // prefill defaults for the in-game menu
+    overlay::set_status("not connected - open the Archipelago menu");
 
     g_run.store(true);
     g_thread = std::thread(poll_loop);
     g_thread.detach();  // let the process exit cleanly (no join at teardown)
-    mod_log("ap: poll thread started");
+    mod_log("ap: poll thread started (autoconnect=%d)", (int)g_autoconnect);
+
+    if (g_autoconnect)
+        ap_request_connect(g_host, g_port, g_slot, g_pass);
 }

@@ -95,7 +95,9 @@ add_library(dinput8 SHARED
     src/hook_ap.cpp
     src/hook_bridge.cpp
     src/hook_watch.cpp
+    src/hook_input.cpp
     src/overlay.cpp
+    src/menu.cpp
     src/exports.def
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp

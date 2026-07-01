@@ -8,6 +8,8 @@
 
 static HMODULE g_real = nullptr;
 
+extern "C" void input_on_dinput8_created(void* idi8);  // hook_input.cpp
+
 void proxy_load_real() {
     if (g_real) return;
     char path[MAX_PATH];
@@ -27,7 +29,11 @@ HRESULT WINAPI DirectInput8Create(HINSTANCE hinst, DWORD ver, const void* riid,
                                   void** out, void* outer) {
     typedef HRESULT(WINAPI* fn)(HINSTANCE, DWORD, const void*, void**, void*);
     static fn p = (fn)real("DirectInput8Create");
-    return p ? p(hinst, ver, riid, out, outer) : E_FAIL;
+    if (!p) return E_FAIL;
+    HRESULT hr = p(hinst, ver, riid, out, outer);
+    if (SUCCEEDED(hr) && out && *out)
+        input_on_dinput8_created(*out);   // hook CreateDevice -> GetDeviceState
+    return hr;
 }
 
 HRESULT WINAPI DllCanUnloadNow() {

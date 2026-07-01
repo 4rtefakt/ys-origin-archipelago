@@ -47,26 +47,28 @@ C:\Program Files (x86)\Steam\steamapps\common\Ys Origin\
 
 (To uninstall later, just delete that file.)
 
-### Step 5 — Point the mod at the server
-**Launch the game once and quit.** The mod creates a file called
-**`yso_ap.cfg`** next to `yso_win.exe`. Open it in Notepad and fill in your room:
+### Step 5 — Connect from the in-game menu
+Launch the game. On the **title screen** there's a new **Archipelago** entry just
+above *New Game* — **press `F8`** to open the connect menu. Fill in:
 
-```ini
-host=archipelago.gg
-port=12345
-slot=YourName
-password=
-```
+- **Server** — e.g. `archipelago.gg` (the secure `wss://` is added automatically)
+- **Port** — your room's port
+- **Slot / Name** — the **name** you put in your yaml
+- **Password** — leave blank if there isn't one
 
-(`slot` is the **name** you put in your yaml. Leave `password` blank if there
-isn't one.) Save.
+Use **Tab** or **↑/↓** to move between fields, type to edit, then press **Enter**
+to connect. The status line shows the result. That's it — no file editing needed.
+
+> **Prefer a config file?** The mod reads **`yso_ap.cfg`** next to `yso_win.exe`
+> (created on first launch) for the menu's default values. Set `autoconnect=1`
+> there to connect automatically at startup and skip the menu.
 
 ### Step 6 — Play!
-Launch the game and load your save (or start a New Game). Top-right you'll see an
-**"Archipelago"** overlay showing your connection, your current room, and items.
-Open chests / trigger checks as normal — you'll get the **randomized** item, and
-items other players find for you arrive automatically. **Press `INSERT`** to
-hide/show the overlay.
+Load your save or start a New Game. Top-right you'll see an **"Archipelago"**
+overlay showing your connection, your current room, and items. Open chests /
+trigger checks as normal — you'll get the **randomized** item, and items other
+players find for you arrive automatically. **Press `INSERT`** to hide/show the
+overlay.
 
 > Stuck connecting? See [Troubleshooting](#-troubleshooting) below.
 

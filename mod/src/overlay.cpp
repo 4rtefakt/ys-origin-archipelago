@@ -35,6 +35,11 @@ void set_room(const std::string& text) {
     g_room = text;
 }
 
+std::string get_status() {
+    std::lock_guard<std::mutex> lk(g_mtx);
+    return g_status;
+}
+
 // -- drawn from the render thread ------------------------------------------ #
 
 // Draw one right-aligned line as floating HUD text at a given font/size: a black
