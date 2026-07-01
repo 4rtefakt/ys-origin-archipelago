@@ -58,7 +58,11 @@ ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 # index<->name map is provisional (blessings). Marked EXCLUDED so AP only puts
 # FILLER there -> seeds stay beatable via the confirmed checks. Upgrade once
 # their live detection / mapping is pinned.
-EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36BC58)
+# blessing left this set with the shop rando: purchases are live-detected (the
+# bitfield poll), so blessings can hold real/progression items — buy a blessing,
+# get a check. boss stays excluded (detection is arena ENTRY, not the kill);
+# room stays excluded (scene-entry checks hold filler by design).
+EXCLUDED_TYPES: Set[str] = {"boss", "room"}   # floor live 0x36BC58; blessing live 0x36BC80
 
 # Filler for sanity locations. ONLY items that are safe to grant in unbounded
 # quantity may go here:
@@ -610,6 +614,58 @@ def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
             continue
         out[_region_of_location(l)].append(l["name"])
     return dict(out)
+
+
+# -- overlay tracker maps (published in slot_data) --------------------------- #
+
+def scene_locations_map(active: Set[str], name_to_id: Dict[str, int]
+                        ) -> Dict[str, List[int]]:
+    """scene leaf number (str) -> AP location ids of the ACTIVE locations tied to
+    that scene (chests, events, statues, rooms, bosses). Drives the overlay's
+    per-room "checks here" tracker; floor/blessing checks have no scene."""
+    out: Dict[str, List[int]] = defaultdict(list)
+    for l in _LOCS:
+        if l["name"] not in active:
+            continue
+        sc = _scene_of(l)
+        if sc:
+            out[str(int(sc[2:]))].append(name_to_id[l["name"]])
+    return dict(out)
+
+
+def floor_locations_map(active: Set[str], name_to_id: Dict[str, int]
+                        ) -> Dict[str, List[int]]:
+    """tower floor (str) -> AP location ids of the ACTIVE locations on it (via
+    each location's scene; "Reach NF" belongs to floor N). Drives the overlay's
+    per-floor remaining-checks list shown at statues (the warp menu's floors)."""
+    out: Dict[str, List[int]] = defaultdict(list)
+    for l in _LOCS:
+        if l["name"] not in active:
+            continue
+        fl: Optional[int] = None
+        if l["type"] == "floor":
+            fl = l.get("detect", {}).get("floor")
+        else:
+            sc = _scene_of(l)
+            if sc:
+                fl = scene_floor(int(sc[2:]))
+        if fl:
+            out[str(int(fl))].append(name_to_id[l["name"]])
+    return dict(out)
+
+
+def blessing_location_names(active: Set[str], name_to_id: Dict[str, int]
+                            ) -> Dict[str, str]:
+    """AP location id (str) -> short blessing name ("Increase SP gain") for the
+    active blessing locations. Drives the shop-hints overlay panel (what item a
+    blessing purchase actually gives, per the scout data)."""
+    out: Dict[str, str] = {}
+    for l in _LOCS:
+        if l["type"] != "blessing" or l["name"] not in active:
+            continue
+        short = l["name"].split(": ", 1)[-1]
+        out[str(name_to_id[l["name"]])] = short
+    return out
 
 
 # Detection methods the live client can actually observe today. A location whose

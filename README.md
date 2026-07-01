@@ -116,6 +116,20 @@ overlay.
   Receiving Cleria Ore upgrades your weapon directly (no NPC trip). On by default;
   pairs with level scaling so warped-ahead floors stay playable. See
   `weapon_requirements`.
+- **Blessing shop rando** — Divine Blessings can hold real multiworld items:
+  pay SP at any goddess statue, get a check (you keep the blessing's effect
+  too). With `shop_hints` on, the overlay lists what each blessing actually
+  gives while you're at a statue, so purchases are informed choices. SP drops
+  and SP filler items feed the economy.
+- **Overlay trackers** — a "Checks here: k/n" line for the current room
+  (top-right, under the room name), and a per-floor remaining-checks panel that
+  appears at goddess statues (where the warp menu lives) — F7 toggles it
+  anywhere else.
+- **Seed-scoped saves** — while connected, save files are transparently
+  redirected to an `archipelago_<seed>/` folder next to the normal saves:
+  AP runs never touch your vanilla saves, and each multiworld keeps its own
+  save set. Vanilla/offline play is unaffected (`save_redirect=0` in
+  `yso_ap.cfg` disables it).
 - **Goal:** defeat Darm (the final boss), or optionally all bosses.
 
 ## ⚙️ Options (in your yaml)
@@ -129,6 +143,7 @@ overlay.
 | `boss_checks` | `true` / `false` | `true` | Reaching each boss arena is a check |
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
+| `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | **Start anywhere.** With `statue_warp_locks` on, New Game spawns you at a random statue: the mod skips the whole intro (movies + cutscenes, every character) and warps you there geared for the floor; bidirectional warp-network logic keeps the seed beatable from any spawn |
 | `max_starting_floor` | `1`–`25` | `10` | Cap the `random_start` spawn to statues on this floor or below, so New Game never drops you on the brutal deep floors with no gear behind you. Lower = gentler openings; raise for more variety. No effect unless `random_start` is on |

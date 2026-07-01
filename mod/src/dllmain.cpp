@@ -9,12 +9,14 @@ void bridge_install();
 void ap_install();
 void watch_install();
 void input_hooks_install();
+void saveredir_install();
 void mod_log(const char* fmt, ...);
 
 static DWORD WINAPI init_thread(LPVOID) {
     mod_log("init_thread: started, installing hooks");
     hook_d3d9_install();   // overlay (runs MH_Initialize)
     input_hooks_install(); // freeze game input while the AP connect form is open
+    saveredir_install();   // per-seed save folders while connected to AP
     bridge_install();      // localhost socket bridge (legacy / fallback)
     ap_install();          // self-contained Archipelago client (apclientpp)
     hook_vm_install();     // event-VM grant interception (suppress/detect/give)
