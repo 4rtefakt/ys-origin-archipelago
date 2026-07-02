@@ -377,7 +377,10 @@ static std::map<std::string, std::vector<int>> g_prog_gear;
 static int g_character = 1;              // 0=Yunica 1=Hugo 2=Toal (slot_data character)
 static int g_spawn_reg_idx = -1;         // warp-registry index of the spawn statue
 static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statue
+extern "C" __declspec(dllimport) unsigned long __stdcall GetTickCount(void);
 static std::atomic<bool> g_saw_intro{false};     // New-Game intro (scene 2) seen
+static std::atomic<unsigned long> g_intro_arm_tick{0};  // GetTickCount when armed
+static const unsigned long kIntroDelayMs = 3000; // let the intro play a beat first
 static std::atomic<bool> g_force_spawn_done{false};
 static std::atomic<bool> g_warp_request{false};  // manual test hotkey -> main thread
 static volatile int g_warp_idx = -1;     // target for do_warp_native()
@@ -902,8 +905,10 @@ static void poll_scene() {
     // per session (g_force_spawn_done not re-armed here, so a 7xxx cutscene playing
     // again mid-game can't re-warp the player).
     if (scene == 2 || (scene >= 7000 && scene < 8000)) {
-        if (!g_saw_intro.exchange(true))
+        if (!g_saw_intro.exchange(true)) {
+            g_intro_arm_tick.store(GetTickCount());
             mod_log("force-spawn: armed (New Game intro scene %d seen)", scene);
+        }
         g_expected_hi = 0;   // New Game: forget the last run's deepest floor
     }
 
@@ -1354,11 +1359,14 @@ extern "C" void exp_scaling_on_frame() {
     // (control handed over) and warp a short beat later.
     int cur_scene = read_current_scene();
     bool entity = *kPlayerEntPtr != nullptr;
-    // Fire on the FIRST frame the intro gives us a player entity — do NOT wait,
-    // because the intro cutscene flickers scene 2 <-> 0 and the entity appears
-    // only briefly, so any multi-frame settle never completes. The warp itself
-    // forces the scene change that aborts the cutscene (the proven v1.4.0 path).
-    bool auto_intro = !g_force_spawn_done.load() && g_saw_intro.load() &&
+    // Wait a WALL-CLOCK beat after the intro arms (kIntroDelayMs) so the intro
+    // actually starts playing before we cut it — a frame COUNTER can't be used
+    // because the cutscene flickers scene 2 <-> 0 and would reset it. After the
+    // delay, fire on the next frame a player entity exists (the warp then forces
+    // the scene change that aborts the intro).
+    bool delay_passed = g_saw_intro.load() &&
+        (GetTickCount() - g_intro_arm_tick.load()) >= kIntroDelayMs;
+    bool auto_intro = !g_force_spawn_done.load() && delay_passed &&
                       entity && cur_scene >= 2;
     if (spawn_seed && (manual || auto_intro)) {
         g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
