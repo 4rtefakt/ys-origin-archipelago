@@ -27,10 +27,10 @@ Ys Origin:
                          #   false = blind buys
 
   # --- blessing shop economy (the mod's own F5 shop overlay) ---
-  blessing_costs: vanilla # vanilla | random
-                          #   vanilla = buy from the game's statue menu as usual
-                          #   random  = the mod's F5 shop sells blessings at
-                          #             seed-randomized SP prices (min/max below)
+  blessing_costs: vanilla # vanilla | shuffled
+                          #   vanilla  = buy from the game's statue menu as usual
+                          #   shuffled = the mod's F5 shop sells blessings at
+                          #              seed-randomized SP prices (min/max below)
   blessing_cost_min: 100  # cheapest possible randomized price (SP)
   blessing_cost_max: 800  # priciest possible randomized price (SP)
   blessing_shop_unlock: all # all | one_per_floor

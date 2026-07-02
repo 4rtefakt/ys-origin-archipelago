@@ -214,14 +214,15 @@ class ExpCatchupMargin(Range):
 
 class BlessingCosts(Choice):
     """Blessing shop economy. ``vanilla`` = buy from the game's own statue menu
-    at its normal prices. ``random`` = the mod's OWN shop overlay (F5) sells the
-    blessings at seed-randomized SP prices (between the min/max below) — the
+    at its normal prices. ``shuffled`` = the mod's OWN shop overlay (F5) sells
+    the blessings at seed-randomized SP prices (between the min/max below) — the
     vanilla menu still works at vanilla prices, but the overlay shop is where
     the deals (and ripoffs) are. Purchases either way grant the blessing effect
-    AND the multiworld check."""
+    AND the multiworld check. (The value can't be called ``random`` — that's a
+    reserved yaml keyword for Choice options in Archipelago.)"""
     display_name = "Blessing costs"
     option_vanilla = 0
-    option_random = 1
+    option_shuffled = 1
     default = 0
 
 
@@ -279,6 +280,18 @@ class WeaponRequirements(DefaultOnToggle):
     display_name = "Weapon requirements"
 
 
+class ExpMultiplierMax(Range):
+    """DEPRECATED (v1.6.0): the single EXP cap was replaced by the
+    ``exp_multiplier_base`` / ``exp_multiplier_catchup`` pair. Kept as an accepted
+    no-op so yamls written for v1.3.0-1.5.0 still generate without error; the
+    value is ignored. Set the two replacement options instead."""
+    display_name = "EXP multiplier max (deprecated)"
+    range_start = 1
+    range_end = 20
+    default = 1
+    visibility = 0  # hidden from templates/webhost — legacy compatibility only
+
+
 @dataclass
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
@@ -300,6 +313,7 @@ class YsOriginOptions(PerGameCommonOptions):
     exp_multiplier_base: ExpMultiplierBase
     exp_multiplier_catchup: ExpMultiplierCatchup
     exp_catchup_margin: ExpCatchupMargin
+    exp_multiplier_max: ExpMultiplierMax  # deprecated no-op (legacy yaml compat)
     progressive_armor: ProgressiveArmor
     shop_hints: ShopHints
     blessing_costs: BlessingCosts

@@ -249,6 +249,9 @@ class YsOriginWorld(World):
             # expected level keyed by SCENE (current_floor/0xCF is unreliable for
             # warp destinations; the mod reads current_scene/0x1F9 reliably).
             "scene_levels": dt.scene_levels(),
+            # scene leaf number -> tower floor, for reliable "distinct floors
+            # visited" (blessing-shop one-per-floor pacing) off current_scene.
+            "scene_floors": dt.scene_floors(),
             "location_signals": {
                 n: i for n, i in self.location_name_to_id.items() if n in active
             },

@@ -68,10 +68,11 @@ static bool at_title() {
 static void prefill_once() {
     if (g_prefilled) return;
     g_prefilled = true;
-    // Show the bare hostname — the wss:// scheme is implied (re-added on connect).
+    // Strip only the implied "wss://" prefix (re-added on connect); KEEP an
+    // explicit "ws://" so a local/plain-WebSocket cfg host stays plain instead of
+    // being silently upgraded to TLS (which never handshakes against a ws:// server).
     std::string h = ap_cfg_host();
-    size_t s = h.find("://");
-    if (s != std::string::npos) h = h.substr(s + 3);
+    if (h.rfind("wss://", 0) == 0) h = h.substr(6);
     if (h.empty()) h = "archipelago.gg";
     g_fields[F_HOST] = h;
     char portbuf[16]; snprintf(portbuf, sizeof(portbuf), "%d", ap_cfg_port());

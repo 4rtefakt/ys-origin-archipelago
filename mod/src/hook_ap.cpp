@@ -72,6 +72,10 @@ static char g_uri[192] = "ws://127.0.0.1:38281";
 // HUD/menu HP cells are mirrors that do NOT drive death — this entity HP does.
 static int g_hp_ptr = 0x349D44;     // module-relative static entity pointer
 static int g_hp_field = 0x98;       // HP offset within the entity
+// Filled from yso_ap.cfg in load_config; documented at their feature blocks
+// (overlay blessing shop / goal reporting) further down.
+static int g_bless_arr_idx[32];     // bless_idx_N: bit -> state-array idx (-1 unmapped)
+static int g_goal_scene = 0;        // goal_scene=: ending scene (0 = not configured)
 
 static void strip_eol(char* s) { s[strcspn(s, "\r\n")] = '\0'; }
 
@@ -135,6 +139,13 @@ static void load_config() {
 
 static const uintptr_t kGFlagsAbs = 0x0076B91C;  // runtime g_flags base
 static const int kGFlagsRel = 0x0036B91C;        // module-relative (slot_data offsets)
+// Sanity window for a module-relative poll offset before we dereference it every
+// tick. The real out-of-g_flags cells (armor blessing 0x36A684, floor/bit cells
+// ~0x36BCxx) all live in the exe's .data band ~0x36xxxx; a corrupt or version-
+// skewed slot_data offset outside this range would fault the poll thread.
+static inline bool poll_offset_ok(int off) {
+    return off >= 0x300000 && off < 0x400000;
+}
 // Current loaded scene = g_flags[0x1F9] (abs 0x0076C100), as a decimal leaf
 // number (S_1004 -> 1004). Stable per room, changes on transition. Drives
 // scene-method check detection (boss / room locations) + the overlay room line.
@@ -159,6 +170,7 @@ static int  g_req_port = 0;
 static char g_req_slot[128] = "";
 static char g_req_pass[128] = "";
 static void create_client();  // defined below; builds g_ap on the poll thread
+static void reset_floor_prev();  // clears the Reach-NF crossing baseline (poll section)
 
 // flag index -> AP location ids (set in slot_connected, read in ap_on_check).
 // A VECTOR per flag: one event flag can be several AP locations (the elemental
@@ -206,15 +218,17 @@ static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap fi
 static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
 static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
 static std::set<int> g_floors_seen;                  // distinct floors visited
-static int g_bless_arr_idx[32];                      // bit -> state-array idx (-1 unmapped)
 static const uintptr_t kSpAbs = kGFlagsAbs + 0xD8 * 4;         // SP currency
+// Guards read-modify-write of the SP cell: the F5 shop deducts on the game main
+// thread while SP-filler grants add on the poll thread — without this a lost
+// update either drops a grant or hands out a free blessing.
+static std::mutex g_sp_mtx;
 static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
 static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
 static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
 // Goal reporting: entering the ending scene sends StatusUpdate(GOAL) once. The
 // ending scene id is not RE'd yet — set goal_scene= in yso_ap.cfg after one
 // live capture (kill Darm, read the scene number off the log/overlay).
-static int g_goal_scene = 0;              // cfg goal_scene= (0 = not configured)
 static bool g_goal_sent = false;
 // Chat send queue (chat.cpp input -> poll thread -> g_ap->Say).
 static std::mutex g_say_mtx;
@@ -308,6 +322,7 @@ static int g_exp_catchup_margin = 5;
 static int g_expected_hi = 0;          // deepest visited floor's expected level
                                        // (session high-water; reset on New Game)
 static std::map<int, int> g_scene_levels;  // scene number -> expected level
+static std::map<int, int> g_scene_floors;  // scene number -> tower floor (shop pacing)
 static std::atomic<int> g_pending_level{0};  // bump requested; applied on the main thread
 static inline int read_level() { return *(volatile int*)kLevelAbs; }
 
@@ -532,6 +547,29 @@ static void on_slot_connected(const nlohmann::json& sd) {
     g_poll_vals.clear();
     g_poll_floors.clear();
     g_loc_bitmap.clear();
+    // Per-session dedupe/progress state must also reset on a (re)connect, or a
+    // second connection in the same process (the F8 menu allows switching rooms
+    // without restarting) inherits the previous room's fired/checked/floor state.
+    // Location ids are identical across seeds, so stale entries would silently
+    // swallow this room's checks and mislabel the shop. g_floor_prev is defined
+    // below (poll section) — reset via the extern helper declared there.
+    g_poll_fired.clear();
+    g_scene_fired.clear();
+    g_goal_sent = false;
+    g_applied_through = -1;
+    reset_floor_prev();
+    // Re-arm force-spawn from the connect point: discard any intro scene the
+    // title/attract screen showed BEFORE the player connected, so a fresh F8
+    // connect at the title can't burn the one-shot warp on nothing (which left
+    // the real New Game to play the full intro). It now fires only when the intro
+    // scene is entered AFTER connecting — i.e. the player actually starts a game.
+    g_saw_intro.store(false);
+    g_force_spawn_done.store(false);
+    {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        g_checked.clear();
+        g_floors_seen.clear();
+    }
     if (sd.contains("location_detect")) {
         const auto& sig = sd.contains("location_signals") ? sd["location_signals"]
                                                           : nlohmann::json::object();
@@ -547,10 +585,13 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     g_loc_flag[idx] = true;
                     std::lock_guard<std::mutex> lk(g_reg_mtx);
                     g_flag_to_loc[idx].push_back(loc);
-                } else {
+                } else if (poll_offset_ok(off)) {
                     // Outside g_flags (e.g. the armor blessing cell): the VM
                     // store hook can't see it — poll for value >= 1 instead.
                     g_poll_vals.push_back({kImageBase + (uintptr_t)off, loc});
+                } else {
+                    mod_log("ap: WARN dropped flag detect, offset 0x%X out of range", off);
+                    continue;
                 }
                 scout.push_back(loc);
                 locs++;
@@ -558,6 +599,10 @@ static void on_slot_connected(const nlohmann::json& sd) {
                 // Blessing purchases: one bitfield cell, one bit per blessing.
                 // Written natively by the shop menu -> poll, don't hook.
                 int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                if (!poll_offset_ok(off)) {
+                    mod_log("ap: WARN dropped bit detect, offset 0x%X out of range", off);
+                    continue;
+                }
                 g_poll_bits.push_back({kImageBase + (uintptr_t)off,
                                        d["bit"].get<int>(), loc});
                 g_loc_bitmap[loc] = d["bit"].get<int>();
@@ -566,6 +611,10 @@ static void on_slot_connected(const nlohmann::json& sd) {
             } else if (method == "floor" && d.contains("offset") && d.contains("floor")) {
                 // "Reach NF": fires once current_floor reaches N (native write).
                 int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                if (!poll_offset_ok(off)) {
+                    mod_log("ap: WARN dropped floor detect, offset 0x%X out of range", off);
+                    continue;
+                }
                 g_poll_floors.push_back({kImageBase + (uintptr_t)off,
                                          d["floor"].get<int>(), loc});
                 scout.push_back(loc);
@@ -704,6 +753,11 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["scene_levels"].items())
             g_scene_levels[atoi(kv.key().c_str())] = kv.value().get<int>();
     }
+    g_scene_floors.clear();
+    if (sd.contains("scene_floors")) {
+        for (auto& kv : sd["scene_floors"].items())
+            g_scene_floors[atoi(kv.key().c_str())] = kv.value().get<int>();
+    }
     if (g_level_scaling)
         mod_log("ap: level scaling mode=%d (margin %d, exp x%d base / x%d catch-up +%d)",
                 g_level_scaling, g_level_margin, g_exp_base_mult,
@@ -737,6 +791,7 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         auto pg = g_prog_gear.find(name);
         if (sp != g_sp_items.end()) {
             // SP filler: add straight to the SP currency cell (give semantics).
+            std::lock_guard<std::mutex> lk(g_sp_mtx);   // vs main-thread shop buy
             ap_give(g_sp_flag_idx, sp->second);
         } else if (pg != g_prog_gear.end()) {
             // Progressive gear: grant the first unowned tier in the ladder.
@@ -853,6 +908,15 @@ static void poll_scene() {
         } catch (...) {}
     }
 
+    // Blessing-shop one-per-floor pacing: count distinct floors from the RELIABLE
+    // current scene (the floor cell is wrong for warp destinations). Fed here on
+    // every room change so warping to a statue still advances the shop.
+    auto fl = g_scene_floors.find(scene);
+    if (fl != g_scene_floors.end() && fl->second >= 1 && fl->second <= 26) {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        g_floors_seen.insert(fl->second);
+    }
+
     auto it = g_scene_name.find(scene);
     char room[160];
     if (it != g_scene_name.end())
@@ -908,6 +972,8 @@ static void fire_poll_locs(const std::vector<int64_t>& fire) {
 // start warp or a mid-run reconnect can't spray Reach-NF checks never earned.
 // Only polled once a scene is loaded, so New-Game/menu garbage can't misfire.
 static std::map<uintptr_t, int> g_floor_prev;   // floor cell -> last seen value
+static std::atomic<bool> g_reprime_floor{false};  // set after a warp: rebaseline, don't fire
+static void reset_floor_prev() { g_reprime_floor.store(true); }
 static void poll_value_checks() {
     if (read_current_scene() <= 0) return;
     std::vector<int64_t> fire;
@@ -918,6 +984,10 @@ static void poll_value_checks() {
     for (const auto& pv : g_poll_vals)
         if (*(volatile int*)pv.abs >= 1 && g_poll_fired.insert(pv.loc).second)
             fire.push_back(pv.loc);
+    // A pending reprime (New Game / force-spawn / any warp) means the floor cell
+    // just jumped for a reason that is NOT the player climbing — swallow this
+    // tick's crossings so a spawn at 10F can't spray Reach-2F..10F.
+    bool reprime = g_reprime_floor.exchange(false);
     std::map<uintptr_t, int> cur_floor;
     for (const auto& pf : g_poll_floors)
         cur_floor[pf.abs] = *(volatile int*)pf.abs;
@@ -927,9 +997,14 @@ static void poll_value_checks() {
             std::lock_guard<std::mutex> lk(g_checked_mtx);
             g_floors_seen.insert(cur);    // shop unlock pacing (one-per-floor)
         }
+        if (reprime) continue;            // baseline this tick, fire nothing
         auto pit = g_floor_prev.find(pf.abs);
-        int prev = (pit != g_floor_prev.end()) ? pit->second : cur;  // prime
-        if (cur >= pf.floor_n && pf.floor_n > prev &&
+        if (pit == g_floor_prev.end()) continue;  // first sighting: prime only, below
+        int prev = pit->second;
+        // Fire only on ARRIVING at exactly floor_n from below (cur == floor_n),
+        // not on any cur >= floor_n span — so a multi-floor warp doesn't back-fill
+        // every intermediate Reach-NF the player never actually walked into.
+        if (cur == pf.floor_n && pf.floor_n > prev &&
             g_poll_fired.insert(pf.loc).second)
             fire.push_back(pf.loc);
     }
@@ -973,7 +1048,10 @@ static void update_trackers() {
         std::lock_guard<std::mutex> lk(g_scout_mtx);
         scouted = g_loc_found.size();
     }
+    // F7 is a per-room override of the auto behavior: reset it on a room change
+    // so it defaults back (shown at statues, hidden elsewhere) each new room.
     static int last_scene = -2;
+    if (g_last_scene != last_scene) g_panel_toggle = false;
     static size_t last_checked = (size_t)-1, last_scouted = (size_t)-1;
     static bool last_toggle = false;
     if (g_last_scene == last_scene && checked == last_checked &&
@@ -995,8 +1073,10 @@ static void update_trackers() {
     }
     overlay::set_tracker(tr);
 
+    // Auto-show at goddess statues; F7 flips that default for the current room
+    // (so it can be hidden AT a statue, or shown anywhere else).
     bool at_statue = g_statue_scene_set.count(scene) != 0;
-    if (!at_statue && !g_panel_toggle) {
+    if (!(at_statue ^ g_panel_toggle)) {
         overlay::set_panel("");
         return;
     }
@@ -1080,12 +1160,16 @@ std::string ap_shop_line(int i) {
         it = g_shop_items[i];
     }
     std::string found = "?";
+    int fl = 0;
     {
+        // g_scout_mtx guards BOTH g_loc_found and g_loc_flags — on_location_info
+        // rebuilds them on the poll thread while this runs on the render thread.
         std::lock_guard<std::mutex> lk(g_scout_mtx);
         auto f = g_loc_found.find(it.loc);
         if (f != g_loc_found.end()) found = f->second;
+        auto ff = g_loc_flags.find(it.loc);
+        if (ff != g_loc_flags.end()) fl = ff->second;
     }
-    int fl = g_loc_flags.count(it.loc) ? g_loc_flags[it.loc] : 0;
     const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
     char buf[256];
     if (shop_item_owned(it))
@@ -1109,9 +1193,12 @@ bool ap_shop_buy(int i) {
         it = g_shop_items[i];
     }
     if (shop_item_owned(it) || !shop_item_unlocked(i)) return false;
-    volatile int* sp = (volatile int*)kSpAbs;
-    if (*sp < it.cost) return false;
-    *sp = *sp - it.cost;
+    {
+        std::lock_guard<std::mutex> lk(g_sp_mtx);   // vs poll-thread SP grants
+        volatile int* sp = (volatile int*)kSpAbs;
+        if (*sp < it.cost) return false;
+        *sp = *sp - it.cost;
+    }
     *(volatile int*)kBlessBitsAbs |= (1 << it.bit);      // purchase bit -> check
     int idx = (it.bit >= 0 && it.bit < 32) ? g_bless_arr_idx[it.bit] : -1;
     if (idx >= 0) {
@@ -1222,6 +1309,9 @@ static void force_spawn() {
     g_warp_idx = g_spawn_reg_idx;
     do_warp_native();
     if (g_start_weapon > 0) g_pending_weapon.store(g_start_weapon);
+    // The warp jumps the floor cell for a non-climb reason — rebaseline the
+    // Reach-NF crossing detector so it doesn't spray floor checks on arrival.
+    reset_floor_prev();
     mod_log("force-spawn: warped to spawn S_%d (reg idx %d), weapon=%d, crystal idx 0x%X",
             g_start_statue_scene, g_spawn_reg_idx, g_start_weapon, crystal_idx);
 }
@@ -1240,10 +1330,16 @@ extern "C" void exp_scaling_on_frame() {
     // re-triggers manually.
     bool spawn_seed = g_start_statue_scene > 0 && g_start_statue_scene != 1000;
     bool manual = g_warp_request.exchange(false);
+    // Auto-fire only while still in the intro scene (2 = Hugo/Yunica opening,
+    // 7xxx = Toal), never on arbitrary gameplay scenes, and only after a player
+    // entity exists. g_saw_intro is re-armed at connect, so this can't trip on a
+    // pre-connect title screen.
+    int cur_scene = read_current_scene();
+    bool in_intro = cur_scene == 2 || (cur_scene >= 7000 && cur_scene < 8000);
     bool auto_intro = !g_force_spawn_done.load() && g_saw_intro.load() &&
-                      read_current_scene() >= 2 && *kPlayerEntPtr != nullptr;
+                      in_intro && *kPlayerEntPtr != nullptr;
     if (spawn_seed && (manual || auto_intro)) {
-        g_force_spawn_done.store(true);
+        g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
         force_spawn();
     }
 

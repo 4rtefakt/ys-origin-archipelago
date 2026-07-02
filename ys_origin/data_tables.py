@@ -407,8 +407,8 @@ def start_statue_candidates(max_floor: int) -> List[int]:
 # are the anchors; non-boss floors interpolated. NOTE the steep Demonic Core spike
 # (21F~32 -> 22F~41) and that useful levels run to ~52 at the summit (max 60).
 FLOOR_LEVELS: Dict[int, int] = {
-    1: 1, 2: 4, 3: 6, 4: 8, 5: 9,           # Wailing Blue (5F Beast 9)
-    6: 11, 7: 13, 8: 15, 9: 17,             # Flooded Prison (9F Arthropod 17)
+    1: 1, 2: 2, 3: 3, 4: 4, 5: 6,           # Wailing Blue (gentle opening; 5F Beast 6)
+    6: 9, 7: 12, 8: 15, 9: 17,              # Flooded Prison (9F Arthropod 17)
     10: 18, 11: 19, 12: 20, 13: 21,         # Flames of Guilt (13F Monk 20, win 23)
     14: 22, 15: 23, 16: 24, 17: 25,         # Silent Sands (17F Construct ~23-25)
     18: 27, 19: 32, 20: 36, 21: 41,         # Corrupted Blood (21F Mantid = guide "Lv41")
@@ -525,6 +525,20 @@ def scene_levels() -> Dict[str, int]:
         _lvl = FLOOR_LEVELS.get(_floor) if _floor else None
         if _lvl:
             out[str(_leaf)] = _lvl
+    return out
+
+
+def scene_floors() -> Dict[str, int]:
+    """scene leaf number (as str) -> tower floor number. Same rationale as
+    scene_levels: the mod derives "distinct floors visited" (blessing-shop
+    one-per-floor pacing) from the reliable current_scene, not the warp-unreliable
+    current_floor cell."""
+    out: Dict[str, int] = {}
+    for _sc in SCENE_ROOM:
+        _leaf = int(_sc[2:])
+        _floor = scene_floor(_leaf)
+        if _floor:
+            out[str(_leaf)] = _floor
     return out
 
 # Per-character room-logic gate substitutions for items a character lacks. Toal

@@ -102,6 +102,12 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
             and (n == 0 or state.has(CLERIA_ORE, player, n))
             and (a is None or state.can_reach(a, "Region", player))
         )
+        # An entrance rule that depends on region reachability MUST register the
+        # anchor region as an indirect condition, or AP's sweep won't re-evaluate
+        # this warp edge when the anchor floor later becomes reachable within the
+        # same pass -> stale false-negatives -> nondeterministic fill failures.
+        if anchor is not None:
+            mw.register_indirect_condition(mw.get_region(anchor, player), entrance)
 
     # Per-scene room logic (bidirectional graph), character-transformed.
     for (src, dst), req in open_scene_edge_requirements().items():

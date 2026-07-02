@@ -16,6 +16,7 @@
 // (hook_ap.cpp -> push()); everything is mutex-guarded.
 #include "imgui.h"
 
+#include <cfloat>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -86,7 +87,9 @@ bool on_wm_char(unsigned long long wp) {
     return true;
 }
 
-// Drawn from the D3D9 EndScene hook, inside the ImGui frame.
+// Drawn from the D3D9 EndScene hook, inside the ImGui frame. Anchored bottom-
+// RIGHT over a translucent backdrop so the feed stays readable over bright
+// scenes; each line is right-aligned to the panel edge.
 void draw() {
     if (!g_visible) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
@@ -98,32 +101,47 @@ void draw() {
     const ImU32 white = IM_COL32(235, 235, 235, 255);
     const ImU32 gold = IM_COL32(228, 196, 112, 255);
 
-    auto line_at = [&](float x, float y, ImU32 col, const char* text) {
-        ImVec2 p(x, y);
-        dl->AddText(font, sz, ImVec2(p.x - 1, p.y), shadow, text);
-        dl->AddText(font, sz, ImVec2(p.x + 1, p.y), shadow, text);
-        dl->AddText(font, sz, ImVec2(p.x, p.y - 1), shadow, text);
-        dl->AddText(font, sz, ImVec2(p.x, p.y + 1), shadow, text);
-        dl->AddText(font, sz, p, col, text);
+    // Right-aligned outlined text: x is the RIGHT edge, text is placed to its left.
+    auto right_at = [&](float xr, float y, ImU32 col, const char* text) {
+        ImVec2 ts = font->CalcTextSizeA(sz, FLT_MAX, 0.0f, text);
+        float x = xr - ts.x;
+        dl->AddText(font, sz, ImVec2(x - 1, y), shadow, text);
+        dl->AddText(font, sz, ImVec2(x + 1, y), shadow, text);
+        dl->AddText(font, sz, ImVec2(x, y - 1), shadow, text);
+        dl->AddText(font, sz, ImVec2(x, y + 1), shadow, text);
+        dl->AddText(font, sz, ImVec2(x, y), col, text);
+        return ts.x;
     };
 
     std::lock_guard<std::mutex> lk(g_mtx);
-    const float x = 18.0f;
-    float y = io.DisplaySize.y - 30.0f - lh;        // input line anchor
-    // input line (or the hint how to open it)
-    if (g_typing) {
-        std::string cur = "> " + g_input + "_";
-        line_at(x, y, gold, cur.c_str());
-    } else {
-        line_at(x, y, IM_COL32(150, 150, 150, 200),
-                "[F6] chat  [Enter] type  (!hint <item>, !help)");
+    const float margin = 18.0f;
+    const float pad = 8.0f;
+    const float xr = io.DisplaySize.x - margin;          // right edge of text
+    const float y_input = io.DisplaySize.y - 30.0f - lh; // input line baseline
+    std::string input_line = g_typing
+        ? ("> " + g_input + "_")
+        : std::string("[F6] chat  [Enter] type  (!hint <item>, !help)");
+    // Measure the block (widest line + how many feed lines) to size the backdrop.
+    float widest = font->CalcTextSizeA(sz, FLT_MAX, 0.0f, input_line.c_str()).x;
+    int feed = 0;
+    for (auto it = g_lines.rbegin(); it != g_lines.rend() && feed < kShow;
+         ++it, ++feed) {
+        float w = font->CalcTextSizeA(sz, FLT_MAX, 0.0f, it->c_str()).x;
+        if (w > widest) widest = w;
     }
-    // feed above it, newest at the bottom
+    // Translucent backdrop behind the whole block (feed lines climb above input).
+    dl->AddRectFilled(ImVec2(xr - widest - pad, y_input - feed * lh - pad),
+                      ImVec2(xr + pad, y_input + lh + pad),
+                      IM_COL32(10, 14, 30, 170), 6.0f);
+
+    right_at(xr, y_input, g_typing ? gold : IM_COL32(150, 150, 150, 210),
+             input_line.c_str());
+    float y = y_input;
     int shown = 0;
     for (auto it = g_lines.rbegin(); it != g_lines.rend() && shown < kShow;
          ++it, ++shown) {
         y -= lh;
-        line_at(x, y, white, it->c_str());
+        right_at(xr, y, white, it->c_str());
     }
 }
 

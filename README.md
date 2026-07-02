@@ -130,7 +130,7 @@ overlay.
   AP runs never touch your vanilla saves, and each multiworld keeps its own
   save set. Vanilla/offline play is unaffected (`save_redirect=0` in
   `yso_ap.cfg` disables it).
-- **Blessing cost rando + F5 shop** — with `blessing_costs: random`, the mod
+- **Blessing cost rando + F5 shop** — with `blessing_costs: shuffled`, the mod
   runs its OWN shop overlay (F5): blessings at seed-randomized SP prices, each
   listed with the multiworld item it holds. Buying deducts SP and grants the
   blessing + check directly — no dependency on the game's price table. Optional
@@ -161,7 +161,7 @@ overlay.
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
 | `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
-| `blessing_costs` | `vanilla` / `random` | `vanilla` | `random` = the mod's own F5 shop overlay sells blessings at seed-randomized SP prices (the game's menu still works at vanilla prices) |
+| `blessing_costs` | `vanilla` / `shuffled` | `vanilla` | `shuffled` = the mod's own F5 shop overlay sells blessings at seed-randomized SP prices (the game's menu still works at vanilla prices) |
 | `blessing_cost_min` | `10`–`2000` | `100` | Cheapest possible randomized blessing price |
 | `blessing_cost_max` | `10`–`5000` | `800` | Priciest possible randomized blessing price |
 | `blessing_shop_unlock` | `all` / `one_per_floor` | `all` | `one_per_floor` = one more F5-shop slot (cheapest first) unlocks per distinct tower floor visited |
