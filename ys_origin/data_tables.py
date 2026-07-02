@@ -58,7 +58,11 @@ ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 # index<->name map is provisional (blessings). Marked EXCLUDED so AP only puts
 # FILLER there -> seeds stay beatable via the confirmed checks. Upgrade once
 # their live detection / mapping is pinned.
-EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36BC58)
+# blessing left this set with the shop rando: purchases are live-detected (the
+# bitfield poll), so blessings can hold real/progression items — buy a blessing,
+# get a check. boss stays excluded (detection is arena ENTRY, not the kill);
+# room stays excluded (scene-entry checks hold filler by design).
+EXCLUDED_TYPES: Set[str] = {"boss", "room"}   # floor live 0x36BC58; blessing live 0x36BC80
 
 # Filler for sanity locations. ONLY items that are safe to grant in unbounded
 # quantity may go here:
@@ -67,12 +71,21 @@ EXCLUDED_TYPES: Set[str] = {"blessing", "boss", "room"}   # floor now live (0x36
 #   * Roda Fruit and Cleria Ore are count-capped in vanilla; granting extra copies
 #     bugs out / overpowers the player — excluded (they still appear at their
 #     vanilla locations at the correct count).
-#   * Celcetan Panacea and Gold are safe to give in any quantity. (SP would be a
-#     nice filler too but it's a stat, not an item — needs a custom grant path.)
+#   * Celcetan Panacea is safe to give in any quantity.
+#   * SP is the game's only currency (blessings + gear upgrades at statues) —
+#     granted straight into the SP cell g_flags[0xD8] via SP_FILLER below.
+#   * Gold ("50G".."1000G") was removed: the flags exist in the item table but
+#     Ys Origin has no money, so they granted nothing.
 FILLER_POOL: List[str] = [
     "Celcetan Panacea",
-    "50G", "100G", "500G", "1000G",
+    "SP: 50", "SP: 150", "SP: 500",
 ]
+
+# SP filler grants: item name -> amount added to the SP currency (g_flags[0xD8],
+# the cell the blessing/upgrade GROWnn.XSO scripts deduct from). Published in
+# slot_data so the mod/client can apply them (they're stat writes, not items).
+SP_FILLER: Dict[str, int] = {"SP: 50": 50, "SP: 150": 150, "SP: 500": 500}
+SP_FLAG_IDX = 0xD8
 
 
 def _load() -> List[dict]:
@@ -274,6 +287,54 @@ def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
     return variants[0]
 
 
+# -- progressive gear (optional, progressive_armor) -------------------------- #
+# Ys Origin has two defensive slots, Armor and Boots, each a strict tier ladder
+# per character (chests in tower order). With the option on, every gear chest
+# seeds a "Progressive Armor" / "Progressive Boots" instead of the raw piece;
+# receiving one grants your character's NEXT unowned tier, so pickups can't skip
+# ahead (finding the 22F armor first still gives you tier 1). The 4th variant in
+# each gear chest (Chain Mail / Wooden Shield / ...) belongs to the unlockable EX
+# character and is never seeded for Yunica/Hugo/Toal.
+PROGRESSIVE_ARMOR = "Progressive Armor"
+PROGRESSIVE_BOOTS = "Progressive Boots"
+
+GEAR_LADDERS: Dict[str, Dict[str, List[str]]] = {
+    "yunica": {
+        PROGRESSIVE_ARMOR: ["Ring Mail", "Half Plate", "Reflex", "Silver Dress"],
+        PROGRESSIVE_BOOTS: ["Leather Boots", "Hard Leggings", "Leg Guards",
+                            "Battle Guards", "Silver Leggings"],
+    },
+    "hugo": {
+        PROGRESSIVE_ARMOR: ["Ebony Robe", "Chain Cloak", "Elder Robe",
+                            "Cleria Garb"],
+        PROGRESSIVE_BOOTS: ["Leather Greaves", "Ebony Shoes", "Shell Greaves",
+                            "Moon Greaves", "Dark Falcon"],
+    },
+    "toal": {
+        PROGRESSIVE_ARMOR: ["Black Chain", "Banded Mail", "Gothic Suit",
+                            "Brave Armor"],
+        PROGRESSIVE_BOOTS: ["Riveted Boots", "Black Leggings", "Banded Boots",
+                            "Phantom Boots", "Brave Guards"],
+    },
+}
+
+
+def progressive_gear_slot_data(char: str) -> Dict[str, List[int]]:
+    """Progressive item name -> the character's tier ladder as g_flags indices
+    (tier order). The mod/client grants the first index whose cell is unowned."""
+    ladders = GEAR_LADDERS.get(char, GEAR_LADDERS["hugo"])
+    return {nm: [item_index[i] for i in tiers if i in item_index]
+            for nm, tiers in ladders.items()}
+
+
+def _progressive_name_for(item: str, char: str) -> Optional[str]:
+    """The progressive item replacing `item` in the pool (None if not gear)."""
+    for nm, tiers in GEAR_LADDERS.get(char, {}).items():
+        if item in tiers:
+            return nm
+    return None
+
+
 # Goddess-statue warp unlocks (optional, statue_warp_locks). One item per statue;
 # receiving it lets the mod enable warping to that statue. Bonus/useful (not
 # progression) -> they never change reachability (everything stays reachable on
@@ -292,7 +353,8 @@ for _l in _LOCS:
     }
 
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
-    | set(FILLER_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS)
+    | set(FILLER_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
+    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS}
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
@@ -320,6 +382,19 @@ def statue_location_scenes() -> Dict[str, str]:
 def statue_scenes() -> List[int]:
     """All statue scene leaf numbers (for picking a random start statue)."""
     return sorted({v["scene"] for v in STATUE_UNLOCKS.values()})
+
+
+def start_statue_candidates(max_floor: int) -> List[int]:
+    """Statue scene leaves eligible as a Random-start spawn under ``max_floor``:
+    only statues on a tower floor <= max_floor. Never empty — if the cap excludes
+    every statue (or a floor can't be resolved), the lowest-floor statue is used so
+    a spawn is always available."""
+    scenes = statue_scenes()
+    eligible = [s for s in scenes if (scene_floor(s) or 1) <= max_floor]
+    if eligible:
+        return eligible
+    lowest = min(scenes, key=lambda s: (scene_floor(s) or 1, s))
+    return [lowest]
 
 
 # Expected character level per tower floor, from the bundled Hugo guide's
@@ -400,6 +475,18 @@ def floor_levels() -> Dict[str, int]:
     return {str(k): v for k, v in FLOOR_LEVELS.items()}
 
 
+# Displayed weapon level (1-6) -> g_flags[0x94] record value. Mirrors the mod's
+# kWeaponTier ladder (ore N -> value {1,2,4,6,8} = Lv2..Lv6); Lv1 = starter = 0.
+_WEAPON_LEVEL_VALUE: Dict[int, int] = {1: 0, 2: 1, 3: 2, 4: 4, 5: 6, 6: 8}
+
+
+def weapon_value_for_level(level: int) -> int:
+    """g_flags[0x94] weapon record value for a displayed weapon level (1-6),
+    clamped into range. Used to publish the starting-weapon floor in slot data."""
+    lvl = max(1, min(6, int(level)))
+    return _WEAPON_LEVEL_VALUE[lvl]
+
+
 CLERIA_ORE = "Cleria Ore"
 
 # Cleria Ore (= weapon-upgrade) count required to ENTER each zone, per the
@@ -472,7 +559,7 @@ def character_req(req: list, char: str) -> list:
 def item_classification(name: str) -> str:
     if name == GOAL_ITEM or name in GATE_ITEMS:
         return "progression"
-    if name in STATUE_UNLOCKS:
+    if name in STATUE_UNLOCKS or name in (PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS):
         return "useful"
     return _item_class.get(name, "filler")
 
@@ -529,6 +616,69 @@ def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
     return dict(out)
 
 
+# -- overlay tracker maps (published in slot_data) --------------------------- #
+
+def scene_locations_map(active: Set[str], name_to_id: Dict[str, int]
+                        ) -> Dict[str, List[int]]:
+    """scene leaf number (str) -> AP location ids of the ACTIVE locations tied to
+    that scene (chests, events, statues, rooms, bosses). Drives the overlay's
+    per-room "checks here" tracker; floor/blessing checks have no scene."""
+    out: Dict[str, List[int]] = defaultdict(list)
+    for l in _LOCS:
+        if l["name"] not in active:
+            continue
+        sc = _scene_of(l)
+        if sc:
+            out[str(int(sc[2:]))].append(name_to_id[l["name"]])
+    return dict(out)
+
+
+def floor_locations_map(active: Set[str], name_to_id: Dict[str, int]
+                        ) -> Dict[str, List[int]]:
+    """tower floor (str) -> AP location ids of the ACTIVE locations on it (via
+    each location's scene; "Reach NF" belongs to floor N). Drives the overlay's
+    per-floor remaining-checks list shown at statues (the warp menu's floors)."""
+    out: Dict[str, List[int]] = defaultdict(list)
+    for l in _LOCS:
+        if l["name"] not in active:
+            continue
+        fl: Optional[int] = None
+        if l["type"] == "floor":
+            fl = l.get("detect", {}).get("floor")
+        else:
+            sc = _scene_of(l)
+            if sc:
+                fl = scene_floor(int(sc[2:]))
+        if fl:
+            out[str(int(fl))].append(name_to_id[l["name"]])
+    return dict(out)
+
+
+def blessing_location_names(active: Set[str], name_to_id: Dict[str, int]
+                            ) -> Dict[str, str]:
+    """AP location id (str) -> short blessing name ("Increase SP gain") for the
+    active blessing locations. Drives the shop-hints overlay panel (what item a
+    blessing purchase actually gives, per the scout data)."""
+    out: Dict[str, str] = {}
+    for l in _LOCS:
+        if l["type"] != "blessing" or l["name"] not in active:
+            continue
+        short = l["name"].split(": ", 1)[-1]
+        out[str(name_to_id[l["name"]])] = short
+    return out
+
+
+def blessing_bit_location_ids(active: Set[str], name_to_id: Dict[str, int]
+                              ) -> List[int]:
+    """AP location ids of the ACTIVE bit-method blessing locations (the 23 the
+    overlay shop can sell), sorted by location name for deterministic cost
+    rolls. The armor blessing (flag-method; a different grant mechanism) is
+    excluded — it stays vanilla-menu-only."""
+    return [name_to_id[l["name"]] for l in sorted(_LOCS, key=lambda x: x["name"])
+            if l["type"] == "blessing" and l["name"] in active
+            and l.get("detect", {}).get("method") == "bit"]
+
+
 # Detection methods the live client can actually observe today. A location whose
 # method isn't one of these can't be checked in-game yet, so it must stay
 # filler-only regardless of its category (e.g. an event that fell back to
@@ -557,16 +707,39 @@ def is_excluded(loc_name: str) -> bool:
 item_index: Dict[str, int] = json.loads(_read_data("data/items.json"))
 
 
-def vanilla_items(enabled: Set[str], char: str = "hugo") -> List[str]:
+def start_item_indices(names) -> List[int]:
+    """g_flags indices for the named starting items (resolved via item_index).
+    Unknown names are skipped (so a typo can't break generation); order preserved,
+    deduped. Published in slot data for the mod/client to grant at New Game."""
+    out: List[int] = []
+    seen: Set[int] = set()
+    for nm in names:
+        idx = item_index.get(str(nm).strip())
+        if idx is None or int(idx) in seen:
+            continue
+        seen.add(int(idx))
+        out.append(int(idx))
+    return out
+
+
+def vanilla_items(enabled: Set[str], char: str = "hugo",
+                  progressive_gear: bool = False) -> List[str]:
     """The real items to seed the pool (one per enabled chest/event location),
-    using the selected character's variant at each location."""
+    using the selected character's variant at each location. With
+    ``progressive_gear`` on, armor/boots pieces seed Progressive Armor/Boots
+    instead (receiving one grants the character's next unowned tier)."""
     out: List[str] = []
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
         it = location_vanilla_item(l["name"], char)
-        if it:
-            out.append(it)
+        if not it:
+            continue
+        if progressive_gear:
+            prog = _progressive_name_for(it, char)
+            if prog:
+                it = prog
+        out.append(it)
     return out
 
 
@@ -746,20 +919,55 @@ def warp_connections() -> List[Tuple[str, str]]:
     return conns
 
 
-def warp_edge_rules(spawn_scene: int, locks: bool, weapon_on) -> Dict[Tuple[str, str], Tuple[Optional[str], int]]:
-    """(hub,statue) -> (unlock-item or None, ore-count). The spawn statue is free;
-    other statues need their unlock item (when warp locks are on) AND the warped-to
-    zone's Cleria-Ore count (when weapon requirements are on)."""
+def _floor_anchor_regions() -> Dict[int, str]:
+    """tower floor -> a representative scene region present on it (lowest leaf).
+    Used by the warp-skip limit: reaching this region == "you can reach floor N"."""
+    out: Dict[int, str] = {}
+    for sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
+        fl = scene_floor(int(sc[2:]))
+        if fl and fl not in out:
+            out[fl] = scene_region(sc)
+    return out
+
+
+_FLOOR_ANCHOR = _floor_anchor_regions()
+
+
+def warp_skip_anchor(target_floor: Optional[int], max_skip: int) -> Optional[str]:
+    """Region a player must already reach before a warp to ``target_floor`` is in
+    logic, under the ``max_skip`` floors-ahead limit. Returns the anchor region for
+    the lowest floor in ``[target_floor - max_skip, target_floor)`` that exists, or
+    None when the limit doesn't bind (``max_skip <= 0``, unknown floor, or the
+    window reaches the base of the tower so any spawn already qualifies)."""
+    if max_skip <= 0 or not target_floor:
+        return None
+    low = target_floor - max_skip
+    if low <= 1:
+        return None                                  # within reach of a base spawn
+    for f in range(low, target_floor):               # lowest existing floor in window
+        if f in _FLOOR_ANCHOR:
+            return _FLOOR_ANCHOR[f]
+    return None                                      # no scene in window -> don't block
+
+
+def warp_edge_rules(spawn_scene: int, locks: bool, weapon_on, max_skip: int = 0
+                    ) -> Dict[Tuple[str, str], Tuple[Optional[str], int, Optional[str]]]:
+    """(hub,statue) -> (unlock-item or None, ore-count, skip-anchor region or None).
+    The spawn statue is free; other statues need their unlock item (when warp locks
+    are on), the warped-to zone's Cleria-Ore count (when weapon requirements are
+    on), and — under ``max_skip`` > 0 — a reachable floor within ``max_skip`` of the
+    destination so a lone unlock can't teleport you across the tower."""
     ore = zone_ore_requirements(weapon_on)
-    out: Dict[Tuple[str, str], Tuple[Optional[str], int]] = {}
+    out: Dict[Tuple[str, str], Tuple[Optional[str], int, Optional[str]]] = {}
     for nm, info in _statue_targets():
         sc = f"S_{info['scene']}"
         dst = scene_region(sc)
         if info["scene"] == spawn_scene:
-            out[(WARP_HUB, dst)] = (None, 0)            # spawn: always free
+            out[(WARP_HUB, dst)] = (None, 0, None)      # spawn: always free
         else:
             unlock = nm if locks else None
-            out[(WARP_HUB, dst)] = (unlock, ore.get(SCENE_ZONE.get(sc, ""), 0))
+            anchor = warp_skip_anchor(scene_floor(info["scene"]), max_skip)
+            out[(WARP_HUB, dst)] = (unlock, ore.get(SCENE_ZONE.get(sc, ""), 0), anchor)
     return out
 
 

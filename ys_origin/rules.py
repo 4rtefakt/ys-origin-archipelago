@@ -92,14 +92,15 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
     weapon_on = int(world.options.weapon_requirements.value)
     locks = bool(world.options.statue_warp_locks.value)
 
-    def gate(src, dst, item, ore_n):
-        """Attach an (item AND ore-count) access rule to an entrance."""
-        if item is None and ore_n == 0:
+    def gate(src, dst, item, ore_n, anchor=None):
+        """Attach an (item AND ore-count AND reach-anchor) access rule to an edge."""
+        if item is None and ore_n == 0 and anchor is None:
             return                          # free edge
         entrance = mw.get_entrance(f"{src} -> {dst}", player)
-        entrance.access_rule = lambda state, i=item, n=ore_n: (
+        entrance.access_rule = lambda state, i=item, n=ore_n, a=anchor: (
             (i is None or state.has(i, player))
             and (n == 0 or state.has(CLERIA_ORE, player, n))
+            and (a is None or state.can_reach(a, "Region", player))
         )
 
     # Per-scene room logic (bidirectional graph), character-transformed.
@@ -115,10 +116,13 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
         gate(src, dst, med, ore_n)
 
     # Warp hub: spawn statue free; others need their unlock item (when locks are
-    # on) + the warped-to zone's Cleria Ore (when weapon requirements are on).
-    for (src, dst), (unlock, ore_n) in warp_edge_rules(
-            world.start_statue_scene, locks, weapon_on).items():
-        gate(src, dst, unlock, ore_n)
+    # on), the warped-to zone's Cleria Ore (when weapon requirements are on), and a
+    # reachable floor within max_warp_floors_skip of the destination (so a lone
+    # unlock can't leapfrog you across the tower).
+    max_skip = int(world.options.max_warp_floors_skip.value)
+    for (src, dst), (unlock, ore_n, anchor) in warp_edge_rules(
+            world.start_statue_scene, locks, weapon_on, max_skip).items():
+        gate(src, dst, unlock, ore_n, anchor)
 
 
 def set_completion_condition(world: "YsOriginWorld") -> None:

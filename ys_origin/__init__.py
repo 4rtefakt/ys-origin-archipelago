@@ -85,7 +85,10 @@ class YsOriginWorld(World):
         o = self.options
         self.open_mode = bool(o.random_start.value)
         if o.random_start.value:
-            self.start_statue_scene = self.random.choice(dt.statue_scenes())
+            # Cap the spawn to a survivable floor (max_starting_floor); a 25F start
+            # drops the player into brutal rooms with no gear behind them.
+            candidates = dt.start_statue_candidates(int(o.max_starting_floor.value))
+            self.start_statue_scene = self.random.choice(candidates)
         elif o.statue_warp_locks.value:
             self.start_statue_scene = 1000          # 1F starting statue
         else:
@@ -119,7 +122,8 @@ class YsOriginWorld(World):
         # One real (vanilla) item per enabled chest/event location; pad the rest
         # (boss/floor/room sanity checks) with varied filler.
         char = dt.char_name(self.options)
-        pool = [self.create_item(n) for n in dt.vanilla_items(enabled, char)]
+        pool = [self.create_item(n) for n in dt.vanilla_items(
+            enabled, char, bool(self.options.progressive_armor.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
@@ -199,21 +203,46 @@ class YsOriginWorld(World):
             "statue_unlocks": (dt.statue_unlock_slot_data() if locks else {}),
             "random_start": bool(self.options.random_start.value),
             "start_statue_scene": start_statue,
-            # Spawn loadout for random start: the vanilla weapon record value for
-            # the spawn floor, so force-spawn at a high floor isn't a Lv1-weapon
-            # death (the mod grants it once on spawn; the level-floor handles the
-            # level via scene_levels). 0 = no grant (1F start / random off).
-            "start_weapon": (
-                dt.floor_weapon_value(dt.scene_floor(start_statue) or 1)
-                if self.options.random_start.value and start_statue not in (0, 1000)
-                else 0
+            # Spawn loadout weapon record value (g_flags[0x94]), applied by the mod
+            # as a floor at New Game. The higher of: the vanilla weapon for a
+            # random-start spawn floor (so force-spawn ahead isn't a Lv1-weapon
+            # death) and the player's configured starting_weapon_level. 0 = starter.
+            "start_weapon": max(
+                (dt.floor_weapon_value(dt.scene_floor(start_statue) or 1)
+                 if self.options.random_start.value and start_statue not in (0, 1000)
+                 else 0),
+                dt.weapon_value_for_level(int(self.options.starting_weapon_level.value)),
+            ),
+            # New-Game starting loadout (applied as a floor by the mod/client):
+            #   start_level : minimum character level (1 = vanilla, only raises).
+            #   start_items : g_flags indices to mark owned (default = warp Crystals
+            #                 the skipped intro would grant). Unknown names dropped.
+            "start_level": int(self.options.starting_level.value),
+            "start_items": dt.start_item_indices(
+                list(self.options.starting_items.value)
+            ),
+            # SP filler grants: item name -> amount added to the SP currency cell
+            # (g_flags[0xD8]); SP is a stat, not an inventory item, so the mod
+            # needs the explicit map rather than a g_flags item index.
+            "sp_items": dict(dt.SP_FILLER),
+            "sp_flag_idx": dt.SP_FLAG_IDX,
+            # Progressive gear: item name -> the selected character's tier ladder
+            # as g_flags indices; receiving one grants the first unowned tier.
+            "progressive_gear": (
+                dt.progressive_gear_slot_data(dt.char_name(self.options))
+                if self.options.progressive_armor.value else {}
             ),
             # catch-up level scaling: mode + tuning + the floor->expected-level
             # curve, so the mod can bump under-leveled players / boost their EXP
             # when the warp network drops them somewhere too high.
             "level_scaling": int(self.options.level_scaling.value),
             "level_margin": int(self.options.level_margin.value),
-            "exp_multiplier_max": int(self.options.exp_multiplier_max.value),
+            # EXP scaling: flat base multiplier everywhere; the catch-up
+            # multiplier while level <= (deepest visited floor's expected level
+            # + margin). The mod tracks the deepest-floor high-water mark.
+            "exp_base_mult": int(self.options.exp_multiplier_base.value),
+            "exp_catchup_mult": int(self.options.exp_multiplier_catchup.value),
+            "exp_catchup_margin": int(self.options.exp_catchup_margin.value),
             # weapon gating: Cleria Ore = weapon level (for the eventual mod hook
             # that upgrades the weapon on Cleria Ore receipt instead of granting it).
             "weapon_requirements": int(self.options.weapon_requirements.value),
@@ -229,6 +258,32 @@ class YsOriginWorld(World):
             # scene leaf number -> room name, for the in-game overlay's current
             # room line (and scene-method check display).
             "scene_names": dt.scene_names(),
+            # Overlay trackers: per-scene / per-floor active location ids (the
+            # "checks here" line + the per-floor remaining list at statues), the
+            # blessing shop-hint names, and whether to show shop hints at all.
+            "scene_locations": dt.scene_locations_map(active, self.location_name_to_id),
+            "floor_locations": dt.floor_locations_map(active, self.location_name_to_id),
+            "blessing_names": dt.blessing_location_names(active, self.location_name_to_id),
+            "shop_hints": bool(self.options.shop_hints.value),
+            # Overlay blessing shop (blessing_costs: random): loc id -> SP price,
+            # rolled seed-deterministically in [min, max] (rounded to 10s); empty
+            # in vanilla mode (RNG untouched -> vanilla seeds stay identical).
+            # blessing_shop_unlock paces the shop inventory (0 all, 1 per-floor).
+            "blessing_costs": (
+                {
+                    str(loc): 10 * self.random.randint(
+                        int(self.options.blessing_cost_min.value) // 10,
+                        max(int(self.options.blessing_cost_min.value) // 10,
+                            int(self.options.blessing_cost_max.value) // 10))
+                    for loc in dt.blessing_bit_location_ids(
+                        active, self.location_name_to_id)
+                }
+                if self.options.blessing_costs.value else {}
+            ),
+            "blessing_shop_unlock": int(self.options.blessing_shop_unlock.value),
+            # All statue scenes (panel trigger; statue_unlocks only ships with
+            # warp locks on).
+            "statue_scenes": dt.statue_scenes(),
             # g_flags indices of the vanilla content of active chest/event
             # locations — the in-game mod suppresses these (player gets the AP
             # item over the network instead).

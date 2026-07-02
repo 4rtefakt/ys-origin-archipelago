@@ -16,6 +16,9 @@ static std::mutex g_mtx;
 static std::deque<std::string> g_items;   // most-recent appended at the back
 static std::string g_status = "connecting...";
 static std::string g_room;                // current room (scene), from hook_ap
+static std::string g_tracker;             // "Checks here: k/n" (under the room)
+static std::string g_panel;               // multi-line left panel ('\n'-separated):
+                                          // per-floor remaining + blessing shop hints
 
 // -- called from the AP client thread -------------------------------------- #
 
@@ -33,6 +36,16 @@ void set_status(const std::string& text) {
 void set_room(const std::string& text) {
     std::lock_guard<std::mutex> lk(g_mtx);
     g_room = text;
+}
+
+void set_tracker(const std::string& text) {
+    std::lock_guard<std::mutex> lk(g_mtx);
+    g_tracker = text;
+}
+
+void set_panel(const std::string& text) {
+    std::lock_guard<std::mutex> lk(g_mtx);
+    g_panel = text;
 }
 
 std::string get_status() {
@@ -87,7 +100,43 @@ void draw() {
         hud_line(dl, small, ssz, right, y, dim, g_room.c_str());
         y += slh;
     }
+    if (!g_tracker.empty()) {
+        hud_line(dl, small, ssz, right, y, gold, g_tracker.c_str());
+        y += slh;
+    }
     y += slh * 0.4f;
+
+    // Left panel: per-floor remaining checks + blessing shop hints. Drawn as
+    // left-aligned outlined lines (same style as the HUD text, mirrored).
+    if (!g_panel.empty()) {
+        const ImU32 shadow = IM_COL32(0, 0, 0, 220);
+        float py = 16.0f;
+        size_t start = 0;
+        while (start <= g_panel.size()) {
+            size_t end = g_panel.find('\n', start);
+            std::string line = g_panel.substr(
+                start, end == std::string::npos ? std::string::npos : end - start);
+            if (!line.empty()) {
+                // Leading marker selects the color: '-' section header (gold),
+                // '*' progression (gold), '!' trap (red); marker chars other
+                // than '-' are stripped before drawing.
+                ImU32 col = white;
+                if (line[0] == '-') col = gold;
+                else if (line[0] == '*') { col = gold; line.erase(0, 1); }
+                else if (line[0] == '!') { col = IM_COL32(235, 110, 110, 255); line.erase(0, 1); }
+                else if (line[0] == ' ') line.erase(0, 1);
+                ImVec2 p(18.0f, py);
+                dl->AddText(small, ssz, ImVec2(p.x - 1, p.y), shadow, line.c_str());
+                dl->AddText(small, ssz, ImVec2(p.x + 1, p.y), shadow, line.c_str());
+                dl->AddText(small, ssz, ImVec2(p.x, p.y - 1), shadow, line.c_str());
+                dl->AddText(small, ssz, ImVec2(p.x, p.y + 1), shadow, line.c_str());
+                dl->AddText(small, ssz, p, col, line.c_str());
+            }
+            py += slh;
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+    }
 
     int n = 0;
     for (auto it = g_items.rbegin(); it != g_items.rend() && n < 5; ++it, ++n) {

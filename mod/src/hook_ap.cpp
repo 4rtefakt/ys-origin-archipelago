@@ -41,11 +41,20 @@ namespace overlay {
 void push_item(const std::string& text);
 void set_status(const std::string& text);
 void set_room(const std::string& text);
+void set_tracker(const std::string& text);
+void set_panel(const std::string& text);
+}
+namespace apchat {
+void push(const std::string& line);
+void set_visible(bool v);
 }
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
 extern bool g_loc_flag[0x200];    // location flags that are checks
+// Seed-scoped save redirection (hook_saveredir.cpp).
+extern "C" void saveredir_set_seed(const char* seed);
+extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
 static const char* AP_GAME = "Ys Origin";
@@ -79,7 +88,16 @@ static void load_config() {
                   "# (ws:// for local, wss:// for archipelago.gg — the menu\n"
                   "# adds wss:// automatically if you omit it).\n"
                   "host=archipelago.gg\nport=38281\nslot=Hugo\npassword=\n"
-                  "# autoconnect=1  # connect at startup with the above (skip the menu)\n",
+                  "# autoconnect=1  # connect at startup with the above (skip the menu)\n"
+                  "# save_redirect=1   # AP runs save into archipelago_<seed>/ next to\n"
+                  "#                   # the normal saves (vanilla saves stay untouched).\n"
+                  "#                   # 0 = write the regular save files as usual.\n"
+                  "# save_pattern=sav  # filename substring that marks a save file\n"
+                  "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
+                  "#                   # Enter types, e.g. !hint <item>)\n"
+                  "# goal_scene=0      # ending-scene number; entering it reports your\n"
+                  "#                   # goal to the server (capture it live: beat the\n"
+                  "#                   # game once and read the scene id off the log)\n",
                   w);
             fclose(w);
         }
@@ -102,6 +120,14 @@ static void load_config() {
         else if (!strcmp(key, "hp_ptr")) { g_hp_ptr = (int)strtol(val, nullptr, 0); }
         else if (!strcmp(key, "hp_field")) { g_hp_field = (int)strtol(val, nullptr, 0); }
         else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
+        else if (!strcmp(key, "save_redirect")) { saveredir_config(atoi(val), nullptr); }
+        else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
+        else if (!strcmp(key, "goal_scene")) { g_goal_scene = atoi(val); }
+        else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
+        else if (!strncmp(key, "bless_idx_", 10)) {
+            int bit = atoi(key + 10);
+            if (bit >= 0 && bit < 32) g_bless_arr_idx[bit] = atoi(val);
+        }
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
@@ -134,14 +160,85 @@ static char g_req_slot[128] = "";
 static char g_req_pass[128] = "";
 static void create_client();  // defined below; builds g_ap on the poll thread
 
-// flag index -> AP location id (set in slot_connected, read in ap_on_check).
-static int64_t g_flag_to_loc[0x200];
+// flag index -> AP location ids (set in slot_connected, read in ap_on_check).
+// A VECTOR per flag: one event flag can be several AP locations (the elemental
+// altars grant two items — weapon + bracelet — on a single script flag).
+// g_reg_mtx guards it: the poll thread rebuilds it on (re)connect while the VM
+// hook reads it on the game's main thread.
+static std::mutex g_reg_mtx;
+static std::vector<int64_t> g_flag_to_loc[0x200];
 // scene-method detection: scene number -> AP location ids fired on entering it
 // (boss arenas, room-sanity checks); scene number -> room name for the overlay.
 static std::map<int, std::vector<int64_t>> g_scene_locs;
 static std::map<int, std::string> g_scene_name;
 static std::set<int64_t> g_scene_fired;   // dedupe (each scene loc fires once)
 static int g_last_scene = -1;
+
+// Overlay trackers (slot_data): every ACTIVE location by scene / by floor, the
+// blessing shop-hint names, and the statue scenes that trigger the panel. The
+// checked-set mirrors the server (location_checked handler + our own sends).
+static std::map<int, std::vector<int64_t>> g_scene_locations;  // scene -> locs
+static std::map<int, std::vector<int64_t>> g_floor_locations;  // floor -> locs
+static std::map<int64_t, std::string> g_bless_names;   // blessing loc -> name
+static std::set<int> g_statue_scene_set;
+// g_checked + g_floors_seen: written on the poll thread, read by the shop UI on
+// the game's main thread (WndProc/EndScene) — guarded by g_checked_mtx.
+static std::mutex g_checked_mtx;
+static std::set<int64_t> g_checked;
+static bool g_shop_hints = false;
+static bool g_panel_toggle = false;       // F7: force the panel anywhere
+// Item classification per scouted location (AP NetworkItem.flags: 1 progression,
+// 2 useful, 4 trap) — colors the shop-hint lines.
+static std::map<int64_t, int> g_loc_flags;
+
+// -- overlay blessing shop (blessing_costs: random) --------------------------- #
+// Our OWN shop UI (shop.cpp, F5): sells the bit-method blessings at the seed's
+// randomized prices, deducting SP and granting the blessing directly — no
+// dependency on the game's cost table. Buying sets the purchase bit (the bit
+// poll then fires the check), writes the blessing state-array level, and
+// requests the effect recompute (BLESSING_DIRTY). The state-array INDEX per
+// blessing is the one un-RE'd piece: map them via `bless_idx_<bit>=<idx>` lines
+// in yso_ap.cfg (captured once with tools/flaglog.py --bless); until a bit is
+// mapped, its purchase still registers (bit + check + SP) and the effect
+// applies after the next save+reload (g_flags persists the bit).
+struct BlessShopItem { int64_t loc; std::string name; int bit; int cost; };
+static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap first
+static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
+static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
+static std::set<int> g_floors_seen;                  // distinct floors visited
+static int g_bless_arr_idx[32];                      // bit -> state-array idx (-1 unmapped)
+static const uintptr_t kSpAbs = kGFlagsAbs + 0xD8 * 4;         // SP currency
+static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
+static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
+static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
+// Goal reporting: entering the ending scene sends StatusUpdate(GOAL) once. The
+// ending scene id is not RE'd yet — set goal_scene= in yso_ap.cfg after one
+// live capture (kill Darm, read the scene number off the log/overlay).
+static int g_goal_scene = 0;              // cfg goal_scene= (0 = not configured)
+static bool g_goal_sent = false;
+// Chat send queue (chat.cpp input -> poll thread -> g_ap->Say).
+static std::mutex g_say_mtx;
+static std::vector<std::string> g_say_queue;
+
+extern "C" void ap_request_say(const char* text) {
+    std::lock_guard<std::mutex> lk(g_say_mtx);
+    g_say_queue.push_back(text);
+}
+
+// Poll-method detection, for signals the VM store hook can't see (they're
+// written natively, not by script opcode 0x64): blessing purchases (a bitfield
+// cell + the armor cell outside g_flags) and the current-floor "Reach NF"
+// checks. Polled every client tick; each location fires once (g_poll_fired) and
+// already-satisfied signals fire on connect (the AP server dedupes re-sends, so
+// this doubles as catch-up for purchases made while disconnected).
+static const uintptr_t kImageBase = 0x00400000;  // kGFlagsAbs - kGFlagsRel
+struct PollBit   { uintptr_t abs; int bit;     int64_t loc; };  // (cell>>bit)&1
+struct PollVal   { uintptr_t abs;              int64_t loc; };  // cell >= 1
+struct PollFloor { uintptr_t abs; int floor_n; int64_t loc; };  // cell >= N
+static std::vector<PollBit>   g_poll_bits;
+static std::vector<PollVal>   g_poll_vals;
+static std::vector<PollFloor> g_poll_floors;
+static std::set<int64_t> g_poll_fired;    // dedupe (each poll loc fires once)
 
 // -- DeathLink -------------------------------------------------------------- #
 // Enabled from slot_data (death_link). We add the "DeathLink" tag after connect,
@@ -205,7 +302,11 @@ typedef void(__fastcall* SetLevelFn)(unsigned);
 static const SetLevelFn kSetLevel = (SetLevelFn)0x004200F0;
 static int g_level_scaling = 0;        // 0 off, 1 level_floor, 2 exp_mult, 3 both
 static int g_level_margin = 3;
-static int g_exp_mult_max = 8;
+static int g_exp_base_mult = 3;        // flat EXP multiplier (exp modes)
+static int g_exp_catchup_mult = 5;     // while level <= deepest expected + margin
+static int g_exp_catchup_margin = 5;
+static int g_expected_hi = 0;          // deepest visited floor's expected level
+                                       // (session high-water; reset on New Game)
 static std::map<int, int> g_scene_levels;  // scene number -> expected level
 static std::atomic<int> g_pending_level{0};  // bump requested; applied on the main thread
 static inline int read_level() { return *(volatile int*)kLevelAbs; }
@@ -244,6 +345,15 @@ static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byt
 // statue index at 0x76BB40, then run the menu's warp-confirm sequence.
 static int g_start_statue_scene = 0;     // slot_data start_statue_scene (0/1000 = no warp)
 static int g_start_weapon = 0;           // slot_data start_weapon (g_flags[0x94] value)
+static int g_start_level = 0;            // slot_data start_level (New-Game level floor)
+static std::vector<int> g_start_items;   // slot_data start_items (g_flags indices to own)
+// SP fillers: item name -> SP amount, added to the currency cell g_flags[0xD8]
+// (slot_data sp_items / sp_flag_idx; SP is a stat, not an inventory item).
+static std::map<std::string, int> g_sp_items;
+static int g_sp_flag_idx = 0xD8;
+// Progressive gear: item name -> the character's tier ladder (g_flags indices in
+// tier order); receiving one grants the first unowned tier (never skips ahead).
+static std::map<std::string, std::vector<int>> g_prog_gear;
 static int g_character = 1;              // 0=Yunica 1=Hugo 2=Toal (slot_data character)
 static int g_spawn_reg_idx = -1;         // warp-registry index of the spawn statue
 static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statue
@@ -340,29 +450,36 @@ static void ap_give(int idx, int count) {
 // show what was here (item + owning world), from the scout map.
 void ap_on_check(int flag_idx) {
     if (flag_idx < 0 || flag_idx >= 0x200) return;
-    int64_t loc = g_flag_to_loc[flag_idx];
-    if (loc < 0) return;
+    std::vector<int64_t> locs;
     {
-        std::lock_guard<std::mutex> lk(g_check_mtx);
-        g_checks.push_back(loc);
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
+        locs = g_flag_to_loc[flag_idx];
     }
-    std::string found, name;
-    int local_id = -1;
-    {
-        std::lock_guard<std::mutex> lk(g_scout_mtx);
-        auto it = g_loc_found.find(loc);
-        if (it != g_loc_found.end()) found = it->second;
-        auto il = g_loc_local_id.find(loc);
-        if (il != g_loc_local_id.end()) local_id = il->second;
-        auto in = g_loc_item_name.find(loc);
-        if (in != g_loc_item_name.end()) name = in->second;
+    for (int64_t loc : locs) {
+        {
+            std::lock_guard<std::mutex> lk(g_check_mtx);
+            g_checks.push_back(loc);
+        }
+        std::string found, name;
+        int local_id = -1;
+        {
+            std::lock_guard<std::mutex> lk(g_scout_mtx);
+            auto it = g_loc_found.find(loc);
+            if (it != g_loc_found.end()) found = it->second;
+            auto il = g_loc_local_id.find(loc);
+            if (il != g_loc_local_id.end()) local_id = il->second;
+            auto in = g_loc_item_name.find(loc);
+            if (in != g_loc_item_name.end()) name = in->second;
+        }
+        if (!found.empty()) overlay::push_item(found);
+        // Stash the actually-placed item so the native "Acquired <item>" box
+        // (the 0xD5 op, which runs just after this check flag) shows the REAL
+        // item: its art (local id, or a generic icon for foreign) and its name.
+        // On a multi-location flag (altar double-grants) the last one wins the
+        // single native box; the overlay above still lists every item.
+        int art = (local_id >= 0) ? local_id : kForeignArtId;
+        set_pending_box(art, name.c_str());
     }
-    if (!found.empty()) overlay::push_item(found);
-    // Stash the actually-placed item so the native "Acquired <item>" box (the
-    // 0xD5 op, which runs just after this check flag) shows the REAL item: its
-    // art (local id, or a generic icon for foreign) and its name text.
-    int art = (local_id >= 0) ? local_id : kForeignArtId;
-    set_pending_box(art, name.c_str());
 }
 
 // Reply to LocationScouts: learn the item + recipient at each of our locations.
@@ -383,6 +500,7 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
         }
         g_loc_local_id[it.location] = lid;
         g_loc_item_name[it.location] = item;
+        g_loc_flags[it.location] = it.flags;   // 1 prog / 2 useful / 4 trap
     }
     mod_log("ap: scouted %d location(s)", (int)items.size());
 }
@@ -403,6 +521,17 @@ static void on_slot_connected(const nlohmann::json& sd) {
     }
     std::list<int64_t> scout;
     int scenes = 0;
+    // Reset detect registrations (a reconnect re-registers everything; without
+    // this a flag would accumulate duplicate location entries). g_reg_mtx: the
+    // VM hook reads g_flag_to_loc from the game's main thread.
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+    }
+    g_poll_bits.clear();
+    g_poll_vals.clear();
+    g_poll_floors.clear();
+    g_loc_bitmap.clear();
     if (sd.contains("location_detect")) {
         const auto& sig = sd.contains("location_signals") ? sd["location_signals"]
                                                           : nlohmann::json::object();
@@ -414,9 +543,31 @@ static void on_slot_connected(const nlohmann::json& sd) {
             if (method == "flag" && d.contains("offset")) {
                 int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
                 int idx = (off - kGFlagsRel) / 4;
-                if (idx < 0 || idx >= 0x200) continue;
-                g_loc_flag[idx] = true;
-                g_flag_to_loc[idx] = loc;
+                if (idx >= 0 && idx < 0x200) {
+                    g_loc_flag[idx] = true;
+                    std::lock_guard<std::mutex> lk(g_reg_mtx);
+                    g_flag_to_loc[idx].push_back(loc);
+                } else {
+                    // Outside g_flags (e.g. the armor blessing cell): the VM
+                    // store hook can't see it — poll for value >= 1 instead.
+                    g_poll_vals.push_back({kImageBase + (uintptr_t)off, loc});
+                }
+                scout.push_back(loc);
+                locs++;
+            } else if (method == "bit" && d.contains("offset") && d.contains("bit")) {
+                // Blessing purchases: one bitfield cell, one bit per blessing.
+                // Written natively by the shop menu -> poll, don't hook.
+                int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                g_poll_bits.push_back({kImageBase + (uintptr_t)off,
+                                       d["bit"].get<int>(), loc});
+                g_loc_bitmap[loc] = d["bit"].get<int>();
+                scout.push_back(loc);
+                locs++;
+            } else if (method == "floor" && d.contains("offset") && d.contains("floor")) {
+                // "Reach NF": fires once current_floor reaches N (native write).
+                int off = (int)strtol(d["offset"].get<std::string>().c_str(), nullptr, 16);
+                g_poll_floors.push_back({kImageBase + (uintptr_t)off,
+                                         d["floor"].get<int>(), loc});
                 scout.push_back(loc);
                 locs++;
             } else if (method == "scene" && d.contains("scene")) {
@@ -434,6 +585,56 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["scene_names"].items())
             g_scene_name[atoi(kv.key().c_str())] = kv.value().get<std::string>();
     }
+    // Overlay trackers: per-scene / per-floor location lists, shop hints, and
+    // the statue scenes that pop the panel.
+    g_scene_locations.clear();
+    if (sd.contains("scene_locations"))
+        for (auto& kv : sd["scene_locations"].items())
+            for (auto& v : kv.value())
+                g_scene_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
+    g_floor_locations.clear();
+    if (sd.contains("floor_locations"))
+        for (auto& kv : sd["floor_locations"].items())
+            for (auto& v : kv.value())
+                g_floor_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
+    g_bless_names.clear();
+    if (sd.contains("blessing_names"))
+        for (auto& kv : sd["blessing_names"].items())
+            g_bless_names[atoll(kv.key().c_str())] = kv.value().get<std::string>();
+    g_shop_hints = sd.value("shop_hints", false);
+    g_statue_scene_set.clear();
+    if (sd.contains("statue_scenes"))
+        for (auto& v : sd["statue_scenes"])
+            g_statue_scene_set.insert(v.get<int>());
+    // Overlay blessing shop: randomized prices (empty = vanilla mode, no shop).
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // shop UI reads on main thread
+        g_shop_items.clear();
+    }
+    g_shop_unlock_mode = sd.value("blessing_shop_unlock", 0);
+    if (sd.contains("blessing_costs")) {
+        std::vector<BlessShopItem> items;
+        for (auto& kv : sd["blessing_costs"].items()) {
+            int64_t loc = atoll(kv.key().c_str());
+            auto nm = g_bless_names.find(loc);
+            auto bt = g_loc_bitmap.find(loc);
+            if (nm == g_bless_names.end() || bt == g_loc_bitmap.end()) continue;
+            items.push_back({loc, nm->second, bt->second,
+                             kv.value().get<int>()});
+        }
+        std::sort(items.begin(), items.end(),
+                  [](const BlessShopItem& a, const BlessShopItem& b) {
+                      return a.cost < b.cost;
+                  });
+        {
+            std::lock_guard<std::mutex> lk(g_reg_mtx);
+            g_shop_items.swap(items);
+        }
+        mod_log("ap: blessing shop — %d items, unlock mode %d",
+                (int)g_shop_items.size(), g_shop_unlock_mode);
+    }
+    // Seed-scoped save redirection: hand the room seed to the file hook.
+    saveredir_set_seed(g_ap->get_seed().c_str());
     int statues = 0;
     if (sd.value("statue_warp_locks", false) && sd.contains("statue_unlocks")) {
         g_statue_locks_on = true;
@@ -471,17 +672,42 @@ static void on_slot_connected(const nlohmann::json& sd) {
                 statues, start_scene, g_spawn_reg_idx);
     }
     g_start_weapon = sd.value("start_weapon", 0);   // spawn loadout weapon value
+    // New-Game starting loadout floor: minimum level + items to mark owned.
+    g_start_level = sd.value("start_level", 0);
+    {
+        // g_reg_mtx: exp_scaling_on_frame iterates this on the game main thread.
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        g_start_items.clear();
+        if (sd.contains("start_items"))
+            for (auto& v : sd["start_items"])
+                g_start_items.push_back(v.get<int>());
+    }
+    g_sp_items.clear();
+    if (sd.contains("sp_items"))
+        for (auto& kv : sd["sp_items"].items())
+            g_sp_items[kv.key()] = kv.value().get<int>();
+    g_sp_flag_idx = sd.value("sp_flag_idx", 0xD8);
+    g_prog_gear.clear();
+    if (sd.contains("progressive_gear"))
+        for (auto& kv : sd["progressive_gear"].items()) {
+            std::vector<int> tiers;
+            for (auto& v : kv.value()) tiers.push_back(v.get<int>());
+            g_prog_gear[kv.key()] = tiers;
+        }
     g_character = sd.value("character", 1);         // 0 Yunica / 1 Hugo / 2 Toal
     g_level_scaling = sd.value("level_scaling", 0);
     g_level_margin = sd.value("level_margin", 3);
-    g_exp_mult_max = sd.value("exp_multiplier_max", 8);
+    g_exp_base_mult = sd.value("exp_base_mult", 3);
+    g_exp_catchup_mult = sd.value("exp_catchup_mult", 5);
+    g_exp_catchup_margin = sd.value("exp_catchup_margin", 5);
     if (sd.contains("scene_levels")) {
         for (auto& kv : sd["scene_levels"].items())
             g_scene_levels[atoi(kv.key().c_str())] = kv.value().get<int>();
     }
     if (g_level_scaling)
-        mod_log("ap: level scaling mode=%d (margin %d, exp x<=%d)",
-                g_level_scaling, g_level_margin, g_exp_mult_max);
+        mod_log("ap: level scaling mode=%d (margin %d, exp x%d base / x%d catch-up +%d)",
+                g_level_scaling, g_level_margin, g_exp_base_mult,
+                g_exp_catchup_mult, g_exp_catchup_margin);
     if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
     if (g_death_link) {
         g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
@@ -494,13 +720,37 @@ static void on_slot_connected(const nlohmann::json& sd) {
 }
 
 static void on_items_received(const std::list<APClient::NetworkItem>& items) {
+    // A release/collect flood arrives as one big batch: apply everything, but
+    // collapse the overlay feed to a single summary line (the chat overlay
+    // still carries the full detail via PrintJSON).
+    int fresh = 0;
+    for (const auto& it : items)
+        if (it.index > g_applied_through) fresh++;
+    bool batch = fresh > 6;
     for (const auto& it : items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
         std::string from = g_ap->get_player_alias(it.player);
         auto su = g_statue_item_idx.find(name);
         auto f = g_name_to_idx.find(name);
-        if (su != g_statue_item_idx.end()) {
+        auto sp = g_sp_items.find(name);
+        auto pg = g_prog_gear.find(name);
+        if (sp != g_sp_items.end()) {
+            // SP filler: add straight to the SP currency cell (give semantics).
+            ap_give(g_sp_flag_idx, sp->second);
+        } else if (pg != g_prog_gear.end()) {
+            // Progressive gear: grant the first unowned tier in the ladder.
+            bool granted = false;
+            for (int idx : pg->second)
+                if (idx >= 0 && idx < 0x200 &&
+                    *(volatile int*)(kGFlagsAbs + idx * 4) < 1) {
+                    ap_give(idx, 1);
+                    granted = true;
+                    break;
+                }
+            if (!granted)
+                mod_log("ap: '%s' — all tiers owned, no-op", name.c_str());
+        } else if (su != g_statue_item_idx.end()) {
             // Statue warp unlock: fully activate that statue immediately so it's
             // warpable right away (no need to revisit it). Stop clearing its warp
             // byte, set the warp-registry byte, and set the purify/activation flag
@@ -525,9 +775,14 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         // Your own items already print as "Found: X (yours)" when their location
         // fires (ap_on_check), so only surface items coming FROM another player
         // (or the server) here — avoids showing every self-item twice.
-        if (from != g_slot)
+        if (!batch && from != g_slot)
             overlay::push_item(from.empty() ? name : (name + "  <- " + from));
         g_applied_through = it.index;
+    }
+    if (batch) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Received %d items", fresh);
+        overlay::push_item(buf);
     }
 }
 
@@ -581,8 +836,22 @@ static void poll_scene() {
     // main thread as soon as a player entity exists (skipping the rest). Fires once
     // per session (g_force_spawn_done not re-armed here, so a 7xxx cutscene playing
     // again mid-game can't re-warp the player).
-    if (scene == 2 || (scene >= 7000 && scene < 8000))
+    if (scene == 2 || (scene >= 7000 && scene < 8000)) {
         g_saw_intro.store(true);
+        g_expected_hi = 0;   // New Game: forget the last run's deepest floor
+    }
+
+    // Goal: entering the ending scene (goal_scene= in yso_ap.cfg, from a live
+    // capture — kill Darm once and read the scene number off the log) marks the
+    // slot as GOALed so the multiworld releases/completes properly.
+    if (g_goal_scene > 0 && scene == g_goal_scene && !g_goal_sent && g_ap) {
+        g_goal_sent = true;
+        try {
+            g_ap->StatusUpdate(APClient::ClientStatus::GOAL);
+            overlay::push_item("GOAL complete!");
+            mod_log("ap: goal scene %d reached — StatusUpdate(GOAL) sent", scene);
+        } catch (...) {}
+    }
 
     auto it = g_scene_name.find(scene);
     char room[160];
@@ -610,6 +879,252 @@ static void poll_scene() {
         auto f = g_loc_found.find(loc);
         if (f != g_loc_found.end()) overlay::push_item(f->second);
     }
+}
+
+// Fire a batch of poll-detected locations: queue the LocationChecks and echo
+// what was found (from the scout map) on the overlay. Same pattern as
+// poll_scene's firing tail.
+static void fire_poll_locs(const std::vector<int64_t>& fire) {
+    if (fire.empty()) return;
+    {
+        std::lock_guard<std::mutex> lk(g_check_mtx);
+        g_checks.insert(g_checks.end(), fire.begin(), fire.end());
+    }
+    for (int64_t loc : fire) {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f != g_loc_found.end()) overlay::push_item(f->second);
+    }
+}
+
+// Poll-method checks (each client tick): blessing bits, out-of-g_flags value
+// cells (armor blessing), and "Reach NF" floors. These are all written natively
+// (shop menu / floor transition), so the VM store hook never sees them. Each
+// location fires once per session. Blessings/values are CUMULATIVE state, so
+// anything already satisfied fires on the first poll after connect (the server
+// dedupes re-sends — clean catch-up for purchases made while disconnected).
+// The floor cell is WHERE YOU ARE, not progress: it uses crossing semantics
+// (prev primed on the first read, mirroring the Python client), so a random-
+// start warp or a mid-run reconnect can't spray Reach-NF checks never earned.
+// Only polled once a scene is loaded, so New-Game/menu garbage can't misfire.
+static std::map<uintptr_t, int> g_floor_prev;   // floor cell -> last seen value
+static void poll_value_checks() {
+    if (read_current_scene() <= 0) return;
+    std::vector<int64_t> fire;
+    for (const auto& pb : g_poll_bits)
+        if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&
+            g_poll_fired.insert(pb.loc).second)
+            fire.push_back(pb.loc);
+    for (const auto& pv : g_poll_vals)
+        if (*(volatile int*)pv.abs >= 1 && g_poll_fired.insert(pv.loc).second)
+            fire.push_back(pv.loc);
+    std::map<uintptr_t, int> cur_floor;
+    for (const auto& pf : g_poll_floors)
+        cur_floor[pf.abs] = *(volatile int*)pf.abs;
+    for (const auto& pf : g_poll_floors) {
+        int cur = cur_floor[pf.abs];
+        if (cur >= 1 && cur <= 26) {
+            std::lock_guard<std::mutex> lk(g_checked_mtx);
+            g_floors_seen.insert(cur);    // shop unlock pacing (one-per-floor)
+        }
+        auto pit = g_floor_prev.find(pf.abs);
+        int prev = (pit != g_floor_prev.end()) ? pit->second : cur;  // prime
+        if (cur >= pf.floor_n && pf.floor_n > prev &&
+            g_poll_fired.insert(pf.loc).second)
+            fire.push_back(pf.loc);
+    }
+    for (const auto& kv : cur_floor) g_floor_prev[kv.first] = kv.second;
+    fire_poll_locs(fire);
+}
+
+// -- overlay trackers -------------------------------------------------------- #
+// This TU avoids <windows.h> (see the header comment); declare the one user32
+// import the F7 panel toggle needs.
+extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vk);
+static const int kVkF7 = 0x76;
+
+static int count_done(const std::vector<int64_t>& v) {
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    int n = 0;
+    for (int64_t l : v)
+        if (g_checked.count(l)) n++;
+    return n;
+}
+
+// Rebuild the "Checks here: k/n" line (always, for the current room) and the
+// left panel (per-floor remaining checks + blessing shop hints). The panel
+// auto-shows at goddess statues — that's where the warp menu (floors) and the
+// blessing shop live — and F7 toggles it anywhere. Runs each poll tick; string
+// work only, and the overlay setters are mutex-guarded.
+static void update_trackers() {
+    static bool f7_prev = false;
+    bool f7 = (GetAsyncKeyState(kVkF7) & 0x8000) != 0;
+    if (f7 && !f7_prev) g_panel_toggle = !g_panel_toggle;
+    f7_prev = f7;
+
+    // Rebuild only when the inputs changed — this runs every ~10ms poll tick
+    // and the panel is a fair amount of string work.
+    size_t checked, scouted;
+    {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        checked = g_checked.size();
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        scouted = g_loc_found.size();
+    }
+    static int last_scene = -2;
+    static size_t last_checked = (size_t)-1, last_scouted = (size_t)-1;
+    static bool last_toggle = false;
+    if (g_last_scene == last_scene && checked == last_checked &&
+        scouted == last_scouted && g_panel_toggle == last_toggle)
+        return;
+    last_scene = g_last_scene;
+    last_checked = checked;
+    last_scouted = scouted;
+    last_toggle = g_panel_toggle;
+
+    int scene = g_last_scene;
+    std::string tr;
+    auto it = g_scene_locations.find(scene);
+    if (it != g_scene_locations.end() && !it->second.empty()) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "Checks here: %d/%d",
+                 count_done(it->second), (int)it->second.size());
+        tr = buf;
+    }
+    overlay::set_tracker(tr);
+
+    bool at_statue = g_statue_scene_set.count(scene) != 0;
+    if (!at_statue && !g_panel_toggle) {
+        overlay::set_panel("");
+        return;
+    }
+    std::string p = "- Remaining checks -\n";
+    std::string line;
+    int col = 0;
+    for (const auto& kv : g_floor_locations) {
+        int left = (int)kv.second.size() - count_done(kv.second);
+        if (left <= 0) continue;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%2dF:%-3d ", kv.first, left);
+        line += buf;
+        if (++col == 4) { p += line + "\n"; line.clear(); col = 0; }
+    }
+    if (!line.empty()) p += line + "\n";
+    if (g_shop_hints && at_statue && !g_bless_names.empty()) {
+        p += "- Blessing shop -\n";
+        for (const auto& kv : g_bless_names) {
+            if (g_checked.count(kv.first)) continue;   // already bought
+            std::string what = "?";
+            {
+                std::lock_guard<std::mutex> lk(g_scout_mtx);
+                auto f = g_loc_found.find(kv.first);
+                if (f != g_loc_found.end()) what = f->second;
+            }
+            // Leading marker = item classification (colored by overlay.cpp):
+            // '*' progression (gold), '!' trap (red), ' ' filler/useful.
+            int fl = g_loc_flags.count(kv.first) ? g_loc_flags[kv.first] : 0;
+            const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
+            p += mark + kv.second + " = " + what + "\n";
+        }
+    }
+    overlay::set_panel(p);
+}
+
+// -- overlay blessing shop accessors (UI in shop.cpp) ------------------------- #
+
+static bool shop_item_owned(const BlessShopItem& it) {
+    if ((*(volatile int*)kBlessBitsAbs >> it.bit) & 1) return true;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return g_checked.count(it.loc) != 0;
+}
+
+static bool shop_item_unlocked(int i) {
+    if (g_shop_unlock_mode != 1) return true;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return i < (int)g_floors_seen.size();   // one slot per distinct floor visited
+}
+
+bool ap_shop_available() {
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    return !g_shop_items.empty() && g_ap != nullptr;
+}
+int ap_shop_count() {
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    return (int)g_shop_items.size();
+}
+
+std::string ap_shop_status() {
+    char buf[96];
+    int total;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        total = (int)g_shop_items.size();
+    }
+    int unlocked = 0;
+    for (int i = 0; i < total; i++)
+        if (shop_item_unlocked(i)) unlocked++;
+    snprintf(buf, sizeof(buf), "SP: %d   (%d/%d slots unlocked)",
+             *(volatile int*)kSpAbs, unlocked, total);
+    return buf;
+}
+
+// One display line; first char is the classification/color marker the overlay
+// scheme uses ('*' progression gold, '!' trap red, ' ' plain).
+std::string ap_shop_line(int i) {
+    BlessShopItem it;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        if (i < 0 || i >= (int)g_shop_items.size()) return "";
+        it = g_shop_items[i];
+    }
+    std::string found = "?";
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(it.loc);
+        if (f != g_loc_found.end()) found = f->second;
+    }
+    int fl = g_loc_flags.count(it.loc) ? g_loc_flags[it.loc] : 0;
+    const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
+    char buf[256];
+    if (shop_item_owned(it))
+        snprintf(buf, sizeof(buf), " %s  (bought)", it.name.c_str());
+    else if (!shop_item_unlocked(i))
+        snprintf(buf, sizeof(buf), " %s  (locked - visit more floors)",
+                 it.name.c_str());
+    else
+        snprintf(buf, sizeof(buf), "%s%s  %d SP  =  %s", mark, it.name.c_str(),
+                 it.cost, found.c_str());
+    return buf;
+}
+
+// Buy slot i: deduct SP, set the purchase bit (the bit poll fires the check),
+// grant the effect (state array + recompute) when the array index is mapped.
+bool ap_shop_buy(int i) {
+    BlessShopItem it;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        if (i < 0 || i >= (int)g_shop_items.size()) return false;
+        it = g_shop_items[i];
+    }
+    if (shop_item_owned(it) || !shop_item_unlocked(i)) return false;
+    volatile int* sp = (volatile int*)kSpAbs;
+    if (*sp < it.cost) return false;
+    *sp = *sp - it.cost;
+    *(volatile int*)kBlessBitsAbs |= (1 << it.bit);      // purchase bit -> check
+    int idx = (it.bit >= 0 && it.bit < 32) ? g_bless_arr_idx[it.bit] : -1;
+    if (idx >= 0) {
+        *(volatile int*)(kBlessBaseAbs + (uintptr_t)idx * 8) = 1;  // level/owned
+        *(volatile int*)kBlessDirtyAbs |= 0x10;                    // recompute
+    } else {
+        mod_log("ap: shop — bit %d has no bless_idx_%d mapping; effect applies "
+                "after save+reload", it.bit, it.bit);
+    }
+    overlay::push_item("Bought: " + it.name);
+    mod_log("ap: shop bought '%s' (bit %d, %d SP, arr idx %d)",
+            it.name.c_str(), it.bit, it.cost, idx);
+    return true;
 }
 
 // Clear the warp-registry byte of every currently-locked statue. The game writes
@@ -648,18 +1163,22 @@ static void exp_scaling_poll() {
     auto it = g_scene_levels.find(read_current_scene());
     int explv = (it != g_scene_levels.end()) ? it->second : 0;
     int lv = read_level();
-    if (explv <= 0 || lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game / unknown room
-    int gap = explv - lv;
-    // EXP multiplier (modes 2 + 3): scale with how far under-level you are.
+    if (lv <= 0 || lv > 99) { g_exp_factor = 1.0f; return; }  // not in-game
+    if (explv > g_expected_hi) g_expected_hi = explv;  // deepest floor visited
+    // EXP multiplier (modes 2 + 3): the base multiplier everywhere; the catch-up
+    // multiplier while at/under the deepest visited floor's expected level +
+    // margin. Keyed to your furthest PROGRESS (not the current room), so you can
+    // catch up by fighting anywhere — including easy floors below you.
     if (g_level_scaling == 2 || g_level_scaling == 3) {
-        float f = (gap > 0) ? (1.0f + (float)gap) : 1.0f;
-        if (f > (float)g_exp_mult_max) f = (float)g_exp_mult_max;
-        g_exp_factor = f;
+        bool catching_up = g_expected_hi > 0 &&
+                           lv <= g_expected_hi + g_exp_catchup_margin;
+        g_exp_factor = (float)(catching_up ? g_exp_catchup_mult
+                                           : g_exp_base_mult);
     } else {
         g_exp_factor = 1.0f;
     }
     // Level floor (modes 1 + 3): bump up to (expected - margin) if below.
-    if (g_level_scaling == 1 || g_level_scaling == 3) {
+    if ((g_level_scaling == 1 || g_level_scaling == 3) && explv > 0) {
         int target = explv - g_level_margin;
         if (target > lv && target > 1) g_pending_level.store(target);
     }
@@ -728,6 +1247,27 @@ extern "C" void exp_scaling_on_frame() {
         force_spawn();
     }
 
+    // New-Game starting loadout (start_level / start_weapon / start_items): a floor
+    // applied continuously once a player entity + loaded scene exist, so it's
+    // idempotent (only ever raises), survives new-game init / save reload, and
+    // composes with Cleria-Ore weapon upgrades and catch-up level scaling. Only
+    // writes when below the floor, so it self-heals without spamming.
+    if (*kPlayerEntPtr != nullptr && read_current_scene() > 0) {
+        if (g_start_weapon > g_weapon_applied)
+            g_pending_weapon.store(g_start_weapon);   // -> weapon section below
+        if (g_start_level > 1 && read_level() < g_start_level)
+            g_pending_level.store(g_start_level);      // -> level section below
+        std::vector<int> start_items;
+        {
+            std::lock_guard<std::mutex> lk(g_reg_mtx);  // vs reconnect rebuild
+            start_items = g_start_items;
+        }
+        for (int idx : start_items)
+            if (idx >= 0 && idx < 0x200 &&
+                *(volatile int*)(kGFlagsAbs + idx * 4) < 1)
+                *(volatile int*)(kGFlagsAbs + idx * 4) = 1;
+    }
+
     // Weapon upgrade (Cleria Ore). Re-enforce if a save load reset g_flags[0x94]
     // below what we applied (the save reloads g_flags from the on-disk state).
     int wv = g_pending_weapon.exchange(0);
@@ -777,6 +1317,7 @@ static void poll_loop() {
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
+            poll_value_checks();
             poll_deathlink();
             poll_statue_warp();
             exp_scaling_poll();
@@ -789,8 +1330,23 @@ static void poll_loop() {
             if (!pending.empty()) {
                 std::list<int64_t> locs(pending.begin(), pending.end());
                 g_ap->LocationChecks(locs);
+                {
+                    std::lock_guard<std::mutex> lk(g_checked_mtx);
+                    g_checked.insert(pending.begin(), pending.end());
+                }
                 mod_log("ap: sent %d LocationCheck(s)", (int)locs.size());
             }
+            // Outgoing chat (typed in the F6 overlay; also server commands
+            // like !hint).
+            std::vector<std::string> says;
+            {
+                std::lock_guard<std::mutex> lk(g_say_mtx);
+                says.swap(g_say_queue);
+            }
+            for (const auto& s : says) {
+                try { g_ap->Say(s); } catch (...) {}
+            }
+            update_trackers();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -828,6 +1384,19 @@ static void create_client() {
     g_ap->set_slot_connected_handler(on_slot_connected);
     g_ap->set_items_received_handler(on_items_received);
     g_ap->set_location_info_handler(on_location_info);
+    // Server-known checked locations (sent on connect + after each check):
+    // feeds the overlay trackers so counts survive reconnects/co-op checks.
+    g_ap->set_location_checked_handler([](const std::list<int64_t>& locs) {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        for (int64_t l : locs) g_checked.insert(l);
+    });
+    // Room chat / item log -> the F6 chat overlay (rendered to plain text).
+    g_ap->set_print_json_handler([](const APClient::PrintJSONArgs& args) {
+        if (!g_ap) return;
+        try {
+            apchat::push(g_ap->render_json(args.data, APClient::RenderFormat::TEXT));
+        } catch (...) {}
+    });
     g_ap->set_bounced_handler([](const nlohmann::json& packet) {
         if (!g_death_link || !packet.contains("tags")) return;
         bool dl = false;
@@ -869,7 +1438,8 @@ const char* ap_cfg_slot() { return g_slot; }
 const char* ap_cfg_pass() { return g_pass; }
 
 void ap_install() {
-    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i] = -1;
+    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+    for (int i = 0; i < 32; i++) g_bless_arr_idx[i] = -1;   // cfg bless_idx_N maps
     load_config();               // prefill defaults for the in-game menu
     overlay::set_status("not connected - open the Archipelago menu");
 

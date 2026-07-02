@@ -27,7 +27,10 @@ from .game_state import (
     GameState,
     POLL_INTERVAL_S,
     apply_item,
+    apply_start_loadout,
     detect_checks,
+    grant_progressive,
+    grant_sp,
     poll,
 )
 from .memory import ProcessMemory, MemoryError_
@@ -119,6 +122,14 @@ def build_context_class():
             self.overlay.start()
             # signal-string -> AP location id; filled from slot data / datapackage
             self.location_signal_to_id: Dict[str, int] = {}
+            # New-Game starting loadout (from slot data): a floor applied each poll.
+            self.start_level: int = 0
+            self.start_item_names: list[str] = []
+            self._start_loadout_applied: bool = False
+            # SP fillers + progressive gear (from slot data).
+            self.sp_items: Dict[str, int] = {}
+            self.sp_flag_idx: int = 0xD8
+            self.progressive_gear: Dict[str, list[int]] = {}
 
         # -- AP auth ------------------------------------------------------- #
 
@@ -144,6 +155,24 @@ def build_context_class():
                 from .offsets import apply_slot_data
                 apply_slot_data(slot_data.get("location_detect"),
                                 slot_data.get("item_index"))
+                # New-Game starting loadout: level floor + items to mark owned.
+                # start_items ships as g_flags indices; map them back to names via
+                # item_index so we can grant through the suppressor-aware path.
+                self.start_level = int(slot_data.get("start_level", 0) or 0)
+                idx_to_name = {int(v): k for k, v
+                               in (slot_data.get("item_index") or {}).items()}
+                self.start_item_names = [
+                    idx_to_name[int(i)] for i in slot_data.get("start_items", [])
+                    if int(i) in idx_to_name
+                ]
+                self._start_loadout_applied = False
+                self.sp_items = {str(k): int(v) for k, v
+                                 in (slot_data.get("sp_items") or {}).items()}
+                self.sp_flag_idx = int(slot_data.get("sp_flag_idx", 0xD8))
+                self.progressive_gear = {
+                    str(k): [int(i) for i in v] for k, v
+                    in (slot_data.get("progressive_gear") or {}).items()
+                }
                 self.prev_state = None
                 self.suppressor.reset()
                 log.info("connected to slot %s — %d locations, %d items mapped",
@@ -162,8 +191,17 @@ def build_context_class():
                 item_name = self.item_names.lookup_in_game(net_item.item) \
                     if hasattr(self, "item_names") else str(net_item.item)
                 try:
-                    did = apply_item(self.mem, item_name,
-                                     suppressor=self.suppressor)
+                    if item_name in self.sp_items:
+                        grant_sp(self.mem, self.sp_items[item_name],
+                                 self.sp_flag_idx)
+                        did = True
+                    elif item_name in self.progressive_gear:
+                        did = grant_progressive(
+                            self.mem, self.progressive_gear[item_name],
+                            suppressor=self.suppressor) is not None
+                    else:
+                        did = apply_item(self.mem, item_name,
+                                         suppressor=self.suppressor)
                     log.info("applied item #%d %r (write=%s)",
                              self.applied_item_index, item_name, did)
                     src = ""
@@ -254,6 +292,21 @@ async def game_watcher(ctx) -> None:
         ctx.prev_state = state
         # Re-apply received items in case we just (re)attached after a restart.
         await ctx._apply_received_items()
+        # Enforce the New-Game starting loadout as a floor (idempotent: only writes
+        # when below the floor, so a fresh game gets bumped and later polls no-op).
+        if ctx.start_level > 1 or ctx.start_item_names:
+            try:
+                changed = apply_start_loadout(
+                    ctx.mem, level=ctx.start_level,
+                    item_names=ctx.start_item_names, suppressor=ctx.suppressor)
+                for label in changed:
+                    log.info("start loadout: %s", label)
+                    if not ctx._start_loadout_applied:
+                        ctx.overlay.push(label)
+                if changed:
+                    ctx._start_loadout_applied = True
+            except MemoryError_ as e:
+                log.debug("start loadout deferred: %s", e)
 
 
 # --------------------------------------------------------------------------- #

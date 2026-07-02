@@ -43,6 +43,15 @@ namespace apmenu {
     bool on_wm_key(UINT msg, WPARAM wp);
     bool on_wm_char(WPARAM ch);
 }
+namespace apchat {
+    void draw();
+    bool on_wm_key(unsigned msg, unsigned long long wp);
+    bool on_wm_char(unsigned long long ch);
+}
+namespace apshop {
+    void draw();
+    bool on_wm_key(unsigned msg, unsigned long long wp);
+}
 
 // Large font for the overlay's item names (~5x the default), built crisp at its
 // native pixel size. Read by overlay.cpp.
@@ -66,6 +75,14 @@ static LRESULT CALLBACK hk_WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && apmenu::on_wm_key(msg, wp))
         return 1;
     if (msg == WM_CHAR && apmenu::on_wm_char(wp))
+        return 1;
+    // Chat overlay next: F6 toggle + its input line (works anywhere); then
+    // the blessing shop (F5).
+    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && apchat::on_wm_key(msg, wp))
+        return 1;
+    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && apshop::on_wm_key(msg, wp))
+        return 1;
+    if (msg == WM_CHAR && apchat::on_wm_char(wp))
         return 1;
     if (g_show && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp))
         return 1;  // ImGui swallowed the input while the overlay is open
@@ -127,6 +144,8 @@ static HRESULT WINAPI hk_EndScene(IDirect3DDevice9* dev) {
         ImGui::NewFrame();
         overlay::draw();
         apmenu::draw();
+        apchat::draw();
+        apshop::draw();
         ImGui::EndFrame();
         ImGui::Render();
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());

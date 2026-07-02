@@ -8,7 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from Options import (
-    Choice, DeathLink, DefaultOnToggle, PerGameCommonOptions, Range, Toggle,
+    Choice, DeathLink, DefaultOnToggle, OptionList, PerGameCommonOptions, Range,
+    Toggle,
 )
 
 
@@ -79,6 +80,71 @@ class RandomStart(Toggle):
     display_name = "Random start statue"
 
 
+class MaxStartingFloor(Range):
+    """Highest tower floor a Random start may spawn you on. Random start picks a
+    goddess statue uniformly at random, and the deep statues (a 25F spawn) drop you
+    into brutal rooms with no gear history behind you. This caps the draw to statues
+    on floor <= this value, so New Game always begins somewhere survivable while
+    still landing you *somewhere* rather than 1F. Only affects ``random_start``;
+    lower = gentler openings, raise it (up to 25 = the summit) for more variety.
+    Ignored when ``random_start`` is off. If no statue exists at or below the cap,
+    the lowest-floor statue is used."""
+    display_name = "Random start max floor"
+    range_start = 1
+    range_end = 25
+    default = 10
+
+
+class MaxWarpFloorsSkip(Range):
+    """How many tower floors ahead of your current reach a warp may jump, in the
+    random-spawn warp network. With 0 the warp network is unrestricted (a single
+    received unlock can send you 15 floors up into rooms you have no business in
+    yet). With N > 0 the generator only puts a statue's warp in logic once you can
+    already reach a floor within N of it — so progress climbs in steps of at most N
+    floors instead of one lucky unlock teleporting you across the tower. Everything
+    still stays reachable on foot; this only paces the warp shortcuts. Only affects
+    ``random_start``; 0 = unlimited (old behaviour)."""
+    display_name = "Max warp floors skipped"
+    range_start = 0
+    range_end = 25
+    default = 5
+
+
+class StartingItems(OptionList):
+    """Items to grant at the start of every New Game, as a floor (they're simply
+    marked owned — good for key items). Defaults to the two warp Crystals the
+    opening cutscene normally hands you (Crystal, and Toal's Dark Crystal), so a
+    Random start — which skips that intro — still begins with them. Add any item
+    names here (e.g. ``Mask of Eyes``) to start with them; unknown names are
+    ignored. Names must match the game's item names exactly."""
+    display_name = "Starting items"
+    default = ["Crystal", "Dark Crystal"]
+
+
+class StartingLevel(Range):
+    """Character level to start every New Game at, applied as a floor (only ever
+    raises you — never below your real level). Default 1 = vanilla. Raise it for a
+    gentler opening, especially with Random start dropping you on a higher floor.
+    Stacks with catch-up level scaling: you end up at the higher of this and the
+    floor's expected level."""
+    display_name = "Starting level"
+    range_start = 1
+    range_end = 60
+    default = 1
+
+
+class StartingWeaponLevel(Range):
+    """Displayed weapon level (1-6) to start every New Game with, applied as a
+    floor. Default 1 = the vanilla starter weapon. The in-game mod owns the weapon
+    (it upgrades on Cleria Ore and re-applies the floor-appropriate weapon on a
+    Random-start spawn), so this raises the *minimum*: you begin with at least this
+    level, and Cleria Ore / floor-appropriate gear can take you higher."""
+    display_name = "Starting weapon level"
+    range_start = 1
+    range_end = 6
+    default = 1
+
+
 class LevelScaling(Choice):
     """Catch-up leveling so the statue warp network never means a grind wall.
     Compares your level to the floor you're on (per the game's own level curve):
@@ -86,9 +152,10 @@ class LevelScaling(Choice):
     - ``off``            : vanilla leveling.
     - ``level_floor``    : entering a floor far above your level bumps you up to
                            (floor level - margin); only ever raises you.
-    - ``exp_multiplier`` : you gain bonus EXP scaled by how far under-level you
-                           are (1x when on level), so fighting catches you up
-                           fast without changing combat.
+    - ``exp_multiplier`` : boosted EXP — the base multiplier everywhere, the
+                           catch-up multiplier while your level is at/under the
+                           deepest visited floor's expected level + margin (see
+                           the EXP options below).
     - ``both``           : the bump gets you most of the way, the EXP boost
                            finishes it through play. Frictionless (default)."""
     display_name = "Level scaling"
@@ -113,13 +180,93 @@ class LevelMargin(Range):
     default = 0
 
 
-class ExpMultiplierMax(Range):
-    """Cap for the catch-up EXP multiplier (it scales with how far under-level you
-    are, up to this much, and is 1x when you're on level)."""
-    display_name = "Catch-up EXP multiplier cap"
+class ExpMultiplierBase(Range):
+    """Flat EXP multiplier applied everywhere while EXP scaling is on (the
+    ``exp_multiplier`` / ``both`` modes). Default 3x: a rando run zig-zags the
+    tower instead of grinding it in vanilla order, so everyone gets a boost.
+    1 = vanilla rate (only the catch-up boost below then applies)."""
+    display_name = "Base EXP multiplier"
+    range_start = 1
+    range_end = 10
+    default = 3
+
+
+class ExpMultiplierCatchup(Range):
+    """EXP multiplier while you're CATCHING UP: your level is at or under the
+    expected level of the deepest floor you've visited, plus the margin below.
+    Replaces the base multiplier whenever the condition holds, so falling behind
+    your furthest progress levels you back fast wherever you choose to fight."""
+    display_name = "Catch-up EXP multiplier"
     range_start = 1
     range_end = 20
-    default = 8
+    default = 5
+
+
+class ExpCatchupMargin(Range):
+    """How many levels ABOVE the deepest-visited floor's expected level still
+    count as catching up (the catch-up multiplier applies while
+    your level <= expected + this). Default 5."""
+    display_name = "Catch-up margin (levels)"
+    range_start = 0
+    range_end = 20
+    default = 5
+
+
+class BlessingCosts(Choice):
+    """Blessing shop economy. ``vanilla`` = buy from the game's own statue menu
+    at its normal prices. ``random`` = the mod's OWN shop overlay (F5) sells the
+    blessings at seed-randomized SP prices (between the min/max below) — the
+    vanilla menu still works at vanilla prices, but the overlay shop is where
+    the deals (and ripoffs) are. Purchases either way grant the blessing effect
+    AND the multiworld check."""
+    display_name = "Blessing costs"
+    option_vanilla = 0
+    option_random = 1
+    default = 0
+
+
+class BlessingCostMin(Range):
+    """Lowest possible randomized blessing price (SP)."""
+    display_name = "Blessing cost min"
+    range_start = 10
+    range_end = 2000
+    default = 100
+
+
+class BlessingCostMax(Range):
+    """Highest possible randomized blessing price (SP)."""
+    display_name = "Blessing cost max"
+    range_start = 10
+    range_end = 5000
+    default = 800
+
+
+class BlessingShopUnlock(Choice):
+    """How the overlay shop's inventory unlocks. ``all`` = every blessing is
+    purchasable from the start. ``one_per_floor`` = one more shop slot (cheapest
+    first) unlocks for each distinct tower floor you visit — pace your power to
+    your exploration."""
+    display_name = "Blessing shop unlock"
+    option_all = 0
+    option_one_per_floor = 1
+    default = 0
+
+
+class ShopHints(DefaultOnToggle):
+    """Show what each Divine Blessing purchase actually gives (the multiworld
+    item scouted at that shop slot) on the in-game overlay while you're at a
+    goddess statue. Off = blessings are blind buys."""
+    display_name = "Blessing shop hints"
+
+
+class ProgressiveArmor(DefaultOnToggle):
+    """Make defensive gear progressive. Ys Origin has two gear slots — Armor and
+    Boots — each a strict tier ladder per character. When on, every gear chest
+    puts a "Progressive Armor" / "Progressive Boots" in the pool instead of a
+    specific piece: receiving one grants your character's NEXT tier, so you can't
+    get the 22F armor before the 7F one (pickups never skip ahead). Off = raw
+    pieces are shuffled as-is (you can find endgame armor first)."""
+    display_name = "Progressive armor & boots"
 
 
 class WeaponRequirements(DefaultOnToggle):
@@ -143,8 +290,21 @@ class YsOriginOptions(PerGameCommonOptions):
     room_checks: RoomChecks
     statue_warp_locks: StatueWarpLocks
     random_start: RandomStart
+    max_starting_floor: MaxStartingFloor
+    max_warp_floors_skip: MaxWarpFloorsSkip
+    starting_items: StartingItems
+    starting_level: StartingLevel
+    starting_weapon_level: StartingWeaponLevel
     level_scaling: LevelScaling
     level_margin: LevelMargin
-    exp_multiplier_max: ExpMultiplierMax
+    exp_multiplier_base: ExpMultiplierBase
+    exp_multiplier_catchup: ExpMultiplierCatchup
+    exp_catchup_margin: ExpCatchupMargin
+    progressive_armor: ProgressiveArmor
+    shop_hints: ShopHints
+    blessing_costs: BlessingCosts
+    blessing_cost_min: BlessingCostMin
+    blessing_cost_max: BlessingCostMax
+    blessing_shop_unlock: BlessingShopUnlock
     weapon_requirements: WeaponRequirements
     death_link: DeathLink

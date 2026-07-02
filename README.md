@@ -98,11 +98,17 @@ overlay.
   cutscenes, for every character) and warps you straight there with a
   floor-appropriate level + weapon so you're playable wherever you land;
   reachability uses a bidirectional warp-network logic so the seed stays beatable
-  from any spawn. Needs `statue_warp_locks`. Normal seeds are unaffected.
+  from any spawn. Needs `statue_warp_locks`. Normal seeds are unaffected. Two knobs
+  tame it: `max_starting_floor` caps how deep the spawn can be (no more waking up on
+  25F with nothing behind you), and `max_warp_floors_skip` limits how far ahead a
+  single warp unlock can fling you (progress climbs in steps, not lucky leaps).
 - **Catch-up level scaling** — so warping to a far-off floor isn't a grind wall:
-  the mod can bump an under-leveled character toward the floor's expected level
-  and/or grant scaled bonus EXP, tapering to nothing once you're on level. On by
-  default; tune or disable with `level_scaling`.
+  the mod can bump an under-leveled character toward the floor's expected level,
+  and boosts EXP — a flat base multiplier everywhere (default 3x), raised to a
+  catch-up multiplier (default 5x) while your level is at or under the deepest
+  visited floor's expected level + 5, so falling behind your progress levels you
+  back fast fighting anywhere. On by default; tune or disable with
+  `level_scaling` and the `exp_*` options.
 - **Weapon gating** — your weapon (the dominant damage stat) is upgraded by Cleria
   Ore, which is shuffled into the pool as progression. The generator guarantees
   the **vanilla weapon level for each floor** is obtainable before that zone is in
@@ -110,6 +116,37 @@ overlay.
   Receiving Cleria Ore upgrades your weapon directly (no NPC trip). On by default;
   pairs with level scaling so warped-ahead floors stay playable. See
   `weapon_requirements`.
+- **Blessing shop rando** — Divine Blessings can hold real multiworld items:
+  pay SP at any goddess statue, get a check (you keep the blessing's effect
+  too). With `shop_hints` on, the overlay lists what each blessing actually
+  gives while you're at a statue, so purchases are informed choices. SP drops
+  and SP filler items feed the economy.
+- **Overlay trackers** — a "Checks here: k/n" line for the current room
+  (top-right, under the room name), and a per-floor remaining-checks panel that
+  appears at goddess statues (where the warp menu lives) — F7 toggles it
+  anywhere else.
+- **Seed-scoped saves** — while connected, save files are transparently
+  redirected to an `archipelago_<seed>/` folder next to the normal saves:
+  AP runs never touch your vanilla saves, and each multiworld keeps its own
+  save set. Vanilla/offline play is unaffected (`save_redirect=0` in
+  `yso_ap.cfg` disables it).
+- **Blessing cost rando + F5 shop** — with `blessing_costs: random`, the mod
+  runs its OWN shop overlay (F5): blessings at seed-randomized SP prices, each
+  listed with the multiworld item it holds. Buying deducts SP and grants the
+  blessing + check directly — no dependency on the game's price table. Optional
+  `one_per_floor` pacing unlocks one shop slot per tower floor visited. (One
+  live capture — `tools/flaglog.py --bless` — fills the `bless_idx_*` cfg map
+  so effects apply instantly; unmapped effects apply after a save+reload.)
+- **AP chat overlay (F6)** — the room's live feed (items found by/for you,
+  hints, joins, chat) bottom-left in the game's HUD style. Press Enter to type:
+  regular chat or server commands (`!hint <item>`, `!help`, ...). The game's
+  input is frozen while typing. `chat=1` in `yso_ap.cfg` shows it at boot.
+  Shop-hint lines are color-coded (gold = progression, red = trap), and a
+  release/collect flood collapses to one "Received N items" line instead of
+  spamming the feed.
+- **Goal reporting** — entering the ending scene sends your GOAL status to the
+  server (releases your remaining items / completes the seed). Needs the ending
+  scene id captured once live (`goal_scene=` in `yso_ap.cfg`).
 - **Goal:** defeat Darm (the final boss), or optionally all bosses.
 
 ## ⚙️ Options (in your yaml)
@@ -123,11 +160,24 @@ overlay.
 | `boss_checks` | `true` / `false` | `true` | Reaching each boss arena is a check |
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
+| `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
+| `blessing_costs` | `vanilla` / `random` | `vanilla` | `random` = the mod's own F5 shop overlay sells blessings at seed-randomized SP prices (the game's menu still works at vanilla prices) |
+| `blessing_cost_min` | `10`–`2000` | `100` | Cheapest possible randomized blessing price |
+| `blessing_cost_max` | `10`–`5000` | `800` | Priciest possible randomized blessing price |
+| `blessing_shop_unlock` | `all` / `one_per_floor` | `all` | `one_per_floor` = one more F5-shop slot (cheapest first) unlocks per distinct tower floor visited |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | **Start anywhere.** With `statue_warp_locks` on, New Game spawns you at a random statue: the mod skips the whole intro (movies + cutscenes, every character) and warps you there geared for the floor; bidirectional warp-network logic keeps the seed beatable from any spawn |
+| `max_starting_floor` | `1`–`25` | `10` | Cap the `random_start` spawn to statues on this floor or below, so New Game never drops you on the brutal deep floors with no gear behind you. Lower = gentler openings; raise for more variety. No effect unless `random_start` is on |
+| `max_warp_floors_skip` | `0`–`25` | `5` | How many floors ahead of your current reach a warp may jump (`0` = unlimited). With N > 0 a statue's warp only enters logic once you can reach a floor within N of it, so a single unlock can't teleport you across the tower. Everything still stays reachable on foot; this only paces the warp shortcuts. No effect unless `random_start` is on |
+| `starting_items` | list of item names | `[Crystal, Dark Crystal]` | Items to begin every New Game owning (applied as a floor — marked owned). Defaults to the warp Crystals the intro grants, so `random_start` (which skips the intro) still has them. Unknown names are ignored |
+| `starting_level` | `1`–`60` | `1` | Minimum character level at New Game (only ever raises you). `1` = vanilla. Stacks with `level_scaling` — you get the higher of this and the floor's expected level |
+| `starting_weapon_level` | `1`–`6` | `1` | Minimum displayed weapon level at New Game (a floor). `1` = vanilla starter. The mod still upgrades weapon via Cleria Ore / floor-appropriate gear on top of this |
 | `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
 | `level_margin` | `0`–`10` | `0` | How many levels under a floor's expected level the floor-bump leaves you (0 = right at the expected level); raise for more challenge |
-| `exp_multiplier_max` | `1`–`20` | `8` | Cap for the catch-up EXP multiplier (scales with how under-level you are) |
+| `exp_multiplier_base` | `1`–`10` | `3` | Flat EXP multiplier applied everywhere while EXP scaling is on (`1` = vanilla rate) |
+| `exp_multiplier_catchup` | `1`–`20` | `5` | EXP multiplier while your level ≤ the deepest visited floor's expected level + margin — catch up by fighting anywhere, easy floors included |
+| `exp_catchup_margin` | `0`–`20` | `5` | Levels above the deepest floor's expected level that still count as catching up |
+| `progressive_armor` | `true` / `false` | `true` | Armor & Boots become progressive: gear chests hold "Progressive Armor"/"Progressive Boots", and receiving one grants your character's next tier (pickups never skip ahead). Off = raw pieces shuffled as-is |
 | `weapon_requirements` | `true` / `false` | `true` | Gate each zone behind enough Cleria Ore that the vanilla weapon level for that floor is obtainable first; Cleria Ore becomes progression and upgrades your weapon on pickup. Pairs with `level_scaling` to keep warped-ahead floors playable |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
 

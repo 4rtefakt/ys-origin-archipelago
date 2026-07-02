@@ -31,6 +31,7 @@ from .offsets import (
     BLESSING_COUNT_CHECKS,
     CURRENT_FLOOR_OFFSET,
     FLOOR_CHECKS,
+    GFLAGS_BASE,
     GRANT_SAFE_MIN,
     ITEM_OFFSETS,
     LOCATION_FLAG_OFFSETS,
@@ -386,3 +387,64 @@ def apply_item(memory: ProcessMemory, item_name: str,
 
     log.warning("apply_item: no mapping for item %r", name)
     return False
+
+
+def grant_sp(memory: ProcessMemory, amount: int, flag_idx: int = 0xD8) -> None:
+    """Add `amount` to the SP currency cell (g_flags[flag_idx]; the blessing /
+    gear-upgrade scripts deduct from it). SP is a stat, not an inventory item,
+    so it bypasses the item array entirely."""
+    off = GFLAGS_BASE + flag_idx * 4
+    cur = memory.read_offset_int32(off)
+    base = cur if cur >= 0 else 0
+    memory.write_offset_int32(off, base + max(0, amount))
+    log.info("granted %d SP: %d -> %d", amount, cur, base + max(0, amount))
+
+
+def grant_progressive(memory: ProcessMemory, ladder: "List[int]",
+                      suppressor: "Optional[Suppressor]" = None) -> Optional[int]:
+    """Grant the first unowned tier of a progressive-gear ladder (g_flags indices
+    in tier order). Returns the granted index, or None when every tier is owned.
+    Goes through the item-array path so a suppressor treats it as an AP grant."""
+    inv_off = {v: k for k, v in ITEM_OFFSETS.items()}   # offset -> item name
+    for idx in ladder:
+        off = GFLAGS_BASE + idx * 4
+        if memory.read_offset_int32(off) < 1:
+            name = inv_off.get(off)
+            if name is not None and suppressor is not None and suppressor.enabled:
+                suppressor.grant(memory, name)
+            else:
+                memory.write_offset_int32(off, 1)
+            log.info("progressive gear: granted tier g_flags[0x%X] (%s)",
+                     idx, name or "?")
+            return idx
+    return None
+
+
+def apply_start_loadout(memory: ProcessMemory, *, level: int = 0,
+                        item_names: "Optional[List[str]]" = None,
+                        offsets: Offsets = OFFSETS,
+                        suppressor: "Optional[Suppressor]" = None) -> List[str]:
+    """Enforce the New-Game starting loadout as a floor (idempotent, only-raises):
+
+      * grant each named starting item (marked owned) if not already held;
+      * raise the character level to ``level`` if currently below it.
+
+    Weapon level is intentionally NOT written here — the in-game mod owns the
+    weapon record + entity stat sync (see ``start_weapon`` slot data); a bare
+    record write from the client wouldn't affect combat. Returns the human labels
+    of what actually changed (empty when everything already met the floor), so the
+    caller can surface it once and skip logging on subsequent idempotent passes.
+    """
+    changed: List[str] = []
+    for name in (item_names or ()):
+        off = ITEM_OFFSETS.get(name)
+        if off is None:
+            continue                       # not a known g_flags item — skip
+        if memory.read_offset_int32(off) < 1:
+            apply_item(memory, name, offsets=offsets, suppressor=suppressor)
+            changed.append(f"Start item: {name}")
+    if level and level > 1 and offsets.current_level is not None:
+        if memory.read_offset_int32(offsets.current_level) < level:
+            memory.write_offset_int32(offsets.current_level, level)
+            changed.append(f"Start level {level}")
+    return changed

@@ -17,10 +17,25 @@ Ys Origin:
 
   # --- which things count as checks (more checks = more to find) ---
   statue_checks: true    # activating goddess statues
-  blessing_checks: true  # buying divine blessings
+  blessing_checks: true  # buying divine blessings — SHOP RANDO: blessings can
+                         #   hold real multiworld items (pay SP, get a check)
   boss_checks: true      # reaching each boss arena
   floor_checks: true     # reaching each floor
   room_checks: false     # entering each room (adds ~145 filler checks — big!)
+  shop_hints: true       # overlay shows what each blessing purchase actually
+                         #   gives (scouted) while you're at a goddess statue;
+                         #   false = blind buys
+
+  # --- blessing shop economy (the mod's own F5 shop overlay) ---
+  blessing_costs: vanilla # vanilla | random
+                          #   vanilla = buy from the game's statue menu as usual
+                          #   random  = the mod's F5 shop sells blessings at
+                          #             seed-randomized SP prices (min/max below)
+  blessing_cost_min: 100  # cheapest possible randomized price (SP)
+  blessing_cost_max: 800  # priciest possible randomized price (SP)
+  blessing_shop_unlock: all # all | one_per_floor
+                            #   one_per_floor = one more shop slot (cheapest
+                            #   first) unlocks per distinct tower floor visited
 
   # --- goddess statue warp locks ---
   statue_warp_locks: false # when on, every goddess statue starts locked (dark:
@@ -33,17 +48,54 @@ Ys Origin:
                            #   warps you there geared for the floor (level +
                            #   weapon). Beatable from any spawn. Normal seeds
                            #   are unaffected.
+  max_starting_floor: 10   # cap the random-start spawn to statues on floor <= this
+                           #   (1-25). Keeps New Game off the brutal deep floors (a
+                           #   25F start with no gear behind you); lower = gentler
+                           #   openings, raise for more variety. random_start only.
+  max_warp_floors_skip: 5  # how many floors ahead of your current reach a warp may
+                           #   jump (0 = unlimited). With N>0 a statue's warp only
+                           #   enters logic once you can reach a floor within N of it,
+                           #   so one lucky unlock can't fling you 15 floors up into
+                           #   rooms you're not ready for. On foot everything still
+                           #   stays reachable; this only paces warps. random_start only.
+
+  # --- New Game starting loadout (applied as a floor: only ever raises) ---
+  starting_items:        # items to begin every New Game owning. Defaults to the
+    - Crystal            #   warp Crystals the intro normally grants (Toal uses the
+    - Dark Crystal       #   Dark Crystal) so a random_start — which skips the intro
+                         #   — still has them. Add any exact item names; unknowns
+                         #   are ignored. Leave empty ([]) to start with nothing.
+  starting_level: 1      # minimum character level at New Game (1 = vanilla). Raise
+                         #   for a gentler opening; stacks with level_scaling (you
+                         #   get the higher of this and the floor's expected level).
+  starting_weapon_level: 1 # minimum displayed weapon level 1-6 at New Game (1 =
+                           #   vanilla starter). The mod still upgrades it via Cleria
+                           #   Ore / floor-appropriate gear; this only sets the floor.
 
   # --- catch-up level scaling (so warping far ahead isn't a grind wall) ---
   level_scaling: both    # off | level_floor | exp_multiplier | both
                          #   level_floor    = entering a floor far above your
                          #                    level bumps you up to (floor - margin)
-                         #   exp_multiplier = bonus EXP scaled by how under-level
-                         #                    you are (1x when on level)
+                         #   exp_multiplier = boosted EXP (base everywhere,
+                         #                    catch-up while behind — see below)
                          #   both (default) = bump most of the way, EXP boost the rest
   level_margin: 0        # levels under a floor's expected level the bump leaves you
                          #   (0 = right at the expected level; raise for challenge)
-  exp_multiplier_max: 8  # cap for the catch-up EXP multiplier
+  exp_multiplier_base: 3 # flat EXP multiplier everywhere (rando runs zig-zag the
+                         #   tower, so everyone levels faster than vanilla). 1 = off.
+  exp_multiplier_catchup: 5 # EXP multiplier while your level <= the deepest floor
+                            #   you've visited's expected level + the margin below —
+                            #   falling behind your progress levels you back fast,
+                            #   fighting anywhere you like.
+  exp_catchup_margin: 5  # levels above the deepest floor's expected level that
+                         #   still count as "catching up"
+
+  # --- gear ---
+  progressive_armor: true # armor & boots become progressive: every gear chest
+                          #   holds a "Progressive Armor"/"Progressive Boots";
+                          #   receiving one grants your character's NEXT tier, so
+                          #   pickups never skip ahead. Off = raw pieces shuffled
+                          #   (you can find endgame armor first).
 
   # --- weapon gating (so warping far ahead isn't a 1-damage wall) ---
   weapon_requirements: true # gate each zone behind enough Cleria Ore that the
