@@ -380,9 +380,11 @@ static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statu
 extern "C" __declspec(dllimport) unsigned long __stdcall GetTickCount(void);
 static std::atomic<bool> g_saw_intro{false};     // New-Game intro (scene 2) seen
 static std::atomic<unsigned long> g_intro_arm_tick{0};  // GetTickCount when armed
-// CALIBRATION: auto-fire disabled (huge delay) while we find the right moment via
-// F9. Each F9 press logs the exact state so the trigger can be set to match.
-static const unsigned long kIntroDelayMs = 0xFFFFFFFF;
+// Calibrated (F9 timing run): a warp ~1.5s after the intro arms takes cleanly,
+// even with no player entity and during a scene-0 gap. Fire from here and retry
+// until the spawn scene loads (the intro flickers, so one fire can be swallowed).
+static const unsigned long kIntroDelayMs = 1600;
+static const unsigned long kWarpRetryMs = 400;
 static std::atomic<bool> g_force_spawn_done{false};
 static std::atomic<bool> g_warp_request{false};  // manual test hotkey -> main thread
 static volatile int g_warp_idx = -1;     // target for do_warp_native()
@@ -1362,26 +1364,22 @@ extern "C" void exp_scaling_on_frame() {
     // entity yet, so we'd never fire; instead we wait for the entity to appear
     // (control handed over) and warp a short beat later.
     int cur_scene = read_current_scene();
-    bool entity = *kPlayerEntPtr != nullptr;
-    // Wait a WALL-CLOCK beat after the intro arms (kIntroDelayMs) so the intro
-    // actually starts playing before we cut it — a frame COUNTER can't be used
-    // because the cutscene flickers scene 2 <-> 0 and would reset it. After the
-    // delay, fire on the next frame a player entity exists (the warp then forces
-    // the scene change that aborts the intro).
+    // The warp has landed once the spawn scene is loaded — then stop retrying.
+    bool landed = g_saw_intro.load() && cur_scene == g_start_statue_scene;
+    if (landed) g_force_spawn_done.store(true);
+    // Wall-clock delay from intro arm (flicker-proof; a frame counter can't be
+    // used because the cutscene bounces scene 2 <-> 0). Past the delay, fire and
+    // retry every kWarpRetryMs until the spawn scene loads.
+    unsigned long now = GetTickCount();
     bool delay_passed = g_saw_intro.load() &&
-        (GetTickCount() - g_intro_arm_tick.load()) >= kIntroDelayMs;
-    bool auto_intro = !g_force_spawn_done.load() && delay_passed &&
-                      entity && cur_scene >= 2;
-    if (manual) {
-        unsigned long since = g_saw_intro.load()
-            ? (GetTickCount() - g_intro_arm_tick.load()) : 0;
-        mod_log("F9: manual fire — scene %d, entity %s, armed %s, +%lums since arm",
-                cur_scene, entity ? "yes" : "no",
-                g_saw_intro.load() ? "yes" : "no", since);
-    }
-    if (spawn_seed && (manual || auto_intro)) {
-        g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
-        force_spawn();
+        (now - g_intro_arm_tick.load()) >= kIntroDelayMs;
+    bool want_auto = delay_passed && !g_force_spawn_done.load() && !landed;
+    static unsigned long s_last_fire = 0;
+    if (spawn_seed && (manual || want_auto)) {
+        if (manual || now - s_last_fire >= kWarpRetryMs) {
+            s_last_fire = now;
+            force_spawn();
+        }
     }
 
     // New-Game starting loadout (start_level / start_weapon / start_items): a floor
