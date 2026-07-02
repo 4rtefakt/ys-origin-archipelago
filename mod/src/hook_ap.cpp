@@ -1354,16 +1354,14 @@ extern "C" void exp_scaling_on_frame() {
     // (control handed over) and warp a short beat later.
     int cur_scene = read_current_scene();
     bool entity = *kPlayerEntPtr != nullptr;
-    bool intro_ready = !g_force_spawn_done.load() && g_saw_intro.load() &&
-                       entity && cur_scene >= 2;
-    static int s_intro_frames = 0;
-    s_intro_frames = intro_ready ? s_intro_frames + 1 : 0;
-    if (intro_ready && s_intro_frames == 1)
-        mod_log("force-spawn: intro handed control (scene %d) — warping soon", cur_scene);
-    bool auto_intro = intro_ready && s_intro_frames >= 45;   // ~0.75s settle
+    // Fire on the FIRST frame the intro gives us a player entity — do NOT wait,
+    // because the intro cutscene flickers scene 2 <-> 0 and the entity appears
+    // only briefly, so any multi-frame settle never completes. The warp itself
+    // forces the scene change that aborts the cutscene (the proven v1.4.0 path).
+    bool auto_intro = !g_force_spawn_done.load() && g_saw_intro.load() &&
+                      entity && cur_scene >= 2;
     if (spawn_seed && (manual || auto_intro)) {
         g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
-        s_intro_frames = 0;
         force_spawn();
     }
 
