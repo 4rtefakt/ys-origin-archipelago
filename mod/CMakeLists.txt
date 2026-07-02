@@ -97,6 +97,7 @@ add_library(dinput8 SHARED
     src/hook_watch.cpp
     src/hook_input.cpp
     src/hook_saveredir.cpp
+    src/hook_steamcloud.cpp
     src/overlay.cpp
     src/chat.cpp
     src/shop.cpp

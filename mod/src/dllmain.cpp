@@ -10,6 +10,7 @@ void ap_install();
 void watch_install();
 void input_hooks_install();
 void saveredir_install();
+void steamcloud_install();
 void mod_log(const char* fmt, ...);
 
 static DWORD WINAPI init_thread(LPVOID) {
@@ -17,6 +18,7 @@ static DWORD WINAPI init_thread(LPVOID) {
     hook_d3d9_install();   // overlay (runs MH_Initialize)
     input_hooks_install(); // freeze game input while the AP connect form is open
     saveredir_install();   // per-seed save folders while connected to AP
+    steamcloud_install();  // ...and the Steam Cloud (ISteamRemoteStorage) saves
     bridge_install();      // localhost socket bridge (legacy / fallback)
     ap_install();          // self-contained Archipelago client (apclientpp)
     hook_vm_install();     // event-VM grant interception (suppress/detect/give)

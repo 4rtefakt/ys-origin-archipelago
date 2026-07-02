@@ -54,6 +54,15 @@ extern "C" void saveredir_config(int enabled, const char* pattern) {
     }
 }
 
+// Accessors for the Steam Cloud hook (hook_steamcloud.cpp), which redirects the
+// game's ISteamRemoteStorage saves the same way this file redirects CreateFile.
+static bool matches_pattern(const char* base);   // defined below
+extern "C" bool saveredir_active() { return g_enabled && g_seed[0] != '\0'; }
+extern "C" const char* saveredir_seed_cstr() { return g_seed; }
+extern "C" bool saveredir_match_name(const char* base) {
+    return base && matches_pattern(base);
+}
+
 extern "C" void saveredir_set_seed(const char* seed) {
     size_t n = 0;
     for (const char* p = seed; *p && n < sizeof(g_seed) - 1; ++p) {
