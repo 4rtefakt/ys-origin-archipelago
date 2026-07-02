@@ -20,6 +20,7 @@
 
 #include <windows.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -150,6 +151,9 @@ void saveredir_install() {
                                      (void**)&o_CreateFileA) : MH_ERROR_NOT_EXECUTABLE;
     MH_STATUS w = pW ? MH_CreateHook(pW, (void*)&hk_CreateFileW,
                                      (void**)&o_CreateFileW) : MH_ERROR_NOT_EXECUTABLE;
-    MH_EnableHook(MH_ALL_HOOKS);
+    // Enable only OUR hooks — MH_ALL_HOOKS would also flip any hook another
+    // module created but deliberately left disabled.
+    if (a == MH_OK) MH_EnableHook(pA);
+    if (w == MH_OK) MH_EnableHook(pW);
     mod_log("saveredir: CreateFileA=%d CreateFileW=%d (0=ok)", (int)a, (int)w);
 }

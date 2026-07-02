@@ -163,6 +163,9 @@ static void create_client();  // defined below; builds g_ap on the poll thread
 // flag index -> AP location ids (set in slot_connected, read in ap_on_check).
 // A VECTOR per flag: one event flag can be several AP locations (the elemental
 // altars grant two items — weapon + bracelet — on a single script flag).
+// g_reg_mtx guards it: the poll thread rebuilds it on (re)connect while the VM
+// hook reads it on the game's main thread.
+static std::mutex g_reg_mtx;
 static std::vector<int64_t> g_flag_to_loc[0x200];
 // scene-method detection: scene number -> AP location ids fired on entering it
 // (boss arenas, room-sanity checks); scene number -> room name for the overlay.
@@ -178,6 +181,9 @@ static std::map<int, std::vector<int64_t>> g_scene_locations;  // scene -> locs
 static std::map<int, std::vector<int64_t>> g_floor_locations;  // floor -> locs
 static std::map<int64_t, std::string> g_bless_names;   // blessing loc -> name
 static std::set<int> g_statue_scene_set;
+// g_checked + g_floors_seen: written on the poll thread, read by the shop UI on
+// the game's main thread (WndProc/EndScene) — guarded by g_checked_mtx.
+static std::mutex g_checked_mtx;
 static std::set<int64_t> g_checked;
 static bool g_shop_hints = false;
 static bool g_panel_toggle = false;       // F7: force the panel anywhere
@@ -444,7 +450,12 @@ static void ap_give(int idx, int count) {
 // show what was here (item + owning world), from the scout map.
 void ap_on_check(int flag_idx) {
     if (flag_idx < 0 || flag_idx >= 0x200) return;
-    for (int64_t loc : g_flag_to_loc[flag_idx]) {
+    std::vector<int64_t> locs;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
+        locs = g_flag_to_loc[flag_idx];
+    }
+    for (int64_t loc : locs) {
         {
             std::lock_guard<std::mutex> lk(g_check_mtx);
             g_checks.push_back(loc);
@@ -511,11 +522,16 @@ static void on_slot_connected(const nlohmann::json& sd) {
     std::list<int64_t> scout;
     int scenes = 0;
     // Reset detect registrations (a reconnect re-registers everything; without
-    // this a flag would accumulate duplicate location entries).
-    for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+    // this a flag would accumulate duplicate location entries). g_reg_mtx: the
+    // VM hook reads g_flag_to_loc from the game's main thread.
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+    }
     g_poll_bits.clear();
     g_poll_vals.clear();
     g_poll_floors.clear();
+    g_loc_bitmap.clear();
     if (sd.contains("location_detect")) {
         const auto& sig = sd.contains("location_signals") ? sd["location_signals"]
                                                           : nlohmann::json::object();
@@ -529,6 +545,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
                 int idx = (off - kGFlagsRel) / 4;
                 if (idx >= 0 && idx < 0x200) {
                     g_loc_flag[idx] = true;
+                    std::lock_guard<std::mutex> lk(g_reg_mtx);
                     g_flag_to_loc[idx].push_back(loc);
                 } else {
                     // Outside g_flags (e.g. the armor blessing cell): the VM
@@ -590,21 +607,29 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& v : sd["statue_scenes"])
             g_statue_scene_set.insert(v.get<int>());
     // Overlay blessing shop: randomized prices (empty = vanilla mode, no shop).
-    g_shop_items.clear();
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // shop UI reads on main thread
+        g_shop_items.clear();
+    }
     g_shop_unlock_mode = sd.value("blessing_shop_unlock", 0);
     if (sd.contains("blessing_costs")) {
+        std::vector<BlessShopItem> items;
         for (auto& kv : sd["blessing_costs"].items()) {
             int64_t loc = atoll(kv.key().c_str());
             auto nm = g_bless_names.find(loc);
             auto bt = g_loc_bitmap.find(loc);
             if (nm == g_bless_names.end() || bt == g_loc_bitmap.end()) continue;
-            g_shop_items.push_back({loc, nm->second, bt->second,
-                                    kv.value().get<int>()});
+            items.push_back({loc, nm->second, bt->second,
+                             kv.value().get<int>()});
         }
-        std::sort(g_shop_items.begin(), g_shop_items.end(),
+        std::sort(items.begin(), items.end(),
                   [](const BlessShopItem& a, const BlessShopItem& b) {
                       return a.cost < b.cost;
                   });
+        {
+            std::lock_guard<std::mutex> lk(g_reg_mtx);
+            g_shop_items.swap(items);
+        }
         mod_log("ap: blessing shop — %d items, unlock mode %d",
                 (int)g_shop_items.size(), g_shop_unlock_mode);
     }
@@ -649,10 +674,14 @@ static void on_slot_connected(const nlohmann::json& sd) {
     g_start_weapon = sd.value("start_weapon", 0);   // spawn loadout weapon value
     // New-Game starting loadout floor: minimum level + items to mark owned.
     g_start_level = sd.value("start_level", 0);
-    g_start_items.clear();
-    if (sd.contains("start_items"))
-        for (auto& v : sd["start_items"])
-            g_start_items.push_back(v.get<int>());
+    {
+        // g_reg_mtx: exp_scaling_on_frame iterates this on the game main thread.
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        g_start_items.clear();
+        if (sd.contains("start_items"))
+            for (auto& v : sd["start_items"])
+                g_start_items.push_back(v.get<int>());
+    }
     g_sp_items.clear();
     if (sd.contains("sp_items"))
         for (auto& kv : sd["sp_items"].items())
@@ -894,8 +923,10 @@ static void poll_value_checks() {
         cur_floor[pf.abs] = *(volatile int*)pf.abs;
     for (const auto& pf : g_poll_floors) {
         int cur = cur_floor[pf.abs];
-        if (cur >= 1 && cur <= 26)
+        if (cur >= 1 && cur <= 26) {
+            std::lock_guard<std::mutex> lk(g_checked_mtx);
             g_floors_seen.insert(cur);    // shop unlock pacing (one-per-floor)
+        }
         auto pit = g_floor_prev.find(pf.abs);
         int prev = (pit != g_floor_prev.end()) ? pit->second : cur;  // prime
         if (cur >= pf.floor_n && pf.floor_n > prev &&
@@ -913,6 +944,7 @@ extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vk);
 static const int kVkF7 = 0x76;
 
 static int count_done(const std::vector<int64_t>& v) {
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
     int n = 0;
     for (int64_t l : v)
         if (g_checked.count(l)) n++;
@@ -929,6 +961,28 @@ static void update_trackers() {
     bool f7 = (GetAsyncKeyState(kVkF7) & 0x8000) != 0;
     if (f7 && !f7_prev) g_panel_toggle = !g_panel_toggle;
     f7_prev = f7;
+
+    // Rebuild only when the inputs changed — this runs every ~10ms poll tick
+    // and the panel is a fair amount of string work.
+    size_t checked, scouted;
+    {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        checked = g_checked.size();
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        scouted = g_loc_found.size();
+    }
+    static int last_scene = -2;
+    static size_t last_checked = (size_t)-1, last_scouted = (size_t)-1;
+    static bool last_toggle = false;
+    if (g_last_scene == last_scene && checked == last_checked &&
+        scouted == last_scouted && g_panel_toggle == last_toggle)
+        return;
+    last_scene = g_last_scene;
+    last_checked = checked;
+    last_scouted = scouted;
+    last_toggle = g_panel_toggle;
 
     int scene = g_last_scene;
     std::string tr;
@@ -981,33 +1035,50 @@ static void update_trackers() {
 // -- overlay blessing shop accessors (UI in shop.cpp) ------------------------- #
 
 static bool shop_item_owned(const BlessShopItem& it) {
-    return ((*(volatile int*)kBlessBitsAbs >> it.bit) & 1) ||
-           g_checked.count(it.loc) != 0;
+    if ((*(volatile int*)kBlessBitsAbs >> it.bit) & 1) return true;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return g_checked.count(it.loc) != 0;
 }
 
 static bool shop_item_unlocked(int i) {
     if (g_shop_unlock_mode != 1) return true;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
     return i < (int)g_floors_seen.size();   // one slot per distinct floor visited
 }
 
-bool ap_shop_available() { return !g_shop_items.empty() && g_ap != nullptr; }
-int ap_shop_count() { return (int)g_shop_items.size(); }
+bool ap_shop_available() {
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    return !g_shop_items.empty() && g_ap != nullptr;
+}
+int ap_shop_count() {
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    return (int)g_shop_items.size();
+}
 
 std::string ap_shop_status() {
     char buf[96];
+    int total;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        total = (int)g_shop_items.size();
+    }
     int unlocked = 0;
-    for (int i = 0; i < (int)g_shop_items.size(); i++)
+    for (int i = 0; i < total; i++)
         if (shop_item_unlocked(i)) unlocked++;
     snprintf(buf, sizeof(buf), "SP: %d   (%d/%d slots unlocked)",
-             *(volatile int*)kSpAbs, unlocked, (int)g_shop_items.size());
+             *(volatile int*)kSpAbs, unlocked, total);
     return buf;
 }
 
 // One display line; first char is the classification/color marker the overlay
 // scheme uses ('*' progression gold, '!' trap red, ' ' plain).
 std::string ap_shop_line(int i) {
-    if (i < 0 || i >= (int)g_shop_items.size()) return "";
-    const BlessShopItem& it = g_shop_items[i];
+    BlessShopItem it;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        if (i < 0 || i >= (int)g_shop_items.size()) return "";
+        it = g_shop_items[i];
+    }
     std::string found = "?";
     {
         std::lock_guard<std::mutex> lk(g_scout_mtx);
@@ -1031,8 +1102,12 @@ std::string ap_shop_line(int i) {
 // Buy slot i: deduct SP, set the purchase bit (the bit poll fires the check),
 // grant the effect (state array + recompute) when the array index is mapped.
 bool ap_shop_buy(int i) {
-    if (i < 0 || i >= (int)g_shop_items.size()) return false;
-    const BlessShopItem& it = g_shop_items[i];
+    BlessShopItem it;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        if (i < 0 || i >= (int)g_shop_items.size()) return false;
+        it = g_shop_items[i];
+    }
     if (shop_item_owned(it) || !shop_item_unlocked(i)) return false;
     volatile int* sp = (volatile int*)kSpAbs;
     if (*sp < it.cost) return false;
@@ -1182,7 +1257,12 @@ extern "C" void exp_scaling_on_frame() {
             g_pending_weapon.store(g_start_weapon);   // -> weapon section below
         if (g_start_level > 1 && read_level() < g_start_level)
             g_pending_level.store(g_start_level);      // -> level section below
-        for (int idx : g_start_items)
+        std::vector<int> start_items;
+        {
+            std::lock_guard<std::mutex> lk(g_reg_mtx);  // vs reconnect rebuild
+            start_items = g_start_items;
+        }
+        for (int idx : start_items)
             if (idx >= 0 && idx < 0x200 &&
                 *(volatile int*)(kGFlagsAbs + idx * 4) < 1)
                 *(volatile int*)(kGFlagsAbs + idx * 4) = 1;
@@ -1250,7 +1330,10 @@ static void poll_loop() {
             if (!pending.empty()) {
                 std::list<int64_t> locs(pending.begin(), pending.end());
                 g_ap->LocationChecks(locs);
-                g_checked.insert(pending.begin(), pending.end());
+                {
+                    std::lock_guard<std::mutex> lk(g_checked_mtx);
+                    g_checked.insert(pending.begin(), pending.end());
+                }
                 mod_log("ap: sent %d LocationCheck(s)", (int)locs.size());
             }
             // Outgoing chat (typed in the F6 overlay; also server commands
@@ -1304,6 +1387,7 @@ static void create_client() {
     // Server-known checked locations (sent on connect + after each check):
     // feeds the overlay trackers so counts survive reconnects/co-op checks.
     g_ap->set_location_checked_handler([](const std::list<int64_t>& locs) {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
         for (int64_t l : locs) g_checked.insert(l);
     });
     // Room chat / item log -> the F6 chat overlay (rendered to plain text).
