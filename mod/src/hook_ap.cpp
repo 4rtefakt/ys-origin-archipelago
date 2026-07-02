@@ -380,7 +380,9 @@ static int g_spawn_flag_idx = -1;        // purify flag index of the spawn statu
 extern "C" __declspec(dllimport) unsigned long __stdcall GetTickCount(void);
 static std::atomic<bool> g_saw_intro{false};     // New-Game intro (scene 2) seen
 static std::atomic<unsigned long> g_intro_arm_tick{0};  // GetTickCount when armed
-static const unsigned long kIntroDelayMs = 3000; // let the intro play a beat first
+// CALIBRATION: auto-fire disabled (huge delay) while we find the right moment via
+// F9. Each F9 press logs the exact state so the trigger can be set to match.
+static const unsigned long kIntroDelayMs = 0xFFFFFFFF;
 static std::atomic<bool> g_force_spawn_done{false};
 static std::atomic<bool> g_warp_request{false};  // manual test hotkey -> main thread
 static volatile int g_warp_idx = -1;     // target for do_warp_native()
@@ -894,8 +896,10 @@ static void poll_deathlink() {
 static void poll_scene() {
     int scene = read_current_scene();
     if (scene == g_last_scene) return;
-    mod_log("scene: %d -> %d (entity %s)", g_last_scene, scene,
-            *kPlayerEntPtr ? "yes" : "no");   // diagnostic: intro/New-Game trace
+    unsigned long since = g_saw_intro.load()
+        ? (GetTickCount() - g_intro_arm_tick.load()) : 0;
+    mod_log("scene: %d -> %d (entity %s, +%lums since arm)", g_last_scene, scene,
+            *kPlayerEntPtr ? "yes" : "no", since);   // intro/New-Game trace
     g_last_scene = scene;
 
     // New-Game intro: Hugo/Yunica play scene 2; Toal plays his own cutscenes in
@@ -1368,6 +1372,13 @@ extern "C" void exp_scaling_on_frame() {
         (GetTickCount() - g_intro_arm_tick.load()) >= kIntroDelayMs;
     bool auto_intro = !g_force_spawn_done.load() && delay_passed &&
                       entity && cur_scene >= 2;
+    if (manual) {
+        unsigned long since = g_saw_intro.load()
+            ? (GetTickCount() - g_intro_arm_tick.load()) : 0;
+        mod_log("F9: manual fire — scene %d, entity %s, armed %s, +%lums since arm",
+                cur_scene, entity ? "yes" : "no",
+                g_saw_intro.load() ? "yes" : "no", since);
+    }
     if (spawn_seed && (manual || auto_intro)) {
         g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
         force_spawn();
