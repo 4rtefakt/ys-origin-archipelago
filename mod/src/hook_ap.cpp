@@ -891,6 +891,8 @@ static void poll_deathlink() {
 static void poll_scene() {
     int scene = read_current_scene();
     if (scene == g_last_scene) return;
+    mod_log("scene: %d -> %d (entity %s)", g_last_scene, scene,
+            *kPlayerEntPtr ? "yes" : "no");   // diagnostic: intro/New-Game trace
     g_last_scene = scene;
 
     // New-Game intro: Hugo/Yunica play scene 2; Toal plays his own cutscenes in
@@ -900,7 +902,8 @@ static void poll_scene() {
     // per session (g_force_spawn_done not re-armed here, so a 7xxx cutscene playing
     // again mid-game can't re-warp the player).
     if (scene == 2 || (scene >= 7000 && scene < 8000)) {
-        g_saw_intro.store(true);
+        if (!g_saw_intro.exchange(true))
+            mod_log("force-spawn: armed (New Game intro scene %d seen)", scene);
         g_expected_hi = 0;   // New Game: forget the last run's deepest floor
     }
 
@@ -1320,6 +1323,10 @@ static void force_spawn() {
     // The warp jumps the floor cell for a non-climb reason — rebaseline the
     // Reach-NF crossing detector so it doesn't spray floor checks on arrival.
     reset_floor_prev();
+    // Visual tell so the player can see exactly when the warp fires.
+    char msg[96];
+    snprintf(msg, sizeof(msg), "Random start: warped to S_%d", g_start_statue_scene);
+    overlay::push_item(msg);
     mod_log("force-spawn: warped to spawn S_%d (reg idx %d), weapon=%d, crystal idx 0x%X",
             g_start_statue_scene, g_spawn_reg_idx, g_start_weapon, crystal_idx);
 }
@@ -1338,20 +1345,22 @@ extern "C" void exp_scaling_on_frame() {
     // re-triggers manually.
     bool spawn_seed = g_start_statue_scene > 0 && g_start_statue_scene != 1000;
     bool manual = g_warp_request.exchange(false);
-    // Auto-fire only while still in the intro scene (2 = Hugo/Yunica opening,
-    // 7xxx = Toal), never on arbitrary gameplay scenes, and only after a player
-    // entity exists. g_saw_intro is re-armed at connect, so this can't trip on a
-    // pre-connect title screen.
+    // Auto-fire once a New Game has begun and the intro has handed us a player
+    // entity in a loaded scene. g_saw_intro (set when the intro scene 2/7xxx is
+    // entered) proves a New Game started; it's re-armed to false at connect so a
+    // pre-connect title screen can't trip it. We DON'T require the current scene
+    // to still be the intro cutscene — during that cutscene there is no player
+    // entity yet, so we'd never fire; instead we wait for the entity to appear
+    // (control handed over) and warp a short beat later.
     int cur_scene = read_current_scene();
-    bool in_intro = cur_scene == 2 || (cur_scene >= 7000 && cur_scene < 8000);
+    bool entity = *kPlayerEntPtr != nullptr;
     bool intro_ready = !g_force_spawn_done.load() && g_saw_intro.load() &&
-                       in_intro && *kPlayerEntPtr != nullptr;
-    // Let the intro scene settle a beat before warping — firing on the very first
-    // frame the entity exists lands mid-load and reads a couple seconds too early.
-    // ~90 EndScene frames (~1.5s) in, once conditions hold continuously.
+                       entity && cur_scene >= 2;
     static int s_intro_frames = 0;
     s_intro_frames = intro_ready ? s_intro_frames + 1 : 0;
-    bool auto_intro = intro_ready && s_intro_frames >= 90;
+    if (intro_ready && s_intro_frames == 1)
+        mod_log("force-spawn: intro handed control (scene %d) — warping soon", cur_scene);
+    bool auto_intro = intro_ready && s_intro_frames >= 45;   // ~0.75s settle
     if (spawn_seed && (manual || auto_intro)) {
         g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
         s_intro_frames = 0;
