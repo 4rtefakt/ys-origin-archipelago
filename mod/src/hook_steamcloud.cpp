@@ -47,7 +47,9 @@ enum {
     kFilePersisted = 14,     // bool(const char*)
     kGetFileSize = 15,       // int32(const char*)
     kGetFileTimestamp = 16,  // int64(const char*)
-    kVtSlots = 17,
+    kGetFileCount = 18,      // int32()
+    kGetFileNameAndSize = 19,  // const char*(int iFile, int32* pnSize)
+    kVtSlots = 20,
 };
 
 typedef bool     (__fastcall* FileWrite_t)(void*, void*, const char*, const void*, int32_t);
@@ -56,6 +58,8 @@ typedef bool     (__fastcall* NameBool_t)(void*, void*, const char*);
 typedef uint64_t (__fastcall* NameU64_t)(void*, void*, const char*);
 typedef int32_t  (__fastcall* NameI32_t)(void*, void*, const char*);
 typedef int64_t  (__fastcall* NameI64_t)(void*, void*, const char*);
+typedef int32_t  (__fastcall* Count_t)(void*, void*);
+typedef const char* (__fastcall* NameAt_t)(void*, void*, int, int32_t*);
 
 static FileWrite_t o_FileWrite = nullptr;
 static FileRead_t  o_FileRead = nullptr;
@@ -66,6 +70,8 @@ static NameBool_t  o_FileExists = nullptr;
 static NameBool_t  o_FilePersisted = nullptr;
 static NameI32_t   o_GetFileSize = nullptr;
 static NameI64_t   o_GetFileTimestamp = nullptr;
+static Count_t     o_GetFileCount = nullptr;
+static NameAt_t    o_GetFileNameAndSize = nullptr;
 
 static std::mutex g_log_mtx;
 static std::set<std::string> g_logged;
@@ -166,6 +172,35 @@ static int64_t __fastcall hk_GetFileTimestamp(void* self, void* edx, const char*
     return o_GetFileTimestamp(self, edx, file);
 }
 
+// Enumeration — currently LOG-ONLY (pass through). If the save picker lists slots
+// via these, the log reveals it and the names it sees; then we filter to present
+// only this seed's namespace. If the picker doesn't call these, saves isolate via
+// the per-file redirects above and these can be dropped.
+static int32_t __fastcall hk_GetFileCount(void* self, void* edx) {
+    int32_t n = o_GetFileCount(self, edx);
+    {
+        std::lock_guard<std::mutex> lk(g_log_mtx);
+        if (g_logged.insert("__count").second)
+            mod_log("steamcloud: GetFileCount() = %d%s", n,
+                    saveredir_active() ? "" : " [inactive]");
+    }
+    return n;
+}
+
+static const char* __fastcall hk_GetFileNameAndSize(void* self, void* edx,
+                                                    int iFile, int32_t* pnSize) {
+    const char* name = o_GetFileNameAndSize(self, edx, iFile, pnSize);
+    if (name) {
+        std::lock_guard<std::mutex> lk(g_log_mtx);
+        char key[300];
+        snprintf(key, sizeof(key), "__enum:%s", name);
+        if (g_logged.insert(key).second)
+            mod_log("steamcloud: GetFileNameAndSize(%d) = '%s'%s", iFile, name,
+                    saveredir_active() ? "" : " [inactive]");
+    }
+    return name;
+}
+
 static bool hook_slot(void** vt, int slot, void* detour, void** orig) {
     if (MH_CreateHook(vt[slot], detour, orig) != MH_OK) return false;
     return MH_EnableHook(vt[slot]) == MH_OK;
@@ -224,7 +259,10 @@ static void install_now() {
     ok += hook_slot(vt, kGetFileSize, (void*)&hk_GetFileSize, (void**)&o_GetFileSize);
     ok += hook_slot(vt, kGetFileTimestamp, (void*)&hk_GetFileTimestamp,
                     (void**)&o_GetFileTimestamp);
-    mod_log("steamcloud: hooked ISteamRemoteStorage (iface=%p, %d/9 slots)",
+    ok += hook_slot(vt, kGetFileCount, (void*)&hk_GetFileCount, (void**)&o_GetFileCount);
+    ok += hook_slot(vt, kGetFileNameAndSize, (void*)&hk_GetFileNameAndSize,
+                    (void**)&o_GetFileNameAndSize);
+    mod_log("steamcloud: hooked ISteamRemoteStorage (iface=%p, %d/11 slots)",
             iface, ok);
 }
 
