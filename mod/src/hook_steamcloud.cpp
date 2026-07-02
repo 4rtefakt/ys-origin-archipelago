@@ -171,16 +171,45 @@ static bool hook_slot(void** vt, int slot, void* detour, void** orig) {
     return MH_EnableHook(vt[slot]) == MH_OK;
 }
 
-// Resolve ISteamRemoteStorage and detour its vtable. SteamAPI is initialized by
-// the game before it saves, but maybe not the instant the mod loads — so this
-// runs on a short retry thread until the interface is available.
+// This steam_api.dll exports the flat C accessors, NOT a bare SteamRemoteStorage()
+// — so resolve the interface the way the game's inlined accessor does:
+//   SteamInternal_FindOrCreateUserInterface(SteamAPI_GetHSteamUser(), "..016")
+// with the ISteamClient chain as a fallback. (__cdecl on Win32.)
+static const char* kRSVersion = "STEAMREMOTESTORAGE_INTERFACE_VERSION016";
+
+static void* resolve_remote_storage(HMODULE steam) {
+    typedef int (__cdecl* GetUser_t)();
+    typedef int (__cdecl* GetPipe_t)();
+    typedef void* (__cdecl* Find_t)(int, const char*);
+    typedef void* (__cdecl* Client_t)();
+    typedef void* (__cdecl* ClientGetRS_t)(void*, int, int, const char*);
+    auto get_user = (GetUser_t)GetProcAddress(steam, "SteamAPI_GetHSteamUser");
+    auto find = (Find_t)GetProcAddress(steam, "SteamInternal_FindOrCreateUserInterface");
+    if (!get_user) return nullptr;
+    int user = get_user();
+    if (find) {
+        void* rs = find(user, kRSVersion);
+        if (rs) return rs;
+    }
+    // Fallback: ISteamClient::GetISteamRemoteStorage(user, pipe, version).
+    auto client_fn = (Client_t)GetProcAddress(steam, "SteamClient");
+    auto get_pipe = (GetPipe_t)GetProcAddress(steam, "SteamAPI_GetHSteamPipe");
+    auto client_get_rs = (ClientGetRS_t)GetProcAddress(
+        steam, "SteamAPI_ISteamClient_GetISteamRemoteStorage");
+    if (client_fn && get_pipe && client_get_rs) {
+        void* client = client_fn();
+        if (client) return client_get_rs(client, user, get_pipe(), kRSVersion);
+    }
+    return nullptr;
+}
+
+// Detour the ISteamRemoteStorage vtable. SteamAPI is initialized by the game
+// before it saves, but maybe not the instant the mod loads — so this runs on a
+// short retry thread until the interface resolves.
 static void install_now() {
     HMODULE steam = GetModuleHandleA("steam_api.dll");
     if (!steam) return;
-    typedef void* (*GetRS_t)();
-    auto get_rs = (GetRS_t)GetProcAddress(steam, "SteamRemoteStorage");
-    if (!get_rs) { mod_log("steamcloud: no SteamRemoteStorage export"); return; }
-    void* iface = get_rs();
+    void* iface = resolve_remote_storage(steam);
     if (!iface) return;                       // SteamAPI not up yet — retry
     void** vt = *(void***)iface;
     int ok = 0;
@@ -200,15 +229,11 @@ static void install_now() {
 }
 
 static DWORD WINAPI install_thread(LPVOID) {
-    // Retry for ~30s: steam_api + SteamAPI_Init land early, but not necessarily
+    // Retry for ~60s: steam_api + SteamAPI_Init land early, but not necessarily
     // before this mod's init thread. Install once the interface resolves.
-    for (int i = 0; i < 150; i++) {
+    for (int i = 0; i < 300; i++) {
         HMODULE steam = GetModuleHandleA("steam_api.dll");
-        if (steam) {
-            typedef void* (*GetRS_t)();
-            auto get_rs = (GetRS_t)GetProcAddress(steam, "SteamRemoteStorage");
-            if (get_rs && get_rs()) { install_now(); return 0; }
-        }
+        if (steam && resolve_remote_storage(steam)) { install_now(); return 0; }
         Sleep(200);
     }
     mod_log("steamcloud: ISteamRemoteStorage never resolved (cloud redirect off)");
