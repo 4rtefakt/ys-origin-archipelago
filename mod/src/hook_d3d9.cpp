@@ -100,6 +100,11 @@ static void imgui_init(IDirect3DDevice9* dev) {
     ImGui::StyleColorsDark();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;  // don't write imgui.ini next to game
+    // Leave the mouse cursor to the game (it shows its own only when needed). Our
+    // overlay is keyboard-driven (F5/F6/F8 + arrows/Enter), so ImGui must not
+    // force the Windows arrow cursor visible whenever the overlay is open.
+    io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    io.MouseDrawCursor = false;
     io.Fonts->AddFontDefault();  // font[0]: small UI text (header/status)
     // font[1]: large item-name font (~5x). Prefer the GAME's own font
     // (release\yso_ins04.dat — a real TTF with glyf outlines, the one used in the

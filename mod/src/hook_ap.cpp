@@ -218,7 +218,12 @@ static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap fi
 static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
 static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
 static std::set<int> g_floors_seen;                  // distinct floors visited
-static const uintptr_t kSpAbs = kGFlagsAbs + 0xD8 * 4;         // SP currency
+// Real spendable SP currency (the value shown in the HUD): a standalone static
+// int, NOT g_flags[0xD8]. Live-confirmed 2026-07-02: 0x76A75C tracked the HUD SP
+// (328) and accepted writes, while g_flags[0xD8] only ever held the AP-granted
+// "SP: N" fillers (50) that the game never spends. It is the LOW dword of the
+// {SP, level} pair (level = 0x76A760), so writing it doesn't touch the level.
+static const uintptr_t kSpAbs = 0x0076A75C;                    // SP currency
 // Guards read-modify-write of the SP cell: the F5 shop deducts on the game main
 // thread while SP-filler grants add on the poll thread — without this a lost
 // update either drops a grant or hands out a free blessing.
@@ -790,9 +795,12 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         auto sp = g_sp_items.find(name);
         auto pg = g_prog_gear.find(name);
         if (sp != g_sp_items.end()) {
-            // SP filler: add straight to the SP currency cell (give semantics).
+            // SP filler: add to the REAL SP currency cell (kSpAbs = 0x76A75C, the
+            // HUD value), not g_flags[0xD8] which the game never spends.
             std::lock_guard<std::mutex> lk(g_sp_mtx);   // vs main-thread shop buy
-            ap_give(g_sp_flag_idx, sp->second);
+            volatile int* spc = (volatile int*)kSpAbs;
+            *spc = *spc + sp->second;
+            mod_log("ap: granted SP +%d -> %d", sp->second, *spc);
         } else if (pg != g_prog_gear.end()) {
             // Progressive gear: grant the first unowned tier in the ladder.
             bool granted = false;
@@ -1336,10 +1344,17 @@ extern "C" void exp_scaling_on_frame() {
     // pre-connect title screen.
     int cur_scene = read_current_scene();
     bool in_intro = cur_scene == 2 || (cur_scene >= 7000 && cur_scene < 8000);
-    bool auto_intro = !g_force_spawn_done.load() && g_saw_intro.load() &&
-                      in_intro && *kPlayerEntPtr != nullptr;
+    bool intro_ready = !g_force_spawn_done.load() && g_saw_intro.load() &&
+                       in_intro && *kPlayerEntPtr != nullptr;
+    // Let the intro scene settle a beat before warping — firing on the very first
+    // frame the entity exists lands mid-load and reads a couple seconds too early.
+    // ~90 EndScene frames (~1.5s) in, once conditions hold continuously.
+    static int s_intro_frames = 0;
+    s_intro_frames = intro_ready ? s_intro_frames + 1 : 0;
+    bool auto_intro = intro_ready && s_intro_frames >= 90;
     if (spawn_seed && (manual || auto_intro)) {
         g_force_spawn_done.store(true);   // one-shot; F9 (manual) always re-fires
+        s_intro_frames = 0;
         force_spawn();
     }
 
