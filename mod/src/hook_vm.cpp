@@ -301,6 +301,37 @@ __declspec(naked) static void Hook_ExpAdd() {
     }
 }
 
+// SECOND EXP-add path: enemy kills route earned EXP through a different branch
+// (maxss vs the difficulty floor, then addss) that ALSO stores to 0x76A748 and
+// runs the level-up recompute. 0x4FA525 alone never touched kill EXP, so the
+// multiplier felt like a no-op; splice this identically so it reaches kills.
+//     0x5226C7  addss xmm1, [0x76A748]   ; earned + current EXP
+//     0x5226CF  movss [0x76A748], xmm1   ; store
+//     0x5226D7  call 0x420C40            ; level-ups
+static const uintptr_t kExpAdd2 = 0x005226C7;
+static void* g_orig_expadd2 = nullptr;
+__declspec(naked) static void Hook_ExpAdd2() {
+    __asm {
+        mulss xmm1, dword ptr [g_exp_factor]   // earned *= factor
+        jmp   dword ptr [g_orig_expadd2]       // addss xmm1,[0x76a748] ; -> 0x5226CF
+    }
+}
+
+// THIRD EXP-add path: yet another award branch (reads EXP into xmm0, builds the
+// earned amount in xmm1 via const/gauge math, adds it). This is the one regular
+// enemy kills actually use. xmm1 is the final earned at 0x4FCC07, so multiply it
+// there before the add. (MinHook relocates the addss + the following store.)
+//     0x4FCC07  addss xmm0, xmm1        ; EXP + earned
+//     0x4FCC0B  movss [0x76A748], xmm0  ; store
+static const uintptr_t kExpAdd3 = 0x004FCC07;
+static void* g_orig_expadd3 = nullptr;
+__declspec(naked) static void Hook_ExpAdd3() {
+    __asm {
+        mulss xmm1, dword ptr [g_exp_factor]   // earned *= factor
+        jmp   dword ptr [g_orig_expadd3]       // addss xmm0,xmm1 ; -> 0x4FCC0B store
+    }
+}
+
 // --- Cutscene fast-forward (hold a key to blow through cutscenes) ---------- #
 //
 // The event VM drives cutscenes; the thing that makes them slow is the 0xF2
@@ -453,6 +484,10 @@ void hook_vm_install() {
     MH_EnableHook((void*)kBoxFn);
     MH_STATUS cx = MH_CreateHook((void*)kExpAdd, (void*)&Hook_ExpAdd, &g_orig_expadd);
     MH_STATUS ex = MH_EnableHook((void*)kExpAdd);
+    MH_CreateHook((void*)kExpAdd2, (void*)&Hook_ExpAdd2, &g_orig_expadd2);
+    MH_EnableHook((void*)kExpAdd2);
+    MH_CreateHook((void*)kExpAdd3, (void*)&Hook_ExpAdd3, &g_orig_expadd3);
+    MH_EnableHook((void*)kExpAdd3);
     MH_STATUS cw = MH_CreateHook((void*)kWaitOp, (void*)&Hook_Wait, &g_orig_wait);
     MH_STATUS ew = MH_EnableHook((void*)kWaitOp);
     MH_STATUS ct = MH_CreateHook((void*)kWaitTail, (void*)&Hook_WaitTail, &g_orig_waittail);

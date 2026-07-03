@@ -185,13 +185,13 @@ class LevelMargin(Range):
 
 class ExpMultiplierBase(Range):
     """Flat EXP multiplier applied everywhere while EXP scaling is on (the
-    ``exp_multiplier`` / ``both`` modes). Default 3x: a rando run zig-zags the
-    tower instead of grinding it in vanilla order, so everyone gets a boost.
-    1 = vanilla rate (only the catch-up boost below then applies)."""
+    ``exp_multiplier`` / ``both`` modes). Default 20x: a rando run zig-zags the
+    tower out of order and the mod's own EXP hook only reaches kills once fixed,
+    so a strong flat boost keeps leveling brisk. 1 = vanilla rate."""
     display_name = "Base EXP multiplier"
     range_start = 1
-    range_end = 10
-    default = 3
+    range_end = 100
+    default = 20
 
 
 class ExpMultiplierCatchup(Range):
@@ -199,13 +199,13 @@ class ExpMultiplierCatchup(Range):
     expected level of the deepest floor you've visited, plus the margin below.
     Replaces the base multiplier whenever the condition holds, so falling behind
     your furthest progress levels you back fast wherever you choose to fight.
-    Default 3 = the base rate, i.e. a single FLAT always-on multiplier with no
-    catch-up spike (the shipped default). Raise it above the base to add a
+    Defaults to the base rate (20), i.e. a single FLAT always-on multiplier with
+    no catch-up spike (the shipped default). Raise it above the base to add a
     behind-you-level-faster boost."""
     display_name = "Catch-up EXP multiplier"
     range_start = 1
-    range_end = 20
-    default = 3
+    range_end = 100
+    default = 20
 
 
 class ExpCatchupMargin(Range):

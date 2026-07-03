@@ -37,7 +37,8 @@ static const int kRightN = 13, kLeftN = 9;
 static float g_rbx = 0.690f, g_rby = 0.913f, g_rtx = 0.830f, g_rty = 0.150f; // right col
 static float g_lbx = 0.318f, g_lby = 0.588f, g_ltx = 0.573f, g_lty = 0.082f; // left col
 static float g_size = 34.0f;
-static unsigned g_rgb = 0xAAFF33;   // lime-green (readable over the beige/blue map)
+static unsigned g_rgb = 0xAAFF33;      // lime-green: floors with checks still left
+static unsigned g_rgb_done = 0xFFC83C; // gold: floors cleared of all checks
 // Barless floors (no statue -> no bar) are listed here, in the empty bottom-left.
 static float g_lx = 0.220f, g_ly = 0.820f;
 static bool g_cfg_loaded = false;
@@ -52,6 +53,7 @@ static void load_cfg() {
         char* eq = strchr(line, '='); if (!eq) continue;
         *eq = 0; const char* k = line; const char* v = eq + 1;
         if      (!strcmp(k, "warpmap_color")) g_rgb  = (unsigned)strtoul(v, nullptr, 16);
+        else if (!strcmp(k, "warpmap_color_done")) g_rgb_done = (unsigned)strtoul(v, nullptr, 16);
         else if (!strcmp(k, "warpmap_size"))  g_size = (float)atof(v);
         else if (!strcmp(k, "warpmap_rbx"))   g_rbx  = (float)atof(v);
         else if (!strcmp(k, "warpmap_rby"))   g_rby  = (float)atof(v);
@@ -85,7 +87,7 @@ static void text_centered(ImDrawList* dl, ImFont* font, float x, float y,
 }
 
 static void draw_col(ImDrawList* dl, ImFont* font, ImVec2 disp, ImU32 col,
-                     const int* floors, int n,
+                     ImU32 col_done, const int* floors, int n,
                      float bx, float by, float tx, float ty) {
     for (int i = 0; i < n; i++) {
         int fl = floors[i];
@@ -97,7 +99,7 @@ static void draw_col(ImDrawList* dl, ImFont* font, ImVec2 disp, ImU32 col,
         float y = (by + (ty - by) * t) * disp.y;
         char buf[16];
         snprintf(buf, sizeof(buf), "%d/%d", found, total);
-        text_centered(dl, font, x, y, col, buf);
+        text_centered(dl, font, x, y, found >= total ? col_done : col, buf);
     }
 }
 
@@ -108,8 +110,10 @@ void draw() {
     ImFont* font = ImGui::GetFont();
     ImVec2 disp = ImGui::GetIO().DisplaySize;
     ImU32 col = IM_COL32((g_rgb >> 16) & 0xFF, (g_rgb >> 8) & 0xFF, g_rgb & 0xFF, 255);
-    draw_col(dl, font, disp, col, kRightFloors, kRightN, g_rbx, g_rby, g_rtx, g_rty);
-    draw_col(dl, font, disp, col, kLeftFloors,  kLeftN,  g_lbx, g_lby, g_ltx, g_lty);
+    ImU32 col_done = IM_COL32((g_rgb_done >> 16) & 0xFF, (g_rgb_done >> 8) & 0xFF,
+                              g_rgb_done & 0xFF, 255);
+    draw_col(dl, font, disp, col, col_done, kRightFloors, kRightN, g_rbx, g_rby, g_rtx, g_rty);
+    draw_col(dl, font, disp, col, col_done, kLeftFloors,  kLeftN,  g_lbx, g_lby, g_ltx, g_lty);
 
     // Barless floors (no statue -> no bar on the map): list them in the empty
     // bottom-left. Any check-floor not covered by a bar above goes here.
@@ -127,7 +131,7 @@ void draw() {
         if (!ap_floor_count(fl, &found, &total)) continue;
         char buf[24];
         snprintf(buf, sizeof(buf), "%dF  %d/%d", fl, found, total);
-        text_outline(dl, font, g_lx * disp.x, y, col, buf);
+        text_outline(dl, font, g_lx * disp.x, y, found >= total ? col_done : col, buf);
         y += lh;
     }
 }
