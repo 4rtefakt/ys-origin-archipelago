@@ -88,11 +88,12 @@ class MaxStartingFloor(Range):
     still landing you *somewhere* rather than 1F. Only affects ``random_start``;
     lower = gentler openings, raise it (up to 25 = the summit) for more variety.
     Ignored when ``random_start`` is off. If no statue exists at or below the cap,
-    the lowest-floor statue is used."""
+    the lowest-floor statue is used. Default 5 keeps openings in the early tower
+    (1F/4F/5F statues) so a fresh, low-level, starter-weapon run stays fair."""
     display_name = "Random start max floor"
     range_start = 1
     range_end = 25
-    default = 10
+    default = 5
 
 
 class MaxWarpFloorsSkip(Range):
@@ -152,18 +153,20 @@ class LevelScaling(Choice):
     - ``off``            : vanilla leveling.
     - ``level_floor``    : entering a floor far above your level bumps you up to
                            (floor level - margin); only ever raises you.
-    - ``exp_multiplier`` : boosted EXP — the base multiplier everywhere, the
-                           catch-up multiplier while your level is at/under the
-                           deepest visited floor's expected level + margin (see
-                           the EXP options below).
+    - ``exp_multiplier`` : boosted EXP only — no instant bump. A flat always-on
+                           multiplier (default) so you level naturally but fast;
+                           raise the catch-up option for extra EXP while behind.
+                           This is the DEFAULT: with a low ``max_starting_floor``
+                           you begin near-vanilla and just gain levels quicker,
+                           rather than being teleported up in power.
     - ``both``           : the bump gets you most of the way, the EXP boost
-                           finishes it through play. Frictionless (default)."""
+                           finishes it through play — for high warp-ahead starts."""
     display_name = "Level scaling"
     option_off = 0
     option_level_floor = 1
     option_exp_multiplier = 2
     option_both = 3
-    default = 3  # both
+    default = 2  # exp_multiplier — flat always-on boost, no instant level bump
 
 
 class LevelMargin(Range):
@@ -195,11 +198,14 @@ class ExpMultiplierCatchup(Range):
     """EXP multiplier while you're CATCHING UP: your level is at or under the
     expected level of the deepest floor you've visited, plus the margin below.
     Replaces the base multiplier whenever the condition holds, so falling behind
-    your furthest progress levels you back fast wherever you choose to fight."""
+    your furthest progress levels you back fast wherever you choose to fight.
+    Default 3 = the base rate, i.e. a single FLAT always-on multiplier with no
+    catch-up spike (the shipped default). Raise it above the base to add a
+    behind-you-level-faster boost."""
     display_name = "Catch-up EXP multiplier"
     range_start = 1
     range_end = 20
-    default = 5
+    default = 3
 
 
 class ExpCatchupMargin(Range):

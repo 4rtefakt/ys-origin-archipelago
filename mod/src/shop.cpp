@@ -58,8 +58,11 @@ void draw() {
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     const ImGuiIO& io = ImGui::GetIO();
     ImFont* font = ImGui::GetFont();
-    const float sz = ImGui::GetFontSize();
-    const float lh = ImGui::GetTextLineHeightWithSpacing();
+    // Enlarge the whole panel: all geometry (sz, lh, pad, panel W/H) derives from
+    // these two, so scaling them here grows the text and the frame together.
+    const float kTextScale = 1.4f;
+    const float sz = ImGui::GetFontSize() * kTextScale;
+    const float lh = ImGui::GetTextLineHeightWithSpacing() * kTextScale;
     const ImU32 shadow = IM_COL32(0, 0, 0, 235);
     const ImU32 white = IM_COL32(235, 235, 235, 255);
     const ImU32 gold = IM_COL32(228, 196, 112, 255);

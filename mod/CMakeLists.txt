@@ -102,6 +102,7 @@ add_library(dinput8 SHARED
     src/chat.cpp
     src/shop.cpp
     src/menu.cpp
+    src/warpmap.cpp
     src/exports.def
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp

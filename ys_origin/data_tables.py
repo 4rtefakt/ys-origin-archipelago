@@ -419,12 +419,15 @@ FLOOR_LEVELS: Dict[int, int] = {
 # Tower floor for each goddess-statue scene whose location data carries NO floor
 # label (save-point rooms tagged only by zone). Random spawn can drop you at any
 # of these, so every one needs a floor -> the catch-up level-floor has a target.
-# Approximate per the zone's floor range; erring is harmless (level_margin tunes).
+# EXACT floors, extracted from the game's own scene->floor logic (the map-index
+# -> floor-id switch @0x574970 in yso_win.exe v1.1.1.0; each statue's map matched
+# by its warp path and live-verified). Replaces the old zone-range guesses, which
+# were off by up to 3 floors (e.g. S_2012 is the 9F Arthropod-Chamber save, not 7F).
 STATUE_FLOOR: Dict[int, int] = {
-    2012: 7, 2013: 8, 2100: 9,                 # Flooded Prison (6-9F)
-    3000: 10, 3006: 11, 3014: 13, 3015: 13,    # Flames of Guilt (10-13F)
-    4000: 14, 4020: 16, 4104: 16,              # Silent Sands (14-17F, Rado annex)
-    5000: 18, 5010: 21, 5014: 21,              # Corrupted Blood (18F entry; deep saves 21F)
+    2013: 7, 2100: 8, 2012: 9,                 # Flooded Prison (S_2012 = 9F Arthropod Chamber)
+    3000: 10, 3006: 11, 3015: 12, 3014: 13,    # Flames of Guilt
+    4000: 14, 4020: 17, 4104: 18,              # Silent Sands (S_4104 Rado's Annex = 18F in-game)
+    5000: 18, 5010: 20, 5014: 21,              # Corrupted Blood
 }
 
 
@@ -691,6 +694,54 @@ def blessing_bit_location_ids(active: Set[str], name_to_id: Dict[str, int]
     return [name_to_id[l["name"]] for l in sorted(_LOCS, key=lambda x: x["name"])
             if l["type"] == "blessing" and l["name"] in active
             and l.get("detect", {}).get("method") == "bit"]
+
+
+# Depth (tower floor) at which each progression item first matters, derived from
+# the gated edges: item -> lowest floor of an edge it unlocks. Gives a natural
+# "how late is this item" score so blessing costs can track power (early skills
+# cheap, late medallions dear). A few progression items gate zone entries / are
+# collectibles with no room edge -> supplemented by hand.
+ITEM_GATE_FLOOR: Dict[str, int] = {}
+for (_src, _dst), _terms in EDGE_REQS.items():
+    _m = re.search(r"S_(\d+)", _src)
+    _fl = scene_floor(int(_m.group(1))) if _m else None
+    if _fl is None:
+        continue
+    for _t in _terms:
+        for _it in (_t if isinstance(_t, list) else [_t]):
+            ITEM_GATE_FLOOR[_it] = min(ITEM_GATE_FLOOR.get(_it, 99), _fl)
+# Progression items with no room-edge gate (zone-entry medallions / collectibles).
+ITEM_GATE_FLOOR.update({
+    "Arthropod Medallion": 9, "Cerulean Flabellum": 2, "Ignis Bracelet": 10,
+    "Terra Bracelet": 14, "Black Pearl": 22, "Dreaming Idol": 24,
+})
+
+
+def weighted_blessing_cost(item_name: str, local: bool, advancement: bool,
+                           rng, cmin: int, cmax: int) -> int:
+    """SP price for one overlay-shop slot, weighted by the tower depth of the item
+    placed there so filler/early upgrades are cheap and late medallions/skills are
+    dear. Depth 0..1 -> price across [cmin, cmax] with a small deterministic jitter
+    (rounded to 10s). Foreign (multiworld) items: we only know importance, so
+    progression rides the high band, everything else the low-mid band."""
+    if local:
+        floor = ITEM_GATE_FLOOR.get(item_name)
+        cls = _item_class.get(item_name, "useful")
+        if floor is not None:
+            d = (floor - 2) / 23.0            # 2F -> 0.0 .. 25F -> 1.0
+        elif cls == "progression":
+            d = 0.70
+        elif cls == "filler":
+            d = 0.12
+        else:                                  # useful
+            d = 0.38
+    else:
+        d = 0.70 if advancement else 0.38
+    d = min(1.0, max(0.0, d))
+    span = cmax - cmin
+    cost = cmin + d * span + rng.uniform(-0.10, 0.10) * span
+    cost = min(cmax, max(cmin, cost))
+    return int(round(cost / 10.0)) * 10
 
 
 # Detection methods the live client can actually observe today. A location whose

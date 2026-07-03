@@ -52,6 +52,7 @@ namespace apshop {
     void draw();
     bool on_wm_key(unsigned msg, unsigned long long wp);
 }
+namespace apwarpmap { void draw(); }
 
 // Large font for the overlay's item names (~5x the default), built crisp at its
 // native pixel size. Read by overlay.cpp.
@@ -151,6 +152,7 @@ static HRESULT WINAPI hk_EndScene(IDirect3DDevice9* dev) {
         apmenu::draw();
         apchat::draw();
         apshop::draw();
+        apwarpmap::draw();
         ImGui::EndFrame();
         ImGui::Render();
         ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());

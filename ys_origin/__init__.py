@@ -169,6 +169,21 @@ class YsOriginWorld(World):
         set_rules(self)
         set_completion_condition(self)
 
+    def _blessing_costs(self, active: set) -> dict[str, int]:
+        """Overlay-shop SP prices (loc id -> price), weighted by the tower depth of
+        the item placed at each slot so early/filler is cheap and late medallions
+        and skills are expensive. Deterministic (uses self.random)."""
+        cmin = int(self.options.blessing_cost_min.value)
+        cmax = max(cmin, int(self.options.blessing_cost_max.value))
+        id_to_name = {i: n for n, i in self.location_name_to_id.items()}
+        costs: dict[str, int] = {}
+        for loc_id in dt.blessing_bit_location_ids(active, self.location_name_to_id):
+            item = self.get_location(id_to_name[loc_id]).item
+            costs[str(loc_id)] = dt.weighted_blessing_cost(
+                item.name, item.player == self.player, bool(item.advancement),
+                self.random, cmin, cmax)
+        return costs
+
     def fill_slot_data(self) -> dict[str, Any]:
         # The client builds its detection map from slot data:
         #   location_signals : active location name -> AP location id
@@ -205,11 +220,17 @@ class YsOriginWorld(World):
             "start_statue_scene": start_statue,
             # Spawn loadout weapon record value (g_flags[0x94]), applied by the mod
             # as a floor at New Game. The higher of: the vanilla weapon for a
-            # random-start spawn floor (so force-spawn ahead isn't a Lv1-weapon
-            # death) and the player's configured starting_weapon_level. 0 = starter.
+            # random-start spawn floor and the player's configured
+            # starting_weapon_level. 0 = starter. The floor-appropriate weapon is
+            # part of the INSTANT catch-up bundle (with the level bump), so it only
+            # applies when level_scaling includes the bump (level_floor=1 / both=3);
+            # under the default exp_multiplier(2)/off(0) you keep the starter weapon
+            # and earn it back through Cleria Ore, paced by a low max_starting_floor.
             "start_weapon": max(
                 (dt.floor_weapon_value(dt.scene_floor(start_statue) or 1)
-                 if self.options.random_start.value and start_statue not in (0, 1000)
+                 if (self.options.random_start.value
+                     and start_statue not in (0, 1000)
+                     and self.options.level_scaling.value in (1, 3))
                  else 0),
                 dt.weapon_value_for_level(int(self.options.starting_weapon_level.value)),
             ),
@@ -273,14 +294,7 @@ class YsOriginWorld(World):
             # in vanilla mode (RNG untouched -> vanilla seeds stay identical).
             # blessing_shop_unlock paces the shop inventory (0 all, 1 per-floor).
             "blessing_costs": (
-                {
-                    str(loc): 10 * self.random.randint(
-                        int(self.options.blessing_cost_min.value) // 10,
-                        max(int(self.options.blessing_cost_min.value) // 10,
-                            int(self.options.blessing_cost_max.value) // 10))
-                    for loc in dt.blessing_bit_location_ids(
-                        active, self.location_name_to_id)
-                }
+                self._blessing_costs(active)
                 if self.options.blessing_costs.value else {}
             ),
             "blessing_shop_unlock": int(self.options.blessing_shop_unlock.value),

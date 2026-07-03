@@ -577,6 +577,14 @@ static void on_slot_connected(const nlohmann::json& sd) {
     // scene is entered AFTER connecting — i.e. the player actually starts a game.
     g_saw_intro.store(false);
     g_force_spawn_done.store(false);
+    // Weapon watermark: the ReceivedItems replay on reconnect re-counts Cleria Ore
+    // from index 0, so clear it here — otherwise a different-character reconnect
+    // inherits the previous character's weapon tier (Yunica's floor weapon leaking
+    // onto Toal), and a same-character reconnect double-counts the replayed ore.
+    g_cleria_count.store(0);
+    g_pending_weapon.store(0);
+    g_weapon_applied = 0;
+    g_weapon_entity = nullptr;
     {
         std::lock_guard<std::mutex> lk(g_checked_mtx);
         g_checked.clear();
@@ -716,12 +724,29 @@ static void on_slot_connected(const nlohmann::json& sd) {
             tmp.push_back({0, idx, scene});
             statues++;
         }
-        // Registry byte index = position in scene order (live-confirmed pairing).
-        std::sort(tmp.begin(), tmp.end(),
-                  [](const StatueReg& a, const StatueReg& b) { return a.scene < b.scene; });
+        // Registry byte index = the game's AUTHORED warp-destination order (static
+        // table at exe 0x68C190 -> scene-name structs; global/character-independent,
+        // yso_win.exe v1.1.1.0). This is NOT a numeric scene sort: e.g. idx4=S_2013,
+        // idx5=S_2100, idx6=S_2012; idx9=S_3015,idx10=S_3014; idx19=S_6082,idx20=S_6053.
+        // Sorting by scene number mis-warps every spawn past idx3 (S_2013 -> lands on
+        // S_2100) and corrupts locked-statue byte management. Assign each statue its
+        // real index by looking its scene up in this order.
+        static const int kWarpRegOrder[] = {
+            1000, 1009, 1011, 2000, 2013, 2100, 2012, 3000, 3006, 3015, 3014,
+            4000, 4104, 4020, 5000, 5010, 5014, 6000, 6010, 6082, 6053, 7000,
+        };
         g_statue_reg.clear();
-        for (int i = 0; i < (int)tmp.size(); i++)
-            g_statue_reg.push_back({i, tmp[i].flag_idx, tmp[i].scene});
+        for (const auto& s : tmp) {
+            int reg = -1;
+            for (int i = 0; i < (int)(sizeof(kWarpRegOrder) / sizeof(int)); i++)
+                if (kWarpRegOrder[i] == s.scene) { reg = i; break; }
+            if (reg < 0) {
+                mod_log("ap: WARN statue S_%d not in warp registry order — skipped",
+                        s.scene);
+                continue;
+            }
+            g_statue_reg.push_back({reg, s.flag_idx, s.scene});
+        }
         // Resolve the spawn statue's registry + purify-flag index for force-spawn.
         g_start_statue_scene = start_scene;
         for (const auto& s : g_statue_reg)
@@ -1048,6 +1073,34 @@ static int count_done(const std::vector<int64_t>& v) {
     return n;
 }
 
+// floor number -> (found, total) checks, for the warp-map overlay (warpmap.cpp,
+// render thread). Copies the loc list under g_reg_mtx (rebuilt at connect) then
+// counts done under g_checked_mtx — never nests the two locks.
+extern "C" bool ap_floor_count(int floor, int* found, int* total) {
+    std::vector<int64_t> locs;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        auto it = g_floor_locations.find(floor);
+        if (it == g_floor_locations.end() || it->second.empty()) return false;
+        locs = it->second;
+    }
+    *total = (int)locs.size();
+    *found = count_done(locs);
+    return true;
+}
+
+// Sorted list of every floor number that has checks (for the warp-map overlay's
+// "no bar" list — floors without a statue bar). Returns how many were written.
+extern "C" int ap_floors_with_checks(int* out, int cap) {
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    int n = 0;
+    for (const auto& kv : g_floor_locations) {
+        if (n >= cap) break;
+        if (!kv.second.empty()) out[n++] = kv.first;
+    }
+    return n;
+}
+
 // Rebuild the "Checks here: k/n" line (always, for the current room) and the
 // left panel (per-floor remaining checks + blessing shop hints). The panel
 // auto-shows at goddess statues — that's where the warp menu (floors) and the
@@ -1114,23 +1167,8 @@ static void update_trackers() {
         if (++col == 4) { p += line + "\n"; line.clear(); col = 0; }
     }
     if (!line.empty()) p += line + "\n";
-    if (g_shop_hints && at_statue && !g_bless_names.empty()) {
-        p += "- Blessing shop -\n";
-        for (const auto& kv : g_bless_names) {
-            if (g_checked.count(kv.first)) continue;   // already bought
-            std::string what = "?";
-            {
-                std::lock_guard<std::mutex> lk(g_scout_mtx);
-                auto f = g_loc_found.find(kv.first);
-                if (f != g_loc_found.end()) what = f->second;
-            }
-            // Leading marker = item classification (colored by overlay.cpp):
-            // '*' progression (gold), '!' trap (red), ' ' filler/useful.
-            int fl = g_loc_flags.count(kv.first) ? g_loc_flags[kv.first] : 0;
-            const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
-            p += mark + kv.second + " = " + what + "\n";
-        }
-    }
+    // (The blessing-shop hint list was removed from this panel — the F5 overlay
+    // shop is the dedicated storefront now; this panel is remaining-checks only.)
     overlay::set_panel(p);
 }
 
@@ -1144,6 +1182,19 @@ static bool shop_item_owned(const BlessShopItem& it) {
 
 static bool shop_item_unlocked(int i) {
     if (g_shop_unlock_mode != 1) return true;
+    // Progression-carrying blessings are ALWAYS unlocked: one-per-floor pacing
+    // must never trap a run-gating item (e.g. a Statue Warp that's the only
+    // escape from a random-start floor). Only filler/useful blessings are paced.
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        if (i >= 0 && i < (int)g_shop_items.size()) loc = g_shop_items[i].loc;
+    }
+    if (loc >= 0) {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_flags.find(loc);
+        if (f != g_loc_flags.end() && (f->second & 1)) return true;  // progression
+    }
     std::lock_guard<std::mutex> lk(g_checked_mtx);
     return i < (int)g_floors_seen.size();   // one slot per distinct floor visited
 }
@@ -1193,15 +1244,35 @@ std::string ap_shop_line(int i) {
         if (ff != g_loc_flags.end()) fl = ff->second;
     }
     const char* mark = (fl & 1) ? "*" : (fl & 4) ? "!" : " ";
+    // The blessing effect is no longer shown — the shop is a pure AP storefront.
+    // Recompose the scouted "item  -> who" as "who's item" (e.g. "Toal's Cleria
+    // Ore"); "?" (unscouted / hints off) stays hidden.
+    std::string reward = found;
+    if (found == "?") {
+        reward = "???";
+    } else {
+        size_t p = found.find("  -> ");
+        if (p != std::string::npos)
+            reward = found.substr(p + 5) + "'s " + found.substr(0, p);
+    }
     char buf[256];
-    if (shop_item_owned(it))
-        snprintf(buf, sizeof(buf), " %s  (bought)", it.name.c_str());
-    else if (!shop_item_unlocked(i))
-        snprintf(buf, sizeof(buf), " %s  (locked - visit more floors)",
-                 it.name.c_str());
-    else
-        snprintf(buf, sizeof(buf), "%s%s  %d SP  =  %s", mark, it.name.c_str(),
-                 it.cost, found.c_str());
+    if (shop_item_owned(it)) {
+        snprintf(buf, sizeof(buf), " %s  (bought)", reward.c_str());
+    } else if (!shop_item_unlocked(i)) {
+        // one-per-floor pacing: slot i unlocks once you've visited i+1 distinct
+        // floors, so it needs (i+1 - seen) more. Tell the player exactly how many.
+        int seen;
+        {
+            std::lock_guard<std::mutex> lk(g_checked_mtx);
+            seen = (int)g_floors_seen.size();
+        }
+        int need = (i + 1) - seen;
+        if (need < 1) need = 1;
+        snprintf(buf, sizeof(buf), " %d SP  =>  (locked - visit %d more floor%s)",
+                 it.cost, need, need == 1 ? "" : "s");
+    } else {
+        snprintf(buf, sizeof(buf), "%s%d SP  =>  %s", mark, it.cost, reward.c_str());
+    }
     return buf;
 }
 
@@ -1334,10 +1405,6 @@ static void force_spawn() {
     // The warp jumps the floor cell for a non-climb reason — rebaseline the
     // Reach-NF crossing detector so it doesn't spray floor checks on arrival.
     reset_floor_prev();
-    // Visual tell so the player can see exactly when the warp fires.
-    char msg[96];
-    snprintf(msg, sizeof(msg), "Random start: warped to S_%d", g_start_statue_scene);
-    overlay::push_item(msg);
     mod_log("force-spawn: warped to spawn S_%d (reg idx %d), weapon=%d, crystal idx 0x%X",
             g_start_statue_scene, g_spawn_reg_idx, g_start_weapon, crystal_idx);
 }
@@ -1354,7 +1421,10 @@ extern "C" void exp_scaling_on_frame() {
     // spawn statue and grant the crystal ourselves — no waiting for the intro's
     // cutscenes/dialogue/tutorial (which also skips Toal's extra cutscenes). F9
     // re-triggers manually.
-    bool spawn_seed = g_start_statue_scene > 0 && g_start_statue_scene != 1000;
+    // Fire for ANY valid spawn incl. S_1000 (1F): random_start's intro-skip is
+    // wanted wherever you land, and with a low max_starting_floor 1F is a common
+    // roll — the old `!= 1000` guard made a 1F spawn play the full intro.
+    bool spawn_seed = g_start_statue_scene > 0;
     bool manual = g_warp_request.exchange(false);
     // Auto-fire once a New Game has begun and the intro has handed us a player
     // entity in a loaded scene. g_saw_intro (set when the intro scene 2/7xxx is
@@ -1481,7 +1551,6 @@ static void poll_loop() {
             for (const auto& s : says) {
                 try { g_ap->Say(s); } catch (...) {}
             }
-            update_trackers();
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

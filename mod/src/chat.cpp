@@ -91,7 +91,6 @@ bool on_wm_char(unsigned long long wp) {
 // RIGHT over a translucent backdrop so the feed stays readable over bright
 // scenes; each line is right-aligned to the panel edge.
 void draw() {
-    if (!g_visible) return;
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     const ImGuiIO& io = ImGui::GetIO();
     ImFont* font = ImGui::GetFont();
@@ -112,6 +111,13 @@ void draw() {
         dl->AddText(font, sz, ImVec2(x, y), col, text);
         return ts.x;
     };
+
+    // Closed (default): just a one-line hint, no feed/backdrop.
+    if (!g_visible) {
+        right_at(io.DisplaySize.x - 18.0f, io.DisplaySize.y - 30.0f - lh,
+                 IM_COL32(185, 190, 210, 210), "[F6] to open AP chat");
+        return;
+    }
 
     std::lock_guard<std::mutex> lk(g_mtx);
     const float margin = 18.0f;
