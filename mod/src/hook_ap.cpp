@@ -76,12 +76,20 @@ static int g_hp_field = 0x98;       // HP offset within the entity
 // Filled from yso_ap.cfg in load_config; documented at their feature blocks
 // (overlay blessing shop / goal reporting) further down.
 static int g_bless_arr_idx[32];     // bless_idx_N: bit -> state-array idx (-1 unmapped)
-// goal_scene=: the ending scene. Default captured live on a real Toal clear:
-// Darm dies in S_7099 -> current_scene blanks to 0 for the death cutscene -> the
-// ending loads as S_7002. Overridable in yso_ap.cfg if another route differs; a
-// wrong value only means the goal never fires (it can't false-complete, see the
-// gameplay latch on the goal check).
-static int g_goal_scene = 7002;
+// goal_scene=: the ending scene(s), comma-separated. Only S_7002 is confirmed --
+// captured on a real Toal clear (Darm dies in S_7099 -> current_scene blanks to 0
+// for the death cutscene -> the ending loads as S_7002). Yunica and Hugo end on
+// Dalles instead and their ending is NOT captured yet, hence a list: adding it is
+// a config line, not a rebuild.
+//
+// Deliberately an explicit list rather than "any 7xxx scene after the last boss".
+// The 7xxx range is not ending-only -- a real Toal endgame ran
+// 7000 -> 7080 (Dalles) -> 7000 -> 7099 (Darm) -> 7000 -> 0 -> 7002, so S_7000 is
+// a hub visited long BEFORE the game is won. Guessing there risks a FALSE goal,
+// which completes the slot and releases the player's items mid-run; a missed goal
+// is merely a manual release. Unknown endings are surfaced via a loud log +
+// overlay hint below instead of guessed at.
+static std::set<int> g_goal_scenes{7002};
 
 static void strip_eol(char* s) { s[strcspn(s, "\r\n")] = '\0'; }
 
@@ -105,10 +113,12 @@ static void load_config() {
                   "# save_pattern=sav  # filename substring that marks a save file\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
-                  "# goal_scene=7002   # ending-scene number; entering it reports your\n"
-                  "#                   # goal to the server. 7002 (verified on a real\n"
-                  "#                   # clear) is the default — only set this if your\n"
-                  "#                   # route ends on a different scene.\n",
+                  "# goal_scene=7002   # ending-scene number(s), comma-separated;\n"
+                  "#                   # entering one reports your goal to the server.\n"
+                  "#                   # 7002 (verified on a Toal clear) is the default.\n"
+                  "#                   # Yunica/Hugo end on Dalles and their ending is\n"
+                  "#                   # not captured yet — if you win on one of those,\n"
+                  "#                   # the overlay tells you the number to put here.\n",
                   w);
             fclose(w);
         }
@@ -133,7 +143,17 @@ static void load_config() {
         else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
         else if (!strcmp(key, "save_redirect")) { saveredir_config(atoi(val), nullptr); }
         else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
-        else if (!strcmp(key, "goal_scene")) { g_goal_scene = atoi(val); }
+        else if (!strcmp(key, "goal_scene")) {
+            // comma-separated list, e.g. goal_scene=7002,7010 (one per route).
+            g_goal_scenes.clear();
+            for (const char* p = val; *p; ) {
+                while (*p == ' ' || *p == ',') p++;
+                if (!*p) break;
+                int s = atoi(p);
+                if (s > 0) g_goal_scenes.insert(s);
+                while (*p && *p != ',') p++;
+            }
+        }
         else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
         else if (!strncmp(key, "bless_idx_", 10)) {
             int bit = atoi(key + 10);
@@ -142,6 +162,15 @@ static void load_config() {
     }
     fclose(f);
     mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
+    {   // Log the goal scenes: an empty set means the goal can never report, which
+        // is the safe failure but is otherwise invisible (e.g. a typo'd cfg value).
+        std::string gs;
+        for (int s : g_goal_scenes) { if (!gs.empty()) gs += ","; gs += std::to_string(s); }
+        if (gs.empty())
+            mod_log("ap: WARN goal_scene is empty — the goal will NEVER be reported");
+        else
+            mod_log("ap: goal scene(s) = %s", gs.c_str());
+    }
 }
 
 static const uintptr_t kGFlagsAbs = 0x0076B91C;  // runtime g_flags base
@@ -238,7 +267,7 @@ static std::mutex g_sp_mtx;
 static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
 static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
 static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
-// Goal reporting: entering the ending scene (g_goal_scene, S_7002) sends
+// Goal reporting: entering a known ending scene (g_goal_scenes) sends
 // StatusUpdate(GOAL) once. The ending shares the 7xxx range with the New-Game
 // intro cutscenes (Toal's especially), so the scene alone can't tell "the game
 // just ended" from "the game just started". g_saw_gameplay latches once a real
@@ -1105,12 +1134,27 @@ static void poll_scene() {
     // rather than a New-Game intro. Gates the goal check below.
     if (scene >= 1000 && scene <= 6999) g_saw_gameplay = true;
 
-    // Goal: entering the ending scene (S_7002 by default, goal_scene= to override)
-    // marks the slot as GOALed so the multiworld releases/completes properly.
-    // g_saw_gameplay gates it so the shared 7xxx intro range can't complete a
-    // freshly-started slot (verified live: Darm -> scene 0 -> 7002 -> GOAL).
-    if (g_goal_scene > 0 && scene == g_goal_scene && g_saw_gameplay &&
-        !g_goal_sent && g_ap) {
+    // An unlisted 7xxx scene reached after real gameplay is a candidate ending we
+    // haven't captured (Yunica/Hugo finish on Dalles, and their ending is unknown).
+    // Surface it loudly instead of guessing: if the player just won, this number is
+    // exactly what goal_scene= wants, and they can be released manually meanwhile.
+    // Costs nothing when it's only a hub/cutscene, which is why it's a hint and not
+    // a trigger.
+    if (scene >= 7000 && scene < 8000 && g_saw_gameplay && !g_goal_sent &&
+        !g_goal_scenes.count(scene)) {
+        mod_log("goal: scene %d is not a known ending. If you JUST beat the game, "
+                "set goal_scene=%d in yso_ap.cfg and report it.", scene, scene);
+        char buf[96];
+        snprintf(buf, sizeof(buf),
+                 "If you just won: goal_scene=%d", scene);
+        overlay::push_item(buf);
+    }
+
+    // Goal: entering a known ending scene marks the slot as GOALed so the
+    // multiworld releases/completes properly. g_saw_gameplay gates it so the
+    // shared 7xxx intro range can't complete a freshly-started slot (verified
+    // live: Darm -> scene 0 -> 7002 -> GOAL).
+    if (g_goal_scenes.count(scene) && g_saw_gameplay && !g_goal_sent && g_ap) {
         g_goal_sent = true;
         try {
             g_ap->StatusUpdate(APClient::ClientStatus::GOAL);
