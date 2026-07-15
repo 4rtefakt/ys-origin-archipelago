@@ -7,6 +7,39 @@ Darm Tower are shuffled; play as **Yunica, Hugo, or Toal**; everything runs
 
 ---
 
+## 🤖 AI usage disclosure
+
+Archipelago asks developers who use AI to say how they used it, so you can make
+an informed decision. Here's the honest account.
+
+**AI was used heavily.** Most of this project — the mod's C++, the apworld's
+Python, the reverse engineering, the tests, and this documentation — was written
+with Claude (Claude Code) working as a pair-programmer, not as line autocomplete.
+
+**What that did _not_ mean:**
+
+- **Every line has been proofread and reviewed** by the maintainer before it
+  shipped. Nothing was merged sight-unseen.
+- **Nothing ships unplayed.** Every feature was validated in the real game, and
+  the randomizer has been played **end-to-end through a full multiworld to the
+  credits** (Toal, Darm defeated) alongside other players.
+- **The design calls, the tuning, and the bug reports are human.** What the
+  options should be, how the traps should feel, what felt wrong — that came from
+  actually playing it.
+- **Normal engineering discipline applies**: real git history, 36 offline tests,
+  and memory offsets verified live against the running binary rather than guessed.
+
+The playthroughs are the point, and they're what caught the interesting bugs —
+all of which shipped fixed: AP-granted items being silently wiped by the game's
+save/load, artifacts arriving without the skill they're supposed to unlock,
+duplicate items double-firing the same check, and goal detection that could
+mis-fire on a fresh game.
+
+If you'd rather not use software built this way, that's a completely fair call —
+this section exists so it's yours to make.
+
+---
+
 ## 🎮 I just want to play a rando (and I'm not techy)
 
 You need three things:
