@@ -270,6 +270,42 @@ plus #2 are the two gates on answering Linonrim's "is it stable?" honestly.
 
 ---
 
+### 14. 🟡 Over-classified progression in warp mode — *analyzed offline, change pending in-game verification*
+
+Player observation (confirmed): in open/warp mode you can beat a seed with only a
+few warps + Cleria Ore + the Devil Medallion, levelling at each warp — so most of
+the items tagged `progression` are never actually required.
+
+**Ground truth (`tests/test_logic_criticality.py`).** A faithful offline model of
+the open-mode warp graph (reusing `req_satisfied` + the real
+`warp_edge_rules`/`interzone_climb_rules`/`open_scene_edge_requirements` builders)
+computes, per item, whether removing it strands any location. Result is robust
+across **every character and every spawn**, and stable for `max_warp_floors_skip`
+∈ {0,5,10}:
+
+- **19 of 26 progression items are never critical** in open mode — the five zone
+  medallions, most keys, both dragon weapons, all three bracelets, Black Pearl,
+  Blue Necklace, Cerulean Flabellum, Dreaming Idol. A chain of warps ascends the
+  tower without ever climbing, so the climb-gating medallions drop off the path.
+- **Irreducible critical core:** the goal (Devil Medallion) + the room-gate items
+  warps can't bypass — Mask of Eyes (Cleria Ring for Toal), Blue/Red Moon Crest,
+  Water Dragon's Scales, Evil Ring, Bronze Key.
+
+This is **not a beatability bug** (over-tagging is safe — fill still guarantees
+those items reachable); it's the over-classification M. complained about, from the
+logic side, and it over-constrains fill.
+
+**Planned change (clean + robust, needs your in-game generation pass):** make the
+gate-item classification *derived from the active mode* — in open mode, demote the
+provably-non-critical gate items to `useful` (keep the goal + critical core +
+warps as progression); forward mode is unchanged (there you must climb, so they
+stay progression). The criticality is character-dependent (Toal's Cleria Ring vs
+Mask of Eyes), so it's computed per-world from the same logic, not a hardcoded
+list — the test above guards that the demoted set never includes a truly-required
+item. Ship-gated on a real `generate` pass confirming seeds still fill + clear.
+
+---
+
 ### 10–13. ⚪ Out of scope / non-code (tracked, not engineered)
 
 - **10 — Felghana randomizer** (RaindropDry): different game (*Oath in
