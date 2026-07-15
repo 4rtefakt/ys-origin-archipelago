@@ -147,8 +147,26 @@ def _reachable_locs(reached, lr):
     return {l for l, rg in lr.items() if rg in reached}
 
 
+def _goal_region():
+    for loc in _loc_regions():
+        if dt.location_vanilla_item(loc) == dt.GOAL_ITEM:
+            return _loc_regions()[loc]
+    raise AssertionError("no location vanilla-holds the goal item")
+
+
+def _lean_protected():
+    """The set the shipped lean-progression demotion KEEPS as progression: the
+    goal medallion, Cleria Ore, and every warp unlock (the reachability spine)."""
+    return {dt.GOAL_ITEM, dt.CLERIA_ORE} | set(dt.statue_unlock_items())
+
+
 def criticality(char, spawn, max_skip=5):
-    """{progression item -> #locations stranded if removed} for one (char, spawn)."""
+    """FULL-accessibility criticality: {progression item -> #locations stranded if
+    removed} for one (char, spawn). 'Stranded' means the location becomes
+    unreachable — i.e. this is the `accessibility: full` question (every location
+    reachable), NOT 'required to win'. An item can strand side-checks yet be
+    irrelevant to the goal; the goal/lean tests below cover the items/minimal
+    picture that actually drives the shipped classification."""
     conns, warp, climb, scenereq = _model(spawn, 1, max_skip)
     lr = _loc_regions()
     inv0 = _full_inventory(char)
@@ -177,9 +195,10 @@ def test_open_baseline_all_reachable():
             assert not missing, (char, spawn, missing[:8])
 
 
-def test_zone_medallions_are_never_critical_in_open_mode():
-    """The headline finding: warping bypasses every inter-zone climb, so none of
-    the five zone medallions ever strands a location — any character, any spawn."""
+def test_zone_medallions_never_strand_a_location_in_open_mode():
+    """FULL-accessibility: warping bypasses every inter-zone climb, so none of the
+    five zone medallions ever strands even a side-location — any character, any
+    spawn. (They are non-essential under every accessibility level.)"""
     for char in ALL_CHARS:
         for spawn in _all_spawns():
             crit = criticality(char, spawn)
@@ -187,10 +206,11 @@ def test_zone_medallions_are_never_critical_in_open_mode():
             assert not offenders, (char, spawn, offenders)
 
 
-def test_critical_core_still_gates_locations():
-    """Guard the other direction: the room-gate items warps can't bypass MUST
-    still strand at least one location on some spawn — so a future 'demote the
-    non-critical items' change never accidentally frees one of these."""
+def test_room_gate_core_strands_side_locations_under_full_access():
+    """FULL-accessibility guard (NOT 'required to win'): the room-gate items warps
+    can't bypass each strand at least one SIDE location on some spawn. This is why
+    they'd need to stay progression under `accessibility: full` — and why the
+    shipped demotion only fires under items/minimal, never full."""
     for char in ALL_CHARS:
         ever = defaultdict(int)
         for spawn in _all_spawns():
@@ -198,7 +218,41 @@ def test_critical_core_still_gates_locations():
             for k, v in crit.items():
                 ever[k] = max(ever[k], v)
         for item in CRITICAL_CORE[char]:
-            assert ever.get(item, 0) > 0, (char, item, "expected critical, strands nothing")
+            assert ever.get(item, 0) > 0, (char, item, "expected to strand a side-loc")
+
+
+def test_no_progression_item_blocks_the_goal():
+    """MINIMAL accessibility ('required to win'): removing ANY single progression
+    item still leaves the goal's location reachable, for every character and
+    spawn. This is the justification that the demoted gates are never win-critical
+    — the room-gate core strands only side-checks, never the goal."""
+    goal_region = _goal_region()
+    for char in ALL_CHARS:
+        for spawn in _all_spawns():
+            conns, warp, climb, scenereq = _model(spawn)
+            inv0 = _full_inventory(char)
+            prog = [n for n in inv0 if dt.item_classification(n) == "progression"]
+            for it in prog:
+                inv = dict(inv0)
+                inv.pop(it, None)
+                reached = _reachable(inv, char, conns, warp, climb, scenereq)
+                assert goal_region in reached, (char, spawn, f"{it} blocks the goal")
+
+
+def test_lean_progression_set_alone_reaches_goal():
+    """ITEMS-accessibility safety (the make-or-break for the shipped demotion):
+    with ONLY the kept-progression set (warps + Cleria Ore + goal) and EVERY gate
+    item removed together, the goal is still reachable — every character, every
+    spawn. If this held only one-item-at-a-time but not jointly, demoting the
+    gates could strand the goal under items accessibility; it holds jointly."""
+    goal_region = _goal_region()
+    protected = _lean_protected()
+    for char in ALL_CHARS:
+        for spawn in _all_spawns():
+            conns, warp, climb, scenereq = _model(spawn)
+            inv = {k: v for k, v in _full_inventory(char).items() if k in protected}
+            reached = _reachable(inv, char, conns, warp, climb, scenereq)
+            assert goal_region in reached, (char, spawn, "goal unreachable with lean set")
 
 
 def test_goal_item_is_the_only_always_required_medallion():

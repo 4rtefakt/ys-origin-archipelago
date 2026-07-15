@@ -103,6 +103,20 @@ class YsOriginWorld(World):
         else:
             self.start_statue_scene = 0             # locks off: no forced start
 
+        # Lean progression (open / warp mode only). The warp network + level
+        # scaling makes the climb-gating and room-gating items non-essential to
+        # WIN: goal reachability is unaffected by removing any of them (see
+        # tests/test_logic_criticality.py + ROADMAP_2.0 §14). So under `items` /
+        # `minimal` accessibility — where only your progression items and the goal
+        # must be reachable — those gates need not be progression; fill routes
+        # advancement through the warps instead and they stop hogging priority
+        # spots. Under `full` (every location must be reachable) they stay
+        # progression, so we ONLY lean when the setting is positively lenient (an
+        # unknown/`full` key never demotes -> never risks stranding a location).
+        acc_key = getattr(getattr(o, "accessibility", None), "current_key", None)
+        self.lean_open_progression = (
+            self.open_mode and acc_key in ("items", "minimal", "none"))
+
         # Player-supplied per-item classification overrides (advanced). Parsed
         # once here (invalid entries dropped + logged) and applied LAST in
         # create_item so they win over every built-in default.
@@ -128,6 +142,19 @@ class YsOriginWorld(World):
         # (it's merely "useful" convenience in normal, on-foot seeds).
         elif getattr(self, "open_mode", False) and name in dt.STATUE_UNLOCKS:
             cls = ItemClassification.progression
+        # Lean-progression demotion (open mode, items/minimal accessibility): keep
+        # only the genuinely win-critical progression — the goal medallion, the
+        # warp unlocks (the reachability spine, promoted just above) and Cleria Ore
+        # (weapon gating). Every other item that was progression ONLY because it
+        # gates a climb or a side-room is demoted to useful: it stays a real,
+        # collectable item and its access rule is untouched (find it and the gate
+        # still opens), it just no longer forces advancement placement.
+        if (getattr(self, "lean_open_progression", False)
+                and cls == ItemClassification.progression
+                and name != dt.GOAL_ITEM
+                and name != dt.CLERIA_ORE
+                and name not in dt.STATUE_UNLOCKS):
+            cls = ItemClassification.useful
         # Player override wins over every default above (incl. the promotions):
         # they may retune minor progression down or bump filler up for their seed.
         override = getattr(self, "class_overrides", {}).get(name)
