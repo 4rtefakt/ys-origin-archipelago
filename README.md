@@ -12,31 +12,46 @@ Darm Tower are shuffled; play as **Yunica, Hugo, or Toal**; everything runs
 Archipelago asks developers to disclose how they used AI so players and hosts can
 decide for themselves. Here it is, plainly.
 
-- **This project is largely AI-written.** The mod (C++), the apworld (Python),
-  the tests, and most of this documentation were written by Claude (Claude Code)
-  used as a pair-programmer — well past line autocomplete or assistive use. If
-  that's where you draw your line, this project is over it.
-- **The reverse engineering was mostly AI-driven too** — disassembling
-  `yso_win.exe`, locating the memory offsets, and working out the game hooks.
-- **No AI art, and no generated assets.** The game's own art is all you see; the
-  overlay is plain text.
-- **Every line was proofread and reviewed** by the maintainer before it shipped.
-  Nothing was merged sight-unseen.
-- **Nothing ships unplayed.** Every feature was validated in the real game, and
+**This is not vibe-coded, but it is largely AI-written.** Those are two different
+claims, and they're worth weighing separately rather than collapsing into one.
+
+What the AI did:
+
+- **Wrote most of the code** — the mod (C++), the apworld (Python), the tests,
+  and most of this documentation, with Claude (Claude Code) used as a
+  pair-programmer. That is well past line autocomplete; it sits on the generative
+  side of the line, and you should know that going in.
+- **Did most of the reverse engineering** — disassembling `yso_win.exe`, locating
+  the memory offsets, and working out the game hooks.
+
+What it did not do:
+
+- **It did not pilot the design.** The scope, the options, how the traps should
+  feel, the pacing defaults — those were specified and held to. The in-game
+  overlay was built to sit inside the game's own UI rather than be a floating
+  debug window, because that was the brief.
+- **It did not ship unread.** Every line was read and reviewed before release.
+- **It did not ship unplayed.** Every feature was checked in the real game, and
   the randomizer has been played end-to-end through a full multiworld to the
   credits (Toal, Darm defeated) alongside other players.
-- **The design calls and the bug reports are human**, and that's the part that
-  actually mattered. During a live multiworld, gear kept silently vanishing
-  mid-run — the AI wrote the granting code and could not see the bug; it was
-  caught by noticing the boots were gone while playing, and traced to the game
-  rebuilding its flags on every save load. Same story for artifacts that arrived
-  without the skill they unlock. Both shipped fixed in 1.8.0 / 1.8.1.
-- **Checkable rather than claimed**: real git history (not a dumped upload), 36
-  offline tests, and memory offsets verified live against the running binary
-  instead of guessed.
+- **It did not make art.** No generated assets — the game's own art is all you
+  see, and the overlay is plain text.
 
-If you'd rather not use software built this way, that's a fair call — this
-section exists so it's yours to make.
+**Why "read it" isn't the safeguard people assume, and what is:** AI-written code
+arrives uniformly confident. The wrong parts look exactly like the right parts,
+with a tidy rationale attached, so review catches incoherence but is weak against
+coherent-and-wrong. The safeguard that actually earns its keep here is playing the
+thing. During a live multiworld, gear kept silently vanishing mid-run — the AI had
+written the granting code and could not see the bug. It was caught by noticing the
+boots were gone mid-fight, and traced to the game rebuilding its flag block on
+every save load. That fix shipped in 1.8.0.
+
+**Checkable rather than claimed:** real git history (not a dumped upload), 36
+offline tests, memory offsets verified live against the running binary instead of
+guessed, and a full playthrough behind every release.
+
+If you'd rather not use software built this way, that's a fair call — this section
+exists so it's yours to make.
 
 ---
 
