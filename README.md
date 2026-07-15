@@ -9,34 +9,34 @@ Darm Tower are shuffled; play as **Yunica, Hugo, or Toal**; everything runs
 
 ## 🤖 AI usage disclosure
 
-Archipelago asks developers who use AI to say how they used it, so you can make
-an informed decision. Here's the honest account.
+Archipelago asks developers to disclose how they used AI so players and hosts can
+decide for themselves. Here it is, plainly.
 
-**AI was used heavily.** Most of this project — the mod's C++, the apworld's
-Python, the reverse engineering, the tests, and this documentation — was written
-with Claude (Claude Code) working as a pair-programmer, not as line autocomplete.
-
-**What that did _not_ mean:**
-
-- **Every line has been proofread and reviewed** by the maintainer before it
-  shipped. Nothing was merged sight-unseen.
+- **This project is largely AI-written.** The mod (C++), the apworld (Python),
+  the tests, and most of this documentation were written by Claude (Claude Code)
+  used as a pair-programmer — well past line autocomplete or assistive use. If
+  that's where you draw your line, this project is over it.
+- **The reverse engineering was mostly AI-driven too** — disassembling
+  `yso_win.exe`, locating the memory offsets, and working out the game hooks.
+- **No AI art, and no generated assets.** The game's own art is all you see; the
+  overlay is plain text.
+- **Every line was proofread and reviewed** by the maintainer before it shipped.
+  Nothing was merged sight-unseen.
 - **Nothing ships unplayed.** Every feature was validated in the real game, and
-  the randomizer has been played **end-to-end through a full multiworld to the
-  credits** (Toal, Darm defeated) alongside other players.
-- **The design calls, the tuning, and the bug reports are human.** What the
-  options should be, how the traps should feel, what felt wrong — that came from
-  actually playing it.
-- **Normal engineering discipline applies**: real git history, 36 offline tests,
-  and memory offsets verified live against the running binary rather than guessed.
+  the randomizer has been played end-to-end through a full multiworld to the
+  credits (Toal, Darm defeated) alongside other players.
+- **The design calls and the bug reports are human**, and that's the part that
+  actually mattered. During a live multiworld, gear kept silently vanishing
+  mid-run — the AI wrote the granting code and could not see the bug; it was
+  caught by noticing the boots were gone while playing, and traced to the game
+  rebuilding its flags on every save load. Same story for artifacts that arrived
+  without the skill they unlock. Both shipped fixed in 1.8.0 / 1.8.1.
+- **Checkable rather than claimed**: real git history (not a dumped upload), 36
+  offline tests, and memory offsets verified live against the running binary
+  instead of guessed.
 
-The playthroughs are the point, and they're what caught the interesting bugs —
-all of which shipped fixed: AP-granted items being silently wiped by the game's
-save/load, artifacts arriving without the skill they're supposed to unlock,
-duplicate items double-firing the same check, and goal detection that could
-mis-fire on a fresh game.
-
-If you'd rather not use software built this way, that's a completely fair call —
-this section exists so it's yours to make.
+If you'd rather not use software built this way, that's a fair call — this
+section exists so it's yours to make.
 
 ---
 
