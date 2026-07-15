@@ -299,6 +299,12 @@ static inline void write_hp_zero() {
 }
 // AP item name -> g_flags index (from slot_data item_index).
 static std::map<std::string, int> g_name_to_idx;
+// Sacred artifact -> g_flags index of the POWER it unlocks (the bracelet cells
+// 0x74/0x75/0x76). Casting keys off the power, not the artifact, and the vanilla
+// chest sets both — but the bracelets aren't separate pickups, so an AP artifact
+// grant has to light up its skill too or you own an uncastable item. From
+// slot_data skill_grants.
+static std::map<std::string, int> g_skill_grants;
 // Statue warp locks: unlock-item name -> the statue's activation-flag index, so
 // receiving that item clears g_statue_lock (purification allowed). Populated
 // from slot_data statue_unlocks when statue_warp_locks is on.
@@ -663,6 +669,10 @@ static void on_slot_connected(const nlohmann::json& sd) {
             names++;
         }
     }
+    g_skill_grants.clear();
+    if (sd.contains("skill_grants"))
+        for (auto& kv : sd["skill_grants"].items())
+            g_skill_grants[kv.key()] = kv.value().get<int>();
     if (sd.contains("suppress_items")) {
         for (auto& v : sd["suppress_items"]) {
             int i = v.get<int>();
@@ -1001,6 +1011,16 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         } else if (f != g_name_to_idx.end()) {
             ap_give(f->second, 1);
             remember_gear(f->second, tier);   // survive save/load wipes
+            // A sacred artifact also unlocks its power (the bracelet cell) —
+            // that's what the game checks to let you cast. Granting the artifact
+            // alone leaves a dead skill slot.
+            auto sk = g_skill_grants.find(name);
+            if (sk != g_skill_grants.end()) {
+                ap_give(sk->second, 1);
+                remember_gear(sk->second, tier);
+                mod_log("ap: '%s' -> also unlocked skill g_flags[0x%X]",
+                        name.c_str(), sk->second);
+            }
         } else
             mod_log("ap: received '%s' (id %lld) — no g_flags index, skipped",
                     name.c_str(), (long long)it.item);

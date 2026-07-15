@@ -32,6 +32,30 @@ _spec.loader.exec_module(dt)
 ALL_CHARS = ("yunica", "hugo", "toal")
 
 
+def test_artifacts_grant_their_skill():
+    """Each sacred artifact must map to the power cell that lets you cast it.
+
+    The bracelets (0x74/0x75/0x76) are the power the game actually checks, and
+    they are deliberately NOT separate pickups (the vanilla chest sets both cells,
+    so two checks would fire from one chest). That makes this mapping the only
+    thing lighting up a skill — without it you own an uncastable artifact.
+    """
+    grants = dt.skill_grants()
+    assert grants, "artifacts must publish their skill grants"
+    # every artifact resolves to its bracelet's g_flags index
+    for art, skill in dt.SKILL_GRANTS.items():
+        assert art in grants, f"{art} grants no skill"
+        assert grants[art] == dt.item_index[skill], f"{art} -> wrong cell"
+    # the three powers are the known bracelet cells, and are distinct
+    assert sorted(grants.values()) == [0x74, 0x75, 0x76], sorted(grants.values())
+    # the artifacts themselves stay real items; the bracelets stay out of the pool
+    for art, skill in dt.SKILL_GRANTS.items():
+        assert art in dt.item_name_to_id, f"{art} must remain a real item"
+        assert skill not in dt.item_name_to_id, (
+            f"{skill} must NOT be its own item (double-fires the artifact's chest)"
+        )
+
+
 def test_no_hex_placeholder_items():
     bad = [n for n in dt.item_name_to_id if re.fullmatch(r"0x[0-9A-Fa-f]+", n)]
     assert not bad, f"raw-hex placeholder items remain: {bad}"

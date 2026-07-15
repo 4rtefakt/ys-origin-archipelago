@@ -806,6 +806,27 @@ def is_excluded(loc_name: str) -> bool:
 item_index: Dict[str, int] = json.loads(_read_data("data/items.json"))
 
 
+# Each sacred artifact grants a POWER — the "bracelet" cells (0x74/0x75/0x76) —
+# and that power, not the artifact, is what actually lets you cast. Opening the
+# vanilla chest sets BOTH cells, which is why the bracelets can't be separate
+# checks (one chest would fire two) and aren't in the item pool. So receiving the
+# artifact has to grant its power too, or you get an item with a dead skill slot
+# — seen live: Lotusblade + Warhammer owned and uncastable, while a suppressed
+# vanilla chest left the wind power on with no Flabellum. The mod grants both.
+SKILL_GRANTS: Dict[str, str] = {
+    "Cerulean Flabellum": "Ventus Bracelet",    # wind    0x6B -> 0x74
+    "Levinstrike Warhammer": "Terra Bracelet",  # thunder 0x6C -> 0x75
+    "Crimson Lotusblade": "Ignis Bracelet",     # fire    0x6D -> 0x76
+}
+
+
+def skill_grants() -> Dict[str, int]:
+    """artifact item name -> g_flags index of the power it unlocks. Published in
+    slot_data so receiving the artifact also lights up its skill."""
+    return {art: item_index[skill] for art, skill in SKILL_GRANTS.items()
+            if art in item_index and skill in item_index}
+
+
 def start_item_indices(names) -> List[int]:
     """g_flags indices for the named starting items (resolved via item_index).
     Unknown names are skipped (so a typo can't break generation); order preserved,
