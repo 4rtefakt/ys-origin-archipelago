@@ -270,7 +270,27 @@ plus #2 are the two gates on answering Linonrim's "is it stable?" honestly.
 
 ---
 
-### 14. 🟡 Over-classified progression in warp mode — *analyzed offline, change pending in-game verification*
+### 14. ✅/🟡 Over-classified progression in warp mode — *implemented (accessibility-aware), pending in-game generate pass*
+
+> **Correction to the first analysis.** The initial "still-critical 6" (Mask of
+> Eyes, the Moon Crests, …) was measured under `accessibility: full` (every
+> location reachable). Under the shipped default `accessibility: items` — and
+> under `minimal` — the real question is "can you reach the goal / your
+> progression items," and there **no** progression item is critical: removing any
+> one leaves the goal reachable, and the kept set (warps + Cleria Ore + Devil
+> Medallion) reaches the goal *jointly* with every gate item removed. So the gates
+> can be demoted and fill routes advancement through the warps.
+>
+> **Implemented.** `generate_early` sets `lean_open_progression` = open mode AND
+> accessibility ∈ {items, minimal, none}; `create_item` then demotes every
+> would-be-progression gate item (all except the goal, Cleria Ore, and the warp
+> unlocks) to `useful`. Under `full` (or any unrecognised key) nothing is demoted,
+> so a strict seed never risks a stranded location. Player overrides still win.
+> Guarded by `tests/test_logic_criticality.py` (goal-reachability + joint lean-set
+> tests). **Ship-gated on a real `generate` pass** (needs the AP tree, i.e. your
+> machine) confirming open-mode seeds still fill and clear under items/minimal.
+
+Original (full-accessibility) analysis follows.
 
 Player observation (confirmed): in open/warp mode you can beat a seed with only a
 few warps + Cleria Ore + the Devil Medallion, levelling at each warp — so most of

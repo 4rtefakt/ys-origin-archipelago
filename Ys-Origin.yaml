@@ -146,4 +146,14 @@ Ys Origin:
 
   # --- standard Archipelago knobs (leave as-is if unsure) ---
   progression_balancing: 0
-  accessibility: items
+  accessibility: items   # items | minimal | full
+                         #   In WARP mode (random_start) this also LEANS the item
+                         #   tiers: the warp network + scaling makes the climb/room
+                         #   gates non-essential to win, so under items/minimal the
+                         #   medallions, keys, crests, gear & bracelets are demoted
+                         #   from progression to useful (only warps + Cleria Ore +
+                         #   Devil Medallion stay progression) — they stop hogging
+                         #   priority spots but remain real, findable items. Set
+                         #   `full` (every location must be reachable) to keep the
+                         #   gates as progression. Forward (non-warp) seeds always
+                         #   keep the gates progression regardless.
