@@ -243,6 +243,18 @@ route testing.
 
 ### 9. 🟢 Logic completeness / full route coverage — *the actual 2.0 gate*
 
+> **Progress (offline).** `tests/test_logic_reachability.py` now audits the
+> forward (non-random) logic without a game or the AP tree, reusing the module's
+> own `req_satisfied` evaluator: (a) the AP invariant — all items in hand ⇒ every
+> location + the goal reachable, per character, both weapon settings; (b) vanilla
+> placement admits a real clear ordering (weapon gating off); (c) structural
+> guards — every requirement/gate names a real item (the fail-closed typo trap),
+> every graph endpoint is a real region, gated zones have no ungated backdoor.
+> All green today, so they're regression guards. Still open: open-mode
+> (random-spawn) reachability, weapon-gated fill ordering (needs an assumed-fill
+> model), and live per-character playtests to credits.
+
+
 > *"Logic isnt completely covered tho and I need to check more routes … its
 > definetely not as polished as most."* — you
 
