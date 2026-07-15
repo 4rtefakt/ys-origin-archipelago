@@ -1315,25 +1315,6 @@
   ]
  },
  {
-  "id": "S_3007/TALKSAUL/0x76",
-  "type": "event",
-  "zone": "Flames of Guilt",
-  "floor": "",
-  "room": "Fire Altar",
-  "name": "Flames of Guilt: Fire Altar — Ignis Bracelet",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BBFC"
-  },
-  "items": [
-   {
-    "id": "0x76",
-    "name": "Ignis Bracelet",
-    "class": "progression"
-   }
-  ]
- },
- {
   "id": "S_2009/TALKC940/0x6C",
   "type": "event",
   "zone": "Flooded Prison",
@@ -1348,25 +1329,6 @@
    {
     "id": "0x6C",
     "name": "Levinstrike Warhammer",
-    "class": "progression"
-   }
-  ]
- },
- {
-  "id": "S_2009/TALKC940/0x75",
-  "type": "event",
-  "zone": "Flooded Prison",
-  "floor": "",
-  "room": "Skill Room",
-  "name": "Flooded Prison: Skill Room — Terra Bracelet",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BE58"
-  },
-  "items": [
-   {
-    "id": "0x75",
-    "name": "Terra Bracelet",
     "class": "progression"
    }
   ]
@@ -1405,25 +1367,6 @@
    {
     "id": "0x6B",
     "name": "Cerulean Flabellum",
-    "class": "progression"
-   }
-  ]
- },
- {
-  "id": "S_1004/TALKITEM/0x74",
-  "type": "event",
-  "zone": "Wailing Blue",
-  "floor": "2F",
-  "room": "2F Path 2 (Wind Skill)",
-  "name": "Wailing Blue: 2F Path 2 (Wind Skill) — Ventus Bracelet",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36BDDC"
-  },
-  "items": [
-   {
-    "id": "0x74",
-    "name": "Ventus Bracelet",
     "class": "progression"
    }
   ]

@@ -39,6 +39,7 @@ void mod_log(const char* fmt, ...);
 extern "C" void set_pending_box(int art_id, const char* name);  // relabel box (hook_vm.cpp)
 namespace overlay {
 void push_item(const std::string& text);
+void push_toast(const std::string& item, const std::string& who, int flags, bool sent);
 void set_status(const std::string& text);
 void set_room(const std::string& text);
 void set_tracker(const std::string& text);
@@ -75,7 +76,12 @@ static int g_hp_field = 0x98;       // HP offset within the entity
 // Filled from yso_ap.cfg in load_config; documented at their feature blocks
 // (overlay blessing shop / goal reporting) further down.
 static int g_bless_arr_idx[32];     // bless_idx_N: bit -> state-array idx (-1 unmapped)
-static int g_goal_scene = 0;        // goal_scene=: ending scene (0 = not configured)
+// goal_scene=: the ending scene. Default captured live on a real Toal clear:
+// Darm dies in S_7099 -> current_scene blanks to 0 for the death cutscene -> the
+// ending loads as S_7002. Overridable in yso_ap.cfg if another route differs; a
+// wrong value only means the goal never fires (it can't false-complete, see the
+// gameplay latch on the goal check).
+static int g_goal_scene = 7002;
 
 static void strip_eol(char* s) { s[strcspn(s, "\r\n")] = '\0'; }
 
@@ -99,9 +105,10 @@ static void load_config() {
                   "# save_pattern=sav  # filename substring that marks a save file\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
-                  "# goal_scene=0      # ending-scene number; entering it reports your\n"
-                  "#                   # goal to the server (capture it live: beat the\n"
-                  "#                   # game once and read the scene id off the log)\n",
+                  "# goal_scene=7002   # ending-scene number; entering it reports your\n"
+                  "#                   # goal to the server. 7002 (verified on a real\n"
+                  "#                   # clear) is the default — only set this if your\n"
+                  "#                   # route ends on a different scene.\n",
                   w);
             fclose(w);
         }
@@ -231,10 +238,14 @@ static std::mutex g_sp_mtx;
 static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
 static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
 static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
-// Goal reporting: entering the ending scene sends StatusUpdate(GOAL) once. The
-// ending scene id is not RE'd yet — set goal_scene= in yso_ap.cfg after one
-// live capture (kill Darm, read the scene number off the log/overlay).
+// Goal reporting: entering the ending scene (g_goal_scene, S_7002) sends
+// StatusUpdate(GOAL) once. The ending shares the 7xxx range with the New-Game
+// intro cutscenes (Toal's especially), so the scene alone can't tell "the game
+// just ended" from "the game just started". g_saw_gameplay latches once a real
+// gameplay scene (1000..6999) is entered: the intro plays BEFORE any of those, so
+// a fresh game can't false-complete the slot, while a clear always has it set.
 static bool g_goal_sent = false;
+static bool g_saw_gameplay = false;
 // Chat send queue (chat.cpp input -> poll thread -> g_ap->Say).
 static std::mutex g_say_mtx;
 static std::vector<std::string> g_say_queue;
@@ -357,6 +368,29 @@ static char* g_weapon_entity = nullptr;      // entity we last pushed the weapon
                                              // (re-push on respawn = new entity)
 static const uintptr_t kWarpRegAbs = kGFlagsAbs + 0x200 * 4;  // 0x0076C11C (byte array)
 
+// -- traps (received by NAME; effect applied on the main thread or as a timed
+// window). Names must match data_tables.TRAP_POOL. -------------------------- #
+static std::atomic<bool> g_trap_chaos_warp{false};   // main thread: warp to a random statue
+static std::atomic<bool> g_trap_exp_leech{false};    // main thread: drop a chunk of EXP
+static std::atomic<unsigned long> g_fog_until{0};    // Blinding Fog: overlay haze deadline
+static std::atomic<unsigned long> g_butter_until{0}; // Butterfingers: weapon-Lv1 window end
+static const uintptr_t kExpAbs = 0x0076A748;         // current EXP (float)
+
+// Set the effect for a received trap. Returns true if `name` was a trap.
+static bool apply_trap(const std::string& name) {
+    unsigned long now = GetTickCount();
+    if (name == "EXP Leech")          g_trap_exp_leech.store(true);
+    else if (name == "Chaos Warp")    g_trap_chaos_warp.store(true);
+    else if (name == "Butterfingers") g_butter_until.store(now + 8000);
+    else if (name == "Blinding Fog")  g_fog_until.store(now + 30000);
+    else return false;
+    mod_log("ap: TRAP received -> %s", name.c_str());
+    return true;
+}
+// Read by overlay.cpp for the fog haze.
+extern "C" unsigned long ap_fog_until() { return g_fog_until.load(); }
+extern "C" int ap_current_scene() { return read_current_scene(); }
+
 // -- force-spawn (random start) --------------------------------------------- #
 // On a random-start New Game, after the intro drops the player at 1F, warp them
 // to the chosen spawn statue and grant a floor-appropriate loadout (weapon now;
@@ -458,6 +492,41 @@ static std::map<int64_t, std::string> g_loc_found;
 // item's display NAME for the box text. Populated from LocationScouts.
 static std::map<int64_t, int> g_loc_local_id;
 static std::map<int64_t, std::string> g_loc_item_name;
+// item name -> classification (1/2/4/0), from slot_data; a fallback for the toast
+// color when a received item carries no flags (cheat /send, or a stingy server).
+static std::map<std::string, int> g_item_tiers;
+static int tier_or(const std::string& name, int flags) {
+    if (flags) return flags;
+    auto it = g_item_tiers.find(name);
+    return it != g_item_tiers.end() ? it->second : 0;
+}
+
+// Tier-colored toast for a fired location, from the scout map ("item  -> who").
+// Caller must NOT hold g_scout_mtx.
+static void toast_loc(int64_t loc) {
+    std::string found, name;
+    int flags = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f != g_loc_found.end()) found = f->second;
+        auto in = g_loc_item_name.find(loc);
+        if (in != g_loc_item_name.end()) name = in->second;
+        auto fl = g_loc_flags.find(loc);
+        if (fl != g_loc_flags.end()) flags = fl->second;
+    }
+    if (found.empty()) return;
+    std::string item = name, who;
+    size_t p = found.find("  -> ");
+    if (p != std::string::npos) {
+        if (item.empty()) item = found.substr(0, p);
+        who = found.substr(p + 5);
+    } else if (item.empty()) {
+        item = found;
+    }
+    bool sent = !who.empty() && who != g_slot;
+    overlay::push_toast(item, sent ? who : std::string(), tier_or(item, flags), sent);
+}
 // Generic art id for foreign items (a real Ys item id used as a placeholder
 // icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
 static const int kForeignArtId = 0x57;
@@ -470,6 +539,46 @@ static void ap_give(int idx, int count) {
     int base = (cur >= 1) ? cur : 0;
     *cell = base + (count > 0 ? count : 1);
     mod_log("ap: granted g_flags[0x%X] %d -> %d", idx, cur, *cell);
+}
+
+// -- owned-gear reconcile ---------------------------------------------------- #
+// Granted items live in g_flags, but the game rebuilds that block on every save
+// load — and a DeathLink death reloads constantly. Any item granted since the
+// last save is silently reset to unowned, and g_applied_through (session-only,
+// monotonic) means on_items_received never re-grants it: the item is just gone
+// until a full reconnect (which would also re-fire traps and re-add SP).
+// So remember each granted cell's owned value and re-assert it every tick.
+// ONLY progression/useful items are tracked: filler (Celcetan Panacea, herbs) is
+// meant to be SPENT, and re-asserting it would make consumables infinite. Traps
+// carry no flag, SP lives outside g_flags, Cleria Ore rides the weapon watermark
+// and statue unlocks ride g_statue_forced — all already survive a reload.
+static std::mutex g_gear_mtx;
+static std::map<int, int> g_owned_gear;   // g_flags idx -> owned value
+
+// Record a granted cell if the item is progression(1)/useful(2). Call AFTER the
+// grant, so we latch the post-grant (cumulative) value.
+static void remember_gear(int idx, int tier) {
+    if (idx < 0 || idx >= 0x200) return;
+    if (!(tier & 3)) return;                       // filler/trap -> spendable
+    int v = *(volatile int*)(kGFlagsAbs + idx * 4);
+    if (v < 1) return;
+    std::lock_guard<std::mutex> lk(g_gear_mtx);
+    int& cur = g_owned_gear[idx];
+    if (v > cur) cur = v;                          // watermark: only ever rises
+}
+
+// Re-assert every tracked cell the game reset below its owned value.
+static void reconcile_gear() {
+    if (read_current_scene() <= 0) return;         // not in-game: block is stale
+    std::lock_guard<std::mutex> lk(g_gear_mtx);
+    for (const auto& kv : g_owned_gear) {
+        volatile int* cell = (volatile int*)(kGFlagsAbs + kv.first * 4);
+        if (*cell < kv.second) {
+            mod_log("gear: restored g_flags[0x%X] %d -> %d (save/load wipe)",
+                    kv.first, *cell, kv.second);
+            *cell = kv.second;
+        }
+    }
 }
 
 // Called by the VM grant hook (game main thread) when a watched location flag
@@ -488,7 +597,7 @@ void ap_on_check(int flag_idx) {
             g_checks.push_back(loc);
         }
         std::string found, name;
-        int local_id = -1;
+        int local_id = -1, flags = 0;
         {
             std::lock_guard<std::mutex> lk(g_scout_mtx);
             auto it = g_loc_found.find(loc);
@@ -497,8 +606,22 @@ void ap_on_check(int flag_idx) {
             if (il != g_loc_local_id.end()) local_id = il->second;
             auto in = g_loc_item_name.find(loc);
             if (in != g_loc_item_name.end()) name = in->second;
+            auto fl = g_loc_flags.find(loc);
+            if (fl != g_loc_flags.end()) flags = fl->second;
         }
-        if (!found.empty()) overlay::push_item(found);
+        // Toast: "yours" for self, "-> Player" when you found it for someone else.
+        if (!found.empty()) {
+            std::string item = name, who;
+            size_t p = found.find("  -> ");
+            if (p != std::string::npos) {
+                if (item.empty()) item = found.substr(0, p);
+                who = found.substr(p + 5);
+            } else if (item.empty()) {
+                item = found;
+            }
+            bool sent = !who.empty() && who != g_slot;
+            overlay::push_toast(item, sent ? who : std::string(), tier_or(item, flags), sent);
+        }
         // Stash the actually-placed item so the native "Acquired <item>" box
         // (the 0xD5 op, which runs just after this check flag) shows the REAL
         // item: its art (local id, or a generic icon for foreign) and its name.
@@ -568,7 +691,12 @@ static void on_slot_connected(const nlohmann::json& sd) {
     g_poll_fired.clear();
     g_scene_fired.clear();
     g_goal_sent = false;
+    g_saw_gameplay = false;
     g_applied_through = -1;
+    {   // the ReceivedItems replay below re-grants everything -> rebuild from scratch
+        std::lock_guard<std::mutex> lk(g_gear_mtx);
+        g_owned_gear.clear();
+    }
     reset_floor_prev();
     // Re-arm force-spawn from the connect point: discard any intro scene the
     // title/attract screen showed BEFORE the player connected, so a fresh F8
@@ -773,6 +901,10 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["sp_items"].items())
             g_sp_items[kv.key()] = kv.value().get<int>();
     g_sp_flag_idx = sd.value("sp_flag_idx", 0xD8);
+    g_item_tiers.clear();
+    if (sd.contains("item_tiers"))
+        for (auto& kv : sd["item_tiers"].items())
+            g_item_tiers[kv.key()] = kv.value().get<int>();
     g_prog_gear.clear();
     if (sd.contains("progressive_gear"))
         for (auto& kv : sd["progressive_gear"].items()) {
@@ -822,6 +954,7 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
         std::string from = g_ap->get_player_alias(it.player);
+        int tier = tier_or(name, it.flags);   // classification: 1 prog, 2 useful, 4 trap
         auto su = g_statue_item_idx.find(name);
         auto f = g_name_to_idx.find(name);
         auto sp = g_sp_items.find(name);
@@ -840,6 +973,7 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
                 if (idx >= 0 && idx < 0x200 &&
                     *(volatile int*)(kGFlagsAbs + idx * 4) < 1) {
                     ap_give(idx, 1);
+                    remember_gear(idx, tier);   // survive save/load wipes
                     granted = true;
                     break;
                 }
@@ -859,19 +993,22 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             // Cleria Ore: upgrade the weapon instead of granting the (dead) ore
             // item. The acquire box still shows "Cleria Ore" (box-relabel path).
             int n = g_cleria_count.fetch_add(1) + 1;  // 1..N ore now received
-            int tier = kWeaponTier[(n < 5 ? n : 5) - 1];
-            g_pending_weapon.store(tier);
-            mod_log("ap: Cleria Ore #%d -> weapon tier value %d (pending)", n, tier);
-        } else if (f != g_name_to_idx.end())
+            int wtier = kWeaponTier[(n < 5 ? n : 5) - 1];
+            g_pending_weapon.store(wtier);
+            mod_log("ap: Cleria Ore #%d -> weapon tier value %d (pending)", n, wtier);
+        } else if (apply_trap(name)) {
+            // Trap effect armed above; the red trap toast fires below like any item.
+        } else if (f != g_name_to_idx.end()) {
             ap_give(f->second, 1);
-        else
+            remember_gear(f->second, tier);   // survive save/load wipes
+        } else
             mod_log("ap: received '%s' (id %lld) — no g_flags index, skipped",
                     name.c_str(), (long long)it.item);
         // Your own items already print as "Found: X (yours)" when their location
         // fires (ap_on_check), so only surface items coming FROM another player
         // (or the server) here — avoids showing every self-item twice.
         if (!batch && from != g_slot)
-            overlay::push_item(from.empty() ? name : (name + "  <- " + from));
+            overlay::push_toast(name, from, tier, /*sent=*/false);
         g_applied_through = it.index;
     }
     if (batch) {
@@ -943,10 +1080,17 @@ static void poll_scene() {
         g_expected_hi = 0;   // New Game: forget the last run's deepest floor
     }
 
-    // Goal: entering the ending scene (goal_scene= in yso_ap.cfg, from a live
-    // capture — kill Darm once and read the scene number off the log) marks the
-    // slot as GOALed so the multiworld releases/completes properly.
-    if (g_goal_scene > 0 && scene == g_goal_scene && !g_goal_sent && g_ap) {
+    // Real gameplay reached (the intro's cutscene scenes are 2 / 7xxx, and play
+    // BEFORE any of these) -> the ending scene can now be trusted as an ending
+    // rather than a New-Game intro. Gates the goal check below.
+    if (scene >= 1000 && scene <= 6999) g_saw_gameplay = true;
+
+    // Goal: entering the ending scene (S_7002 by default, goal_scene= to override)
+    // marks the slot as GOALed so the multiworld releases/completes properly.
+    // g_saw_gameplay gates it so the shared 7xxx intro range can't complete a
+    // freshly-started slot (verified live: Darm -> scene 0 -> 7002 -> GOAL).
+    if (g_goal_scene > 0 && scene == g_goal_scene && g_saw_gameplay &&
+        !g_goal_sent && g_ap) {
         g_goal_sent = true;
         try {
             g_ap->StatusUpdate(APClient::ClientStatus::GOAL);
@@ -985,11 +1129,7 @@ static void poll_scene() {
         std::lock_guard<std::mutex> lk(g_check_mtx);
         g_checks.insert(g_checks.end(), fire.begin(), fire.end());
     }
-    for (int64_t loc : fire) {
-        std::lock_guard<std::mutex> lk(g_scout_mtx);
-        auto f = g_loc_found.find(loc);
-        if (f != g_loc_found.end()) overlay::push_item(f->second);
-    }
+    for (int64_t loc : fire) toast_loc(loc);
 }
 
 // Fire a batch of poll-detected locations: queue the LocationChecks and echo
@@ -1001,11 +1141,7 @@ static void fire_poll_locs(const std::vector<int64_t>& fire) {
         std::lock_guard<std::mutex> lk(g_check_mtx);
         g_checks.insert(g_checks.end(), fire.begin(), fire.end());
     }
-    for (int64_t loc : fire) {
-        std::lock_guard<std::mutex> lk(g_scout_mtx);
-        auto f = g_loc_found.find(loc);
-        if (f != g_loc_found.end()) overlay::push_item(f->second);
-    }
+    for (int64_t loc : fire) toast_loc(loc);
 }
 
 // Poll-method checks (each client tick): blessing bits, out-of-g_flags value
@@ -1301,7 +1437,8 @@ bool ap_shop_buy(int i) {
         mod_log("ap: shop — bit %d has no bless_idx_%d mapping; effect applies "
                 "after save+reload", it.bit, it.bit);
     }
-    overlay::push_item("Bought: " + it.name);
+    // No "Bought: X" toast -- the blessing check fires its own item toast, and
+    // two banners for one purchase reads as a bug.
     mod_log("ap: shop bought '%s' (bit %d, %d SP, arr idx %d)",
             it.name.c_str(), it.bit, it.cost, idx);
     return true;
@@ -1368,7 +1505,11 @@ static void exp_scaling_poll() {
 // thread (it calls the stat recompute FUN_00420C40 via kStatSet). Sets the
 // persistent record, the 4 weapon stat slots, then pushes the recomputed stat
 // block into the live player entity so the upgrade takes effect immediately.
-static void apply_weapon_level(int tier) {
+// Push a weapon tier into the game (record + 4 stat slots + live entity) WITHOUT
+// touching the tracked g_weapon_applied -- the Butterfingers trap uses this to
+// jam the weapon to Lv1 for a window, after which the enforcement restores the
+// real tier (since the record then reads below g_weapon_applied).
+static void set_weapon_game(int tier) {
     *(volatile int*)kWeaponLevelAbs = tier;     // persistent record / trade gate / menu
     kStatSet(0, tier);
     kStatSet(1, tier);
@@ -1382,8 +1523,11 @@ static void apply_weapon_level(int tier) {
         memcpy(ent + 0xC4, (const void*)(kStatBlock + 0x30), 8);
         *(int*)(ent + 0xCC) = *(const int*)(kStatBlock + 0x38);
     }
+}
+static void apply_weapon_level(int tier) {
+    set_weapon_game(tier);
     g_weapon_applied = tier;
-    mod_log("weapon: applied tier value %d (entity %s)", tier, ent ? "pushed" : "null");
+    mod_log("weapon: applied tier value %d", tier);
 }
 
 // Force-spawn the player at the random-start statue. MUST run on the main thread
@@ -1473,18 +1617,47 @@ extern "C" void exp_scaling_on_frame() {
                 *(volatile int*)(kGFlagsAbs + idx * 4) = 1;
     }
 
-    // Weapon upgrade (Cleria Ore). Re-enforce if a save load reset g_flags[0x94]
-    // below what we applied (the save reloads g_flags from the on-disk state).
+    // Traps that touch the player/scene run here (main thread), only in-game.
+    if (cur_scene > 0) {
+        if (g_trap_exp_leech.exchange(false)) {
+            // Drop a whole level (sets EXP to the lower level's threshold + rescales
+            // stats) rather than a flat EXP cut -- reads as "you lost a level".
+            int lv = read_level();
+            if (lv > 1) {
+                kSetLevel((unsigned)(lv - 1));
+                mod_log("trap: EXP Leech -> Lv %d", lv - 1);
+            }
+        }
+        if (g_trap_chaos_warp.exchange(false)) {
+            volatile unsigned char* reg = (volatile unsigned char*)kWarpRegAbs;
+            int cand[24], nc = 0;
+            for (int i = 0; i < 22; i++) if (reg[i]) cand[nc++] = i;
+            if (nc > 0) {
+                g_warp_idx = cand[GetTickCount() % (unsigned)nc];
+                do_warp_native();
+                reset_floor_prev();
+                mod_log("trap: Chaos Warp -> reg idx %d", g_warp_idx);
+            }
+        }
+    }
+
+    // Weapon upgrade (Cleria Ore) + the Butterfingers trap. Re-enforce if a save
+    // load reset g_flags[0x94] below what we applied.
     int wv = g_pending_weapon.exchange(0);
     if (wv > g_weapon_applied) g_weapon_applied = wv;
-    // Re-apply when: a new tier arrived (wv), the persistent record dropped (save
-    // load), OR the player ENTITY changed (death/respawn or a scene reload spawns
-    // a fresh entity whose combat weapon stats default to Lv1 even though the
-    // record still reads Lv5). The last case is what makes post-respawn deal 1 dmg.
     char* cur_ent = *kPlayerEntPtr;
     bool ent_changed = (cur_ent != nullptr && cur_ent != g_weapon_entity);
-    if (g_weapon_applied > 0 &&
+    if (GetTickCount() < g_butter_until.load()) {
+        // Butterfingers: jam the weapon to Lv1 for the window WITHOUT touching
+        // g_weapon_applied, so the real tier restores when the window ends.
+        if (*(volatile int*)kWeaponLevelAbs != 0 || ent_changed) {
+            set_weapon_game(0);
+            g_weapon_entity = cur_ent;
+        }
+    } else if (g_weapon_applied > 0 &&
         (wv > 0 || ent_changed || *(volatile int*)kWeaponLevelAbs < g_weapon_applied)) {
+        // Re-apply on: new tier, save-load reset, or entity change (respawn spawns
+        // a fresh entity whose combat weapon defaults to Lv1 -> deals 1 dmg).
         apply_weapon_level(g_weapon_applied);
         g_weapon_entity = *kPlayerEntPtr;
     }
@@ -1525,6 +1698,7 @@ static void poll_loop() {
             poll_value_checks();
             poll_deathlink();
             poll_statue_warp();
+            reconcile_gear();   // re-assert granted gear a save/load reset
             exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;

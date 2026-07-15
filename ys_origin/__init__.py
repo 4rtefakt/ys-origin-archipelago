@@ -128,8 +128,14 @@ class YsOriginWorld(World):
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
             pool += [self.create_item(n) for n in dt.statue_unlock_items()]
-        for _ in range(n_locations - len(pool)):
-            pool.append(self.create_item(self.get_filler_item_name()))
+        # Fill the remaining slots: the first `trap_count` become random traps
+        # (they displace filler), the rest varied filler.
+        n_fill = n_locations - len(pool)
+        n_traps = min(int(self.options.trap_count.value), max(0, n_fill))
+        for i in range(n_fill):
+            name = (self.random.choice(dt.TRAP_POOL) if i < n_traps
+                    else self.get_filler_item_name())
+            pool.append(self.create_item(name))
 
         self.multiworld.itempool += pool
 
@@ -247,6 +253,9 @@ class YsOriginWorld(World):
             # needs the explicit map rather than a g_flags item index.
             "sp_items": dict(dt.SP_FILLER),
             "sp_flag_idx": dt.SP_FLAG_IDX,
+            # item name -> tier int (1/2/4/0), for the overlay toast color when a
+            # received item carries no classification flags (cheat /send etc.).
+            "item_tiers": dt.item_tiers(),
             # Progressive gear: item name -> the selected character's tier ladder
             # as g_flags indices; receiving one grants the first unowned tier.
             "progressive_gear": (

@@ -81,6 +81,15 @@ FILLER_POOL: List[str] = [
     "SP: 50", "SP: 150", "SP: 500",
 ]
 
+# Trap items — shuffled into the pool via the `trap_count` option (they displace
+# that many filler). The mod applies the effect on receipt, keyed by NAME, so
+# these strings must match the mod's dispatch (hook_ap.cpp apply_trap):
+#   EXP Leech    - drops a chunk of your EXP
+#   Chaos Warp   - yanks you to a random unlocked statue
+#   Butterfingers- weapon reverts to Lv1 for a few seconds
+#   Blinding Fog - the screen hazes over briefly
+TRAP_POOL: List[str] = ["EXP Leech", "Chaos Warp", "Butterfingers", "Blinding Fog"]
+
 # SP filler grants: item name -> amount added to the SP currency (g_flags[0xD8],
 # the cell the blessing/upgrade GROWnn.XSO scripts deduct from). Published in
 # slot_data so the mod/client can apply them (they're stat writes, not items).
@@ -254,6 +263,8 @@ _item_class: Dict[str, str] = {}
 for _l in _LOCS:
     for _it in _l["items"]:
         _item_class[_it["name"]] = _it["class"]
+for _t in TRAP_POOL:
+    _item_class[_t] = "trap"
 
 
 def char_name(opts_or_value) -> str:
@@ -335,25 +346,75 @@ def _progressive_name_for(item: str, char: str) -> Optional[str]:
     return None
 
 
+# Tower floor for each goddess-statue scene whose location data carries NO floor
+# label (save-point rooms tagged only by zone). Random spawn can drop you at any
+# of these, so every one needs a floor -> the catch-up level-floor has a target.
+# EXACT floors, extracted from the game's own scene->floor logic (the map-index
+# -> floor-id switch @0x574970 in yso_win.exe v1.1.1.0; each statue's map matched
+# by its warp path and live-verified). Replaces the old zone-range guesses, which
+# were off by up to 3 floors (e.g. S_2012 is the 9F Arthropod-Chamber save, not 7F).
+STATUE_FLOOR: Dict[int, int] = {
+    2013: 7, 2100: 8, 2012: 9,                 # Flooded Prison (S_2012 = 9F Arthropod Chamber)
+    3000: 10, 3006: 11, 3015: 12, 3014: 13,    # Flames of Guilt
+    4000: 14, 4020: 17, 4104: 18,              # Silent Sands (S_4104 Rado's Annex = 18F in-game)
+    5000: 18, 5010: 20, 5014: 21,              # Corrupted Blood
+}
+
+
+# Top (boss-approach) floor of each zone. Rooms with no floor label — boss rooms,
+# corridors, vaults, save points near the zone end — fall back to this so the
+# catch-up level-floor always has a target (a random spawn can roam the whole
+# zone, and these unlabeled rooms cluster at the tough top end). The level-floor
+# only ever RAISES, so an on-level normal climber is barely affected.
+ZONE_TOP_FLOOR: Dict[str, int] = {
+    "Wailing Blue": 5, "Flooded Prison": 9, "Flames of Guilt": 13,
+    "Silent Sands": 17, "Corrupted Blood": 21, "Demonic Core": 25,
+}
+
+
+def scene_floor(scene_leaf: int) -> Optional[int]:
+    """Tower floor number for a scene leaf, from the parsed floor label, the
+    STATUE_FLOOR fallback, or the zone-top fallback; None if zone unknown."""
+    sc = f"S_{scene_leaf}"
+    fl = SCENE_FLOOR.get(sc)
+    m = re.match(r"\s*(\d+)\s*[Ff]", str(fl)) if fl else None
+    if m:
+        return int(m.group(1))
+    if scene_leaf in STATUE_FLOOR:
+        return STATUE_FLOOR[scene_leaf]
+    return ZONE_TOP_FLOOR.get(SCENE_ZONE.get(sc, ""))
+
+
 # Goddess-statue warp unlocks (optional, statue_warp_locks). One item per statue;
 # receiving it lets the mod enable warping to that statue. Bonus/useful (not
 # progression) -> they never change reachability (everything stays reachable on
 # foot), so seeds are beatable regardless of where they land.
+# Named by floor for readability ("18F Warp"); Rado's Annex (S_4104) shares 18F
+# with the Layer 5 save, so it keeps its own name ("Rado Tower Warp") to avoid a
+# collision. If any other floor ever gets two statues, the second is tagged with
+# its room so item names stay unique.
 STATUE_UNLOCKS: Dict[str, dict] = {}
 for _l in _LOCS:
     if _l["type"] != "statue":
         continue
     _m = re.match(r"(S_\d+)", _l.get("id", ""))
     _sc = _m.group(1) if _m else ""
-    _nm = f"Statue Warp: {_l['room']} ({_sc})"
+    _scene = int(_sc[2:]) if _sc else 0
+    if "rado" in _l.get("room", "").lower():
+        _nm = "Rado Tower Warp"
+    else:
+        _fl = scene_floor(_scene)
+        _nm = f"{_fl}F Warp" if _fl else f"{_sc} Warp"
+    if _nm in STATUE_UNLOCKS:                         # same-floor collision guard
+        _nm = f"{_nm} ({_l['room']})"
     STATUE_UNLOCKS[_nm] = {
-        "scene": int(_sc[2:]) if _sc else 0,         # scene leaf number (g_flags[0x1F9])
+        "scene": _scene,                             # scene leaf number (g_flags[0x1F9])
         "flag": _l["detect"].get("offset", ""),      # the statue's activation flag
         "location": _l["name"],
     }
 
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
-    | set(FILLER_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
+    | set(FILLER_POOL) | set(TRAP_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
     | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS}
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
@@ -416,43 +477,8 @@ FLOOR_LEVELS: Dict[int, int] = {
 }
 
 
-# Tower floor for each goddess-statue scene whose location data carries NO floor
-# label (save-point rooms tagged only by zone). Random spawn can drop you at any
-# of these, so every one needs a floor -> the catch-up level-floor has a target.
-# EXACT floors, extracted from the game's own scene->floor logic (the map-index
-# -> floor-id switch @0x574970 in yso_win.exe v1.1.1.0; each statue's map matched
-# by its warp path and live-verified). Replaces the old zone-range guesses, which
-# were off by up to 3 floors (e.g. S_2012 is the 9F Arthropod-Chamber save, not 7F).
-STATUE_FLOOR: Dict[int, int] = {
-    2013: 7, 2100: 8, 2012: 9,                 # Flooded Prison (S_2012 = 9F Arthropod Chamber)
-    3000: 10, 3006: 11, 3015: 12, 3014: 13,    # Flames of Guilt
-    4000: 14, 4020: 17, 4104: 18,              # Silent Sands (S_4104 Rado's Annex = 18F in-game)
-    5000: 18, 5010: 20, 5014: 21,              # Corrupted Blood
-}
-
-
-# Top (boss-approach) floor of each zone. Rooms with no floor label — boss rooms,
-# corridors, vaults, save points near the zone end — fall back to this so the
-# catch-up level-floor always has a target (a random spawn can roam the whole
-# zone, and these unlabeled rooms cluster at the tough top end). The level-floor
-# only ever RAISES, so an on-level normal climber is barely affected.
-ZONE_TOP_FLOOR: Dict[str, int] = {
-    "Wailing Blue": 5, "Flooded Prison": 9, "Flames of Guilt": 13,
-    "Silent Sands": 17, "Corrupted Blood": 21, "Demonic Core": 25,
-}
-
-
-def scene_floor(scene_leaf: int) -> Optional[int]:
-    """Tower floor number for a scene leaf, from the parsed floor label, the
-    STATUE_FLOOR fallback, or the zone-top fallback; None if zone unknown."""
-    sc = f"S_{scene_leaf}"
-    fl = SCENE_FLOOR.get(sc)
-    m = re.match(r"\s*(\d+)\s*[Ff]", str(fl)) if fl else None
-    if m:
-        return int(m.group(1))
-    if scene_leaf in STATUE_FLOOR:
-        return STATUE_FLOOR[scene_leaf]
-    return ZONE_TOP_FLOOR.get(SCENE_ZONE.get(sc, ""))
+# STATUE_FLOOR, ZONE_TOP_FLOOR, and scene_floor() are defined above the
+# STATUE_UNLOCKS block (moved up so the statue-warp item names can use the floor).
 
 
 def floor_weapon_value(floor: int) -> int:
@@ -579,6 +605,14 @@ def item_classification(name: str) -> str:
     if name in STATUE_UNLOCKS or name in (PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS):
         return "useful"
     return _item_class.get(name, "filler")
+
+
+# item name -> AP classification int (1 prog, 2 useful, 4 trap, 0 filler), for
+# the overlay toast color when a received item carries no flags (e.g. cheat
+# /send, or any server that omits them). Published in slot_data.
+_CLASS_INT = {"filler": 0, "progression": 1, "useful": 2, "trap": 4}
+def item_tiers() -> Dict[str, int]:
+    return {nm: _CLASS_INT.get(item_classification(nm), 0) for nm in item_name_to_id}
 
 
 # -- per-world selection helpers -------------------------------------------- #

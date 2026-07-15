@@ -20,6 +20,7 @@
 // floor -> (found, total) checks + list of all check-floors (hook_ap.cpp).
 extern "C" bool ap_floor_count(int floor, int* found, int* total);
 extern "C" int ap_floors_with_checks(int* out, int cap);
+extern "C" int ap_current_scene();   // decimal scene leaf, changes on transition
 
 namespace apwarpmap {
 
@@ -103,9 +104,18 @@ static void draw_col(ImDrawList* dl, ImFont* font, ImVec2 disp, ImU32 col,
     }
 }
 
+// The map-open cell (0x738B40) stays at 3 after a warp until the menu is
+// reopened, so gating on it alone leaves the overlay stuck on the destination
+// floor. We capture the scene when the map opens; if the scene changes while the
+// cell is still 3, a warp fired -> treat the map as closed until the cell resets.
+static int g_open_scene = -1;
+
 void draw() {
     if (!g_cfg_loaded) load_cfg();
-    if (*(volatile int*)kMapOpenAbs != 3) return;   // warp map not open
+    if (*(volatile int*)kMapOpenAbs != 3) { g_open_scene = -1; return; }  // closed
+    int scene = ap_current_scene();
+    if (g_open_scene == -1) g_open_scene = scene;   // captured on open
+    else if (scene != g_open_scene) return;         // warped -> stale flag, hide
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = ImGui::GetFont();
     ImVec2 disp = ImGui::GetIO().DisplaySize;

@@ -298,6 +298,18 @@ class ExpMultiplierMax(Range):
     visibility = 0  # hidden from templates/webhost — legacy compatibility only
 
 
+class TrapCount(Range):
+    """How many filler slots to replace with TRAP items, shuffled into the
+    multiworld — you'll send them to other players and receive them yourself.
+    Traps: **EXP Leech** (drops a chunk of your EXP), **Chaos Warp** (yanks you to
+    a random unlocked statue), **Butterfingers** (weapon reverts to Lv1 for a few
+    seconds), **Blinding Fog** (screen hazes over briefly). 0 = no traps."""
+    display_name = "Trap count"
+    range_start = 0
+    range_end = 50
+    default = 6
+
+
 @dataclass
 class YsOriginOptions(PerGameCommonOptions):
     character: Character
@@ -327,4 +339,5 @@ class YsOriginOptions(PerGameCommonOptions):
     blessing_cost_max: BlessingCostMax
     blessing_shop_unlock: BlessingShopUnlock
     weapon_requirements: WeaponRequirements
+    trap_count: TrapCount
     death_link: DeathLink
