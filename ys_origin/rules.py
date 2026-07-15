@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from rule_builder.rules import And, CanReachRegion, Has, HasAny
+from rule_builder.rules import And, CanReachRegion, Has, HasAny, True_
 
 from .data_tables import (
     CLERIA_ORE,
@@ -36,6 +36,20 @@ if TYPE_CHECKING:
     from . import YsOriginWorld
 
 
+def _all_of(terms: list):
+    """AND the terms, or a free edge if there are none.
+
+    Deliberately does NOT lean on ``And()``'s empty behaviour: that flipped from
+    False_() to True_() in June 2026, i.e. AFTER the 0.6.7 release this world
+    supports. On 0.6.7 an empty And() is False_(), which would silently make a
+    "no requirements" edge impassable and the seed unbeatable. Being explicit is
+    correct on every version.
+    """
+    if not terms:
+        return True_()
+    return And(*terms)
+
+
 def _req_rule(req: list):
     """Room-logic requirement expr -> Rule Builder rule.
 
@@ -44,16 +58,13 @@ def _req_rule(req: list):
     fail-closed behaviour on unknown item names: ``Has`` reads the prog_items
     counter, so a name that is not a real item is simply never satisfied.
     """
-    terms = [HasAny(*t) if isinstance(t, (list, tuple)) else Has(t) for t in req]
-    return And(*terms)
+    return _all_of(
+        [HasAny(*t) if isinstance(t, (list, tuple)) else Has(t) for t in req]
+    )
 
 
 def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
-    """(item AND ore-count AND reach-anchor), skipping the parts that don't apply.
-
-    An empty And() resolves to True_() (a free edge), which is what "no
-    requirements" means here.
-    """
+    """(item AND ore-count AND reach-anchor), skipping the parts that don't apply."""
     terms = []
     if item is not None:
         terms.append(Has(item))
@@ -64,7 +75,7 @@ def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
         # so the warp edge is re-evaluated when the anchor floor becomes
         # reachable mid-sweep. No manual register_indirect_condition needed.
         terms.append(CanReachRegion(anchor))
-    return And(*terms)
+    return _all_of(terms)
 
 
 def set_rules(world: "YsOriginWorld") -> None:
