@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from Options import (
-    Choice, DeathLink, DefaultOnToggle, OptionList, PerGameCommonOptions, Range,
-    Toggle,
+    Choice, DeathLink, DefaultOnToggle, OptionDict, OptionList,
+    PerGameCommonOptions, Range, Toggle,
 )
 
 
@@ -298,6 +298,32 @@ class ExpMultiplierMax(Range):
     visibility = 0  # hidden from templates/webhost — legacy compatibility only
 
 
+class ItemClassificationOverrides(OptionDict):
+    """Retune how individual items are classified for THIS seed (advanced).
+
+    Map item names to a tier — ``filler``, ``useful``, ``progression`` or
+    ``trap`` — to override the apworld's built-in classification. The tier
+    controls how the fill algorithm treats the item: only ``progression`` items
+    are guaranteed to land somewhere reachable, ``useful`` are placed with mild
+    priority, ``filler`` anywhere. Empty (the default) = use the built-in tiers.
+
+    Applied LAST, so it wins over every default (including the automatic
+    Cleria-Ore / statue-warp promotions). Unknown item names and invalid tiers
+    are ignored with a log warning — a typo never aborts generation.
+
+    Use it to stop *minor* progression items from eating your priority
+    locations, e.g. ``{"Mask of Eyes": useful}``. You may also DOWNGRADE a
+    default-progression item to ``filler`` when you know a skip makes it
+    non-essential — that's allowed on purpose. Caveat: if you demote an item the
+    logic actually requires, generation fails loudly (a broken seed is never
+    produced), so only downgrade items you're sure are skippable.
+
+    The current default tiers are listed in the yaml template comment; anything
+    not listed there is ``filler``."""
+    display_name = "Item classification overrides"
+    default = {}
+
+
 class TrapCount(Range):
     """How many filler slots to replace with TRAP items, shuffled into the
     multiworld — you'll send them to other players and receive them yourself.
@@ -339,5 +365,6 @@ class YsOriginOptions(PerGameCommonOptions):
     blessing_cost_max: BlessingCostMax
     blessing_shop_unlock: BlessingShopUnlock
     weapon_requirements: WeaponRequirements
+    item_classification_overrides: ItemClassificationOverrides
     trap_count: TrapCount
     death_link: DeathLink

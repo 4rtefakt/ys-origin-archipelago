@@ -11,6 +11,7 @@ grantable-item names are kept identical to the client's ``LOCATION_FLAG_OFFSETS`
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from BaseClasses import (
@@ -35,6 +36,14 @@ _KIND_TO_AP = {
     ItemKind.PROGRESSION: ItemClassification.progression,
     ItemKind.USEFUL: ItemClassification.useful,
     ItemKind.TRAP: ItemClassification.trap,
+}
+
+# player-supplied classification tier (str) -> AP enum, for the yaml override.
+_STR_TO_AP = {
+    "filler": ItemClassification.filler,
+    "useful": ItemClassification.useful,
+    "progression": ItemClassification.progression,
+    "trap": ItemClassification.trap,
 }
 
 
@@ -94,6 +103,18 @@ class YsOriginWorld(World):
         else:
             self.start_statue_scene = 0             # locks off: no forced start
 
+        # Player-supplied per-item classification overrides (advanced). Parsed
+        # once here (invalid entries dropped + logged) and applied LAST in
+        # create_item so they win over every built-in default.
+        self.class_overrides = {
+            nm: _STR_TO_AP[t] for nm, t in dt.parse_class_overrides(
+                o.item_classification_overrides.value,
+                warn=lambda m: logging.warning(
+                    "Ys Origin (%s): item_classification_overrides: %s",
+                    self.multiworld.get_player_name(self.player), m),
+            ).items()
+        }
+
     # -- items --------------------------------------------------------------- #
 
     def create_item(self, name: str) -> YsOriginItem:
@@ -107,6 +128,11 @@ class YsOriginWorld(World):
         # (it's merely "useful" convenience in normal, on-foot seeds).
         elif getattr(self, "open_mode", False) and name in dt.STATUE_UNLOCKS:
             cls = ItemClassification.progression
+        # Player override wins over every default above (incl. the promotions):
+        # they may retune minor progression down or bump filler up for their seed.
+        override = getattr(self, "class_overrides", {}).get(name)
+        if override is not None:
+            cls = override
         return YsOriginItem(name, cls, self.item_name_to_id[name], self.player)
 
     def get_filler_item_name(self) -> str:

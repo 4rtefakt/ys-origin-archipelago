@@ -607,6 +607,44 @@ def item_classification(name: str) -> str:
     return _item_class.get(name, "filler")
 
 
+# The four AP classifications a player may assign via
+# ``item_classification_overrides`` (see options.py / __init__.create_item).
+VALID_TIERS: Tuple[str, ...] = ("filler", "useful", "progression", "trap")
+
+
+def parse_class_overrides(raw, warn=None) -> Dict[str, str]:
+    """Validate a raw ``{item name: tier}`` override map from a player's yaml.
+
+    Returns ``{name: canonical_tier}`` keeping only entries that name a real item
+    and a valid tier (``filler``/``useful``/``progression``/``trap``, case- and
+    whitespace-insensitive). Bad entries are dropped — never fatal — and reported
+    through ``warn(msg)`` if given, so a typo degrades gracefully instead of
+    aborting generation (matches how ``starting_items`` ignores unknown names).
+
+    This is intentionally permissive about *downgrading*: a player may mark a
+    default-progression item as ``filler``/``useful`` when they know a skip makes
+    it non-essential. That is their call; if the item is in fact required by the
+    logic, fill fails loudly (a broken seed is never produced). The caller applies
+    the result as the LAST word over the built-in defaults."""
+    out: Dict[str, str] = {}
+    if not raw:
+        return out
+    items = raw.items() if isinstance(raw, dict) else raw
+    for name, tier in items:
+        if name not in item_name_to_id:
+            if warn:
+                warn(f"unknown item {name!r} ignored")
+            continue
+        t = str(tier).strip().lower()
+        if t not in VALID_TIERS:
+            if warn:
+                warn(f"invalid tier {tier!r} for {name!r} "
+                     f"(use one of {', '.join(VALID_TIERS)})")
+            continue
+        out[name] = t
+    return out
+
+
 # item name -> AP classification int (1 prog, 2 useful, 4 trap, 0 filler), for
 # the overlay toast color when a received item carries no flags (e.g. cheat
 # /send, or any server that omits them). Published in slot_data.

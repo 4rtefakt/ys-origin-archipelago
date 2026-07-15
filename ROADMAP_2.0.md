@@ -27,7 +27,7 @@ things that are both wanted and tractable.
 
 | # | Request | Source | Bucket | 2.0? |
 |---|---|---|---|---|
-| 1 | User-editable **item classifications** (move to a file / yaml override) | M. | 🟢 DOABLE | **Yes** — already promised |
+| 1 | User-editable **item classifications** (move to a file / yaml override) | M. | ✅ DONE | **Shipped on this branch** |
 | 2 | **Goal reporting for Yunica/Hugo** (Dalles ending scene) | Known issue | 🟠 NEEDS RE | **Yes** — stability blocker |
 | 3 | **Permanent stat-bonus items** (XP/STR/DEF pool items) | Release "doesn't work yet" | 🔵 KNOWN | **Yes** — offsets exist |
 | 4 | **Enemy stat / difficulty scaling** (TTTD-style) | HothRaka | 🟠 NEEDS RE | Stretch |
@@ -45,7 +45,20 @@ things that are both wanted and tractable.
 
 ## The details
 
-### 1. 🟢 User-editable item classifications — *promised, do it first*
+### 1. ✅ User-editable item classifications — *shipped on this branch*
+
+> **Implemented.** New `item_classification_overrides` option (an `OptionDict`,
+> name → `filler`/`useful`/`progression`/`trap`). Parsed once in
+> `generate_early` (invalid names/tiers dropped + logged, never fatal) and
+> applied as the **last** word in `create_item`, so it overrides every default
+> including the Cleria-Ore / statue-warp promotions — a player may even downgrade
+> a default-progression item when they know a skip makes it non-essential (fill
+> then fails loudly rather than producing a broken seed). The default tiers are
+> written out as a readable reference in the `Ys-Origin.yaml` comment (that's the
+> "hard to parse" fix M. asked for). Covered by `tests/test_item_curation.py`.
+
+Original analysis follows.
+
 
 > *"is there any chance of moving the item classifications to the items file? i
 > like to mess around with those so the less important progression items don't

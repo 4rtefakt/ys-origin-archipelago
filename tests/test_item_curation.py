@@ -123,6 +123,39 @@ def test_vanilla_items_progressive_substitution():
                 if n not in (dt.PROGRESSIVE_ARMOR, dt.PROGRESSIVE_BOOTS)]
 
 
+def test_class_overrides_valid_entries_kept():
+    real = next(iter(dt.item_name_to_id))
+    out = dt.parse_class_overrides({real: "useful", dt.GOAL_ITEM: "filler"})
+    # a real item -> valid tier is kept, canonicalised to lowercase
+    assert out[real] == "useful"
+    # DOWNGRADING the goal item is allowed on purpose (player's call / skips)
+    assert out[dt.GOAL_ITEM] == "filler"
+
+
+def test_class_overrides_case_and_whitespace_insensitive():
+    real = next(iter(dt.item_name_to_id))
+    out = dt.parse_class_overrides({real: "  PROGRESSION  "})
+    assert out[real] == "progression"
+
+
+def test_class_overrides_drop_unknown_and_invalid():
+    warnings = []
+    raw = {
+        "Definitely Not An Item": "useful",   # unknown name -> dropped
+        dt.GOAL_ITEM: "legendary",            # invalid tier -> dropped
+    }
+    out = dt.parse_class_overrides(raw, warn=warnings.append)
+    assert out == {}, out
+    assert len(warnings) == 2, warnings  # both reported, neither fatal
+
+
+def test_class_overrides_empty_and_none():
+    assert dt.parse_class_overrides(None) == {}
+    assert dt.parse_class_overrides({}) == {}
+    # every accepted tier is one AP knows how to map
+    assert set(dt.VALID_TIERS) == {"filler", "useful", "progression", "trap"}
+
+
 def test_cleaned_chests_seed_filler():
     # the chests whose only content was a hex placeholder / gold now have no
     # vanilla item -> the pool pads them with filler instead.
