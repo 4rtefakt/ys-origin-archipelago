@@ -77,9 +77,15 @@ def _suppress_enabled() -> bool:
 
 def _load_archipelago():
     try:
-        from CommonClient import CommonContext, server_loop, gui_enabled  # type: ignore
+        from CommonClient import CommonContext, server_loop  # type: ignore
         from NetUtils import ClientStatus  # type: ignore
         import Utils  # type: ignore
+        # gui_enabled moved CommonClient -> Utils (AP announcement 2026-02-15).
+        # CommonClient still re-exports it, but that may be removed; prefer Utils
+        # and fall back so older Archipelago checkouts keep working.
+        gui_enabled = getattr(Utils, "gui_enabled", None)
+        if gui_enabled is None:
+            from CommonClient import gui_enabled  # type: ignore
         return CommonContext, server_loop, gui_enabled, ClientStatus, Utils
     except ImportError as e:  # pragma: no cover - depends on external tree
         raise SystemExit(
