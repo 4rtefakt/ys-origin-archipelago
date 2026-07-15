@@ -19,8 +19,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PKG = REPO / "ys_origin"
 
-WORLD_VERSION = "1.8.1"
-MIN_AP_VERSION = "0.6.0"
+WORLD_VERSION = "1.9.0"
+MIN_AP_VERSION = "0.6.8"  # Rule Builder (verified present in 0.6.8)
 
 MANIFEST = {
     # container-format version this file targets (AP 0.6.x uses 7)

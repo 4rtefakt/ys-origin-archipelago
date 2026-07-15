@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from rule_builder.rules import And, CanReachRegion, Has, HasAny
+
 from .data_tables import (
     CLERIA_ORE,
     CONNECTIONS,
@@ -26,13 +28,43 @@ from .data_tables import (
     edge_requirements,
     interzone_climb_rules,
     open_scene_edge_requirements,
-    req_satisfied,
     warp_edge_rules,
     zone_ore_requirements,
 )
 
 if TYPE_CHECKING:
     from . import YsOriginWorld
+
+
+def _req_rule(req: list):
+    """Room-logic requirement expr -> Rule Builder rule.
+
+    ``req`` is a list of terms ANDed together; a term that is itself a list is an
+    OR-group. Mirrors the old ``req_satisfied`` evaluator exactly, including its
+    fail-closed behaviour on unknown item names: ``Has`` reads the prog_items
+    counter, so a name that is not a real item is simply never satisfied.
+    """
+    terms = [HasAny(*t) if isinstance(t, (list, tuple)) else Has(t) for t in req]
+    return And(*terms)
+
+
+def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
+    """(item AND ore-count AND reach-anchor), skipping the parts that don't apply.
+
+    An empty And() resolves to True_() (a free edge), which is what "no
+    requirements" means here.
+    """
+    terms = []
+    if item is not None:
+        terms.append(Has(item))
+    if ore_n:
+        terms.append(Has(CLERIA_ORE, ore_n))
+    if anchor is not None:
+        # Rule Builder registers the indirect condition for this region itself,
+        # so the warp edge is re-evaluated when the anchor floor becomes
+        # reachable mid-sweep. No manual register_indirect_condition needed.
+        terms.append(CanReachRegion(anchor))
+    return And(*terms)
 
 
 def set_rules(world: "YsOriginWorld") -> None:
@@ -59,12 +91,7 @@ def _set_rules_forward(world: "YsOriginWorld") -> None:
         if not srcs:
             continue
         entrance = mw.get_entrance(f"{srcs[0]} -> {zone}", player)
-        medallion = gates.get(zone)
-        ore = ore_req.get(zone, 0)
-        entrance.access_rule = lambda state, i=medallion, n=ore: (
-            (i is None or state.has(i, player))
-            and (n == 0 or state.has(CLERIA_ORE, player, n))
-        )
+        world.set_rule(entrance, _gate_rule(gates.get(zone), ore_req.get(zone, 0)))
 
     # Fine: per-edge room-logic requirements (items/skills), transformed for the
     # selected character (substitute/relax items they can't receive — e.g. Toal
@@ -77,7 +104,7 @@ def _set_rules_forward(world: "YsOriginWorld") -> None:
         if not creq:
             continue  # fully relaxed for this character -> free edge
         entrance = mw.get_entrance(f"{src} -> {dst}", player)
-        entrance.access_rule = lambda state, r=creq: req_satisfied(r, state, player)
+        world.set_rule(entrance, _req_rule(creq))
 
 
 def _set_rules_open(world: "YsOriginWorld") -> None:
@@ -97,17 +124,7 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
         if item is None and ore_n == 0 and anchor is None:
             return                          # free edge
         entrance = mw.get_entrance(f"{src} -> {dst}", player)
-        entrance.access_rule = lambda state, i=item, n=ore_n, a=anchor: (
-            (i is None or state.has(i, player))
-            and (n == 0 or state.has(CLERIA_ORE, player, n))
-            and (a is None or state.can_reach(a, "Region", player))
-        )
-        # An entrance rule that depends on region reachability MUST register the
-        # anchor region as an indirect condition, or AP's sweep won't re-evaluate
-        # this warp edge when the anchor floor later becomes reachable within the
-        # same pass -> stale false-negatives -> nondeterministic fill failures.
-        if anchor is not None:
-            mw.register_indirect_condition(mw.get_region(anchor, player), entrance)
+        world.set_rule(entrance, _gate_rule(item, ore_n, anchor))
 
     # Per-scene room logic (bidirectional graph), character-transformed.
     for (src, dst), req in open_scene_edge_requirements().items():
@@ -115,7 +132,7 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
         if not creq:
             continue
         entrance = mw.get_entrance(f"{src} -> {dst}", player)
-        entrance.access_rule = lambda state, r=creq: req_satisfied(r, state, player)
+        world.set_rule(entrance, _req_rule(creq))
 
     # Inter-zone climbs: next zone's medallion + that zone's Cleria-Ore count.
     for (src, dst), (med, ore_n) in interzone_climb_rules(weapon_on).items():
@@ -132,7 +149,4 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
 
 
 def set_completion_condition(world: "YsOriginWorld") -> None:
-    player = world.player
-    world.multiworld.completion_condition[player] = (
-        lambda state: state.has(GOAL_ITEM, player)
-    )
+    world.set_completion_rule(Has(GOAL_ITEM))
