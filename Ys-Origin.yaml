@@ -48,7 +48,7 @@ Ys Origin:
                            #   warps you there geared for the floor (level +
                            #   weapon). Beatable from any spawn. Normal seeds
                            #   are unaffected.
-  max_starting_floor: 10   # cap the random-start spawn to statues on floor <= this
+  max_starting_floor: 5    # cap the random-start spawn to statues on floor <= this
                            #   (1-25). Keeps New Game off the brutal deep floors (a
                            #   25F start with no gear behind you); lower = gentler
                            #   openings, raise for more variety. random_start only.
@@ -73,17 +73,17 @@ Ys Origin:
                            #   Ore / floor-appropriate gear; this only sets the floor.
 
   # --- catch-up level scaling (so warping far ahead isn't a grind wall) ---
-  level_scaling: both    # off | level_floor | exp_multiplier | both
+  level_scaling: exp_multiplier # off | level_floor | exp_multiplier | both
                          #   level_floor    = entering a floor far above your
                          #                    level bumps you up to (floor - margin)
-                         #   exp_multiplier = boosted EXP (base everywhere,
-                         #                    catch-up while behind — see below)
-                         #   both (default) = bump most of the way, EXP boost the rest
+                         #   exp_multiplier = (default) boosted EXP only — you level
+                         #                    up by playing, no instant bump
+                         #   both           = bump most of the way, EXP boost the rest
   level_margin: 0        # levels under a floor's expected level the bump leaves you
                          #   (0 = right at the expected level; raise for challenge)
-  exp_multiplier_base: 3 # flat EXP multiplier everywhere (rando runs zig-zag the
+  exp_multiplier_base: 20 # flat EXP multiplier everywhere (rando runs zig-zag the
                          #   tower, so everyone levels faster than vanilla). 1 = off.
-  exp_multiplier_catchup: 5 # EXP multiplier while your level <= the deepest floor
+  exp_multiplier_catchup: 20 # EXP multiplier while your level <= the deepest floor
                             #   you've visited's expected level + the margin below —
                             #   falling behind your progress levels you back fast,
                             #   fighting anywhere you like.
@@ -104,6 +104,12 @@ Ys Origin:
                             #   your weapon on pickup. Pairs with level_scaling.
 
   # --- multiworld extras ---
+  trap_count: 6          # how many filler slots become TRAP items, shuffled into
+                         #   the multiworld (you send them to others and receive
+                         #   them yourself). EXP Leech (costs you a level), Chaos
+                         #   Warp (yanks you to a random unlocked statue),
+                         #   Butterfingers (weapon drops to Lv1 for a few seconds),
+                         #   Blinding Fog (screen hazes over for 30s). 0 = no traps.
   death_link: false      # when on, you die when any other DeathLink player dies
 
   # --- standard Archipelago knobs (leave as-is if unsure) ---
