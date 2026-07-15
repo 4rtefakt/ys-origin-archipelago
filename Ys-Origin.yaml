@@ -112,6 +112,38 @@ Ys Origin:
                          #   Blinding Fog (screen hazes over for 30s). 0 = no traps.
   death_link: false      # when on, you die when any other DeathLink player dies
 
+  # --- item classification overrides (ADVANCED, optional) ------------------- #
+  # Retune how individual items are classified for YOUR seed. Map an item name to
+  # a tier: progression | useful | filler | trap. It's applied LAST, so it wins
+  # over the built-in defaults (including the automatic Cleria-Ore / statue-warp
+  # promotions). Unknown names / bad tiers are ignored with a log warning.
+  #
+  # Why: stop MINOR progression items from eating your priority locations, or —
+  # if you know a skip makes an item non-essential — DOWNGRADE it to filler.
+  # Caveat: only progression items are guaranteed reachable by the fill. If you
+  # demote something the logic actually requires, generation fails loudly (you
+  # never get a broken seed), so only downgrade items you're sure are skippable.
+  #
+  # Leave empty ({}) to use the defaults below. To use, uncomment and edit:
+  # item_classification_overrides:
+  #   Mask of Eyes: useful       # minor key item -> stop it hogging a good spot
+  #   Silver Bracelet: filler    # only if you KNOW its gate is skippable
+  #
+  # ---- DEFAULT TIERS (anything not listed here is `filler`) ----
+  # progression (27): Amber Key, Arthropod Medallion, Beast Medallion, Black Pearl,
+  #   Blue Moon Crest, Blue Necklace, Bronze Key, Cerulean Flabellum, Cleria Ring,
+  #   Construct Medallion, Creeper Medallion, Crimson Key, Crimson Lotusblade,
+  #   Devil Medallion, Dragonbone Key, Dreaming Idol, Earth Dragon's Claws,
+  #   Evil Ring, Gold Bracelet, Levinstrike Warhammer, Mantid Medallion,
+  #   Marble Key, Mask of Eyes, Obsidian Key, Red Moon Crest, Silver Bracelet,
+  #   Water Dragon's Scales
+  # useful (59): all NF Warp items, all armor/boots/shield/leggings pieces,
+  #   Progressive Armor, Progressive Boots, Rado Tower Warp, Spirit Cape, Reflex
+  # trap (4): Blinding Fog, Butterfingers, Chaos Warp, EXP Leech
+  # filler: Celcetan Panacea, Roda Fruit, Cleria Ore, SP: 50/150/500
+  # conditional promotions (auto, override still wins): Cleria Ore -> progression
+  #   when weapon_requirements is on; each NF Warp -> progression under random_start.
+
   # --- standard Archipelago knobs (leave as-is if unsure) ---
   progression_balancing: 0
   accessibility: items
