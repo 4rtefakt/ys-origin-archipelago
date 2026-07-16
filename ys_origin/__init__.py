@@ -114,17 +114,24 @@ class YsOriginWorld(World):
 
         # Lean progression (open / warp mode only). The warp network + level
         # scaling makes the climb-gating and room-gating items non-essential to
-        # WIN: goal reachability is unaffected by removing any of them (see
-        # tests/test_logic_criticality.py + ROADMAP_2.0 §14). So under `items` /
-        # `minimal` accessibility — where only your progression items and the goal
+        # WIN: the kept set (warps + Cleria Ore + goal) reaches the goal even with
+        # every gate item removed jointly (see tests/test_logic_criticality.py +
+        # ROADMAP_2.0 §14). So under `minimal` — where only what's needed to win
         # must be reachable — those gates need not be progression; fill routes
         # advancement through the warps instead and they stop hogging priority
-        # spots. Under `full` (every location must be reachable) they stay
-        # progression, so we ONLY lean when the setting is positively lenient (an
-        # unknown/`full` key never demotes -> never risks stranding a location).
+        # spots.
+        #
+        # `minimal` is the ONLY key that leans, and `full` is the only other key
+        # that can appear here: AP defines just two options (full=0, minimal=2),
+        # and the `items` / `locations` / `none` aliases never reach `current_key`
+        # (it reads `name_lookup`, built from `option_*` only). Do NOT extend this
+        # to `items` — it is an alias of `full`, i.e. EVERY location must be
+        # reachable, and the room-gate items provably strand side locations there
+        # (test_room_gate_core_strands_side_locations_under_full_access), so
+        # leaning would fail generation. An unknown / `full` key never demotes ->
+        # never risks stranding a location.
         acc_key = getattr(getattr(o, "accessibility", None), "current_key", None)
-        self.lean_open_progression = (
-            self.open_mode and acc_key in ("items", "minimal", "none"))
+        self.lean_open_progression = self.open_mode and acc_key == "minimal"
 
         # Player-supplied per-item classification overrides (advanced). Parsed
         # once here (invalid entries dropped + logged) and applied LAST in
@@ -151,7 +158,7 @@ class YsOriginWorld(World):
         # (it's merely "useful" convenience in normal, on-foot seeds).
         elif getattr(self, "open_mode", False) and name in dt.STATUE_UNLOCKS:
             cls = ItemClassification.progression
-        # Lean-progression demotion (open mode, items/minimal accessibility): keep
+        # Lean-progression demotion (open mode, `minimal` accessibility): keep
         # only the genuinely win-critical progression — the goal medallion, the
         # warp unlocks (the reachability spine, promoted just above) and Cleria Ore
         # (weapon gating). Every other item that was progression ONLY because it

@@ -165,7 +165,7 @@ def criticality(char, spawn, max_skip=5):
     removed} for one (char, spawn). 'Stranded' means the location becomes
     unreachable — i.e. this is the `accessibility: full` question (every location
     reachable), NOT 'required to win'. An item can strand side-checks yet be
-    irrelevant to the goal; the goal/lean tests below cover the items/minimal
+    irrelevant to the goal; the goal/lean tests below cover the `minimal`
     picture that actually drives the shipped classification."""
     conns, warp, climb, scenereq = _model(spawn, 1, max_skip)
     lr = _loc_regions()
@@ -209,8 +209,9 @@ def test_zone_medallions_never_strand_a_location_in_open_mode():
 def test_room_gate_core_strands_side_locations_under_full_access():
     """FULL-accessibility guard (NOT 'required to win'): the room-gate items warps
     can't bypass each strand at least one SIDE location on some spawn. This is why
-    they'd need to stay progression under `accessibility: full` — and why the
-    shipped demotion only fires under items/minimal, never full."""
+    they must stay progression under `accessibility: full` — and why the shipped
+    demotion fires ONLY under `minimal`. Note `items`/`locations` are AP aliases
+    of `full`, so they must not lean either; this test is what would break."""
     for char in ALL_CHARS:
         ever = defaultdict(int)
         for spawn in _all_spawns():
@@ -240,11 +241,11 @@ def test_no_progression_item_blocks_the_goal():
 
 
 def test_lean_progression_set_alone_reaches_goal():
-    """ITEMS-accessibility safety (the make-or-break for the shipped demotion):
+    """MINIMAL-accessibility safety (the make-or-break for the shipped demotion):
     with ONLY the kept-progression set (warps + Cleria Ore + goal) and EVERY gate
     item removed together, the goal is still reachable — every character, every
     spawn. If this held only one-item-at-a-time but not jointly, demoting the
-    gates could strand the goal under items accessibility; it holds jointly."""
+    gates could strand the goal under `minimal`; it holds jointly."""
     goal_region = _goal_region()
     protected = _lean_protected()
     for char in ALL_CHARS:
