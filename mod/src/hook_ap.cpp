@@ -56,6 +56,8 @@ extern bool g_loc_flag[0x200];    // location flags that are checks
 // Seed-scoped save redirection (hook_saveredir.cpp).
 extern "C" void saveredir_set_seed(const char* seed);
 extern "C" const char* saveredir_seed_cstr();
+// Cutscene fast-forward mode (hook_vm.cpp): 0 off, 1 hold Right-Ctrl, 2 always.
+extern "C" int g_cutscene_skip_mode;
 extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
@@ -114,6 +116,8 @@ static void load_config() {
                   "# save_pattern=sav  # filename substring that marks a save file\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
+                  "# cutscene_skip=1   # 0 off, 1 hold Right-Ctrl to fast-forward,\n"
+                  "#                   # 2 always. Also settable in the F8 menu.\n"
                   "# goal_scene=7002   # ending-scene number(s), comma-separated;\n"
                   "#                   # entering one reports your goal to the server.\n"
                   "#                   # 7002 (verified on a Toal clear) is the default.\n"
@@ -156,6 +160,10 @@ static void load_config() {
             }
         }
         else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
+        else if (!strcmp(key, "cutscene_skip")) {
+            int m = atoi(val);
+            g_cutscene_skip_mode = (m < 0 || m > 2) ? 1 : m;
+        }
         else if (!strncmp(key, "bless_idx_", 10)) {
             int bit = atoi(key + 10);
             if (bit >= 0 && bit < 32) g_bless_arr_idx[bit] = atoi(val);
@@ -620,6 +628,127 @@ static void toast_loc(int64_t loc) {
 // icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
 static const int kForeignArtId = 0x57;
 
+static void request_recalc();   // defined with the recompute block below
+
+// -- vanilla-grant suppression backstop --------------------------------------- #
+//
+// hook_vm.cpp's DecideStore is the primary suppressor and it is the good one: it
+// redirects the store BEFORE it lands, so the vanilla item never appears at all.
+// But it only sees ONE instruction — the store inside the 0x64 Flag_SetInt
+// handler. Two other paths reach the same cells:
+//
+//   * the arithmetic flag ops, which are separate inline stubs with their own
+//     stores (CleriaCore EVENTVM_HANDLERS_2 §2: 0x67 Flag_AddInt is
+//     `ADD [ESI],ECX` @0x567d78, 0x69 Flag_SubInt is `SUB [ESI],ECX` @0x567e0a);
+//   * the native pickup tick FUN_00585ff0, which increments
+//     `(&DAT_0076b91c)[itemId]` directly with no VM involved (ITEM_PICKUP.md
+//     §3.6) — field pickups rather than chests.
+//
+// A randomized location using either path handed the player its vanilla item on
+// top of the AP item. This is the same after-the-fact revert the Python client
+// has always used (client/suppression.py): keep the value each suppressed cell
+// SHOULD have from AP grants alone, and put back anything that climbs above it.
+// It costs up to one poll of visibility, which is why it is the backstop and not
+// the primary — DecideStore still catches the common case with zero flash.
+//
+// Baselines are raised by ap_give (an AP grant is legitimate) and lowered on a
+// legitimate spend, so consumables still work.
+static std::mutex g_supp_mtx;
+static std::map<int, int> g_supp_baseline;    // g_flags idx -> legitimate value
+
+// Adopt the current value of every suppressed cell as legitimate.
+//
+// WHEN this runs matters more than what it does. Priming at connect time is
+// wrong: players usually connect from the title screen, where g_flags holds
+// nothing meaningful, and the save they then load would look like a pile of
+// vanilla grants to revert — the backstop would eat their inventory. So it
+// primes on the ENTRY INTO GAMEPLAY (scene 0 -> a real room), which is exactly
+// the moment the save's inventory is loaded and by definition legitimate. Every
+// vanilla grant we care about happens later, during play.
+static void prime_suppression() {
+    std::lock_guard<std::mutex> lk(g_supp_mtx);
+    g_supp_baseline.clear();
+    for (int idx = 0; idx < 0x200; idx++)
+        if (g_supp_item[idx])
+            g_supp_baseline[idx] = *(volatile int*)(kGFlagsAbs + idx * 4);
+}
+
+// Force a re-prime on the next entry into gameplay (connect / New Game).
+static std::atomic<bool> g_supp_reprime{true};
+static void reset_suppression() { g_supp_reprime.store(true); }
+
+// Record an AP grant so it is never mistaken for a vanilla one.
+static void suppression_note_grant(int idx) {
+    std::lock_guard<std::mutex> lk(g_supp_mtx);
+    auto it = g_supp_baseline.find(idx);
+    if (it != g_supp_baseline.end())
+        it->second = *(volatile int*)(kGFlagsAbs + idx * 4);
+}
+
+// Revert vanilla grants that slipped past DecideStore. Poll thread.
+static void suppress_vanilla_grants() {
+    static int prev_scene = 0;
+    int scene = read_current_scene();
+    bool entered = (scene > 0 && prev_scene <= 0);
+    prev_scene = scene;
+    if (scene <= 0) return;                     // not in-game: the block is stale
+    // Entering gameplay (title -> room, or any save load): whatever is in the
+    // inventory right now came out of the save and is legitimate. Adopt it and
+    // fire nothing this tick.
+    if (entered || g_supp_reprime.exchange(false)) {
+        prime_suppression();
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g_supp_mtx);
+    for (auto& kv : g_supp_baseline) {
+        volatile int* cell = (volatile int*)(kGFlagsAbs + kv.first * 4);
+        int live = *cell;
+        if (live > kv.second) {
+            mod_log("supp: reverted vanilla g_flags[0x%X] %d -> %d "
+                    "(store DecideStore never saw)", kv.first, live, kv.second);
+            *cell = kv.second;
+            request_recalc();
+        } else if (live < kv.second) {
+            kv.second = live;                   // legitimately spent — follow it down
+        }
+    }
+}
+
+// -- derived-state recompute after a grant ----------------------------------- #
+//
+// Writing g_flags[id] puts the item in the inventory, but that is only the
+// RECORD. Anything derived from owning it — the equipment ability-flag word
+// DAT_0076a624, the stat block, the mobility unlocks — is rebuilt by
+// FUN_004208f0/FUN_00420C40, and only when the dirty bitfield DAT_0076b914 says
+// it is stale (CleriaCore EQUIP_EFFECTS.md §0: "the recompute runs only when the
+// dirty bit DAT_0076b914 & 0x10 is set ... so the flags persist between
+// recomputes"). The vanilla pickup tick FUN_00585ff0 ORs 0x75 into that field
+// right after it increments the item cell (ITEM_PICKUP.md §3.6) — we never did,
+// so an AP-granted item sat in the inventory with none of its effect applied.
+//
+// That is Shiro's report: "getting the ring that allows double-jump does
+// nothing, but opening the chest where that ring usually is in vanilla gives the
+// effect". The Gold Bracelet (0x5B, double-jump) and Silver Bracelet (0x5A,
+// high-speed run) are the visible cases; every derived-effect item was affected.
+//
+// The OR itself is deferred to the game's main thread: the grant runs on the AP
+// poll thread, and DAT_0076b914 is a read-modify-write the main thread also
+// touches. exp_scaling_on_frame drains this, the same way pending weapon/level
+// changes are applied.
+static const uintptr_t kRecalcFlagsAbs = 0x0076B914;
+static const int kRecalcBits = 0x75;         // exactly what FUN_00585ff0 sets
+static std::atomic<bool> g_pending_recalc{false};
+
+// Ask for a derived-state rebuild on the next frame. Safe to call repeatedly.
+static void request_recalc() { g_pending_recalc.store(true); }
+
+// Main thread only (exp_scaling_on_frame).
+static void apply_pending_recalc() {
+    if (!g_pending_recalc.exchange(false)) return;
+    *(volatile int*)kRecalcFlagsAbs |= kRecalcBits;
+    mod_log("ap: requested derived-state recompute (0x76b914 |= 0x%X)", kRecalcBits);
+}
+
 // Grant an item in g_flags. Atomic int32.
 //
 // `stack` = may this cell legitimately hold more than one (a consumable)? For
@@ -640,6 +769,8 @@ static void ap_give(int idx, int count, bool stack) {
     int next = stack ? base + (count > 0 ? count : 1) : 1;
     if (!stack && cur == 1) return;               // already owned: no-op, no log spam
     *cell = next;
+    request_recalc();   // the record is set; now make the game derive its effect
+    suppression_note_grant(idx);   // an AP grant is legitimate — raise the floor
     mod_log("ap: granted g_flags[0x%X] %d -> %d%s", idx, cur, *cell,
             stack ? "" : " (key item, clamped to 1)");
 }
@@ -649,6 +780,7 @@ static void ap_give(int idx, int count, bool stack) {
 static void ap_give_tier(int idx, int count, int tier) {
     ap_give(idx, count, /*stack=*/!(tier & 3));
 }
+
 
 // -- owned-gear reconcile ---------------------------------------------------- #
 // Granted items live in g_flags, but the game rebuilds that block on every save
@@ -686,6 +818,7 @@ static void reconcile_gear() {
             mod_log("gear: restored g_flags[0x%X] %d -> %d (save/load wipe)",
                     kv.first, *cell, kv.second);
             *cell = kv.second;
+            request_recalc();   // restoring the record must re-derive its effect
         }
     }
 }
@@ -789,12 +922,19 @@ static void on_slot_connected(const nlohmann::json& sd) {
     if (sd.contains("skill_grants"))
         for (auto& kv : sd["skill_grants"].items())
             g_skill_grants[kv.key()] = kv.value().get<int>();
+    // A reconnect re-registers from scratch; without the clear, a previous
+    // seed's suppress set would linger and eat items this seed leaves vanilla.
+    for (int i = 0; i < 0x200; i++) g_supp_item[i] = false;
     if (sd.contains("suppress_items")) {
         for (auto& v : sd["suppress_items"]) {
             int i = v.get<int>();
             if (i >= 0 && i < 0x200) { g_supp_item[i] = true; supp++; }
         }
     }
+    // The backstop re-primes on the next entry into gameplay (see
+    // prime_suppression) — not here, because a connect usually happens at the
+    // title screen where g_flags holds nothing meaningful.
+    reset_suppression();
     std::list<int64_t> scout;
     int scenes = 0;
     // Reset detect registrations (a reconnect re-registers everything; without
@@ -1894,6 +2034,11 @@ extern "C" void exp_scaling_on_frame() {
         }
     }
 
+    // Rebuild anything derived from the inventory (ability flags, stats) after a
+    // grant — writing g_flags alone leaves the effect unapplied. Main thread, so
+    // the read-modify-write of the dirty bitfield is safe.
+    apply_pending_recalc();
+
     // Weapon upgrade (Cleria Ore) + the Butterfingers trap. Re-enforce if a save
     // load reset g_flags[0x94] below what we applied.
     int wv = g_pending_weapon.exchange(0);
@@ -1952,6 +2097,7 @@ static void poll_loop() {
             poll_deathlink();
             poll_statue_warp();
             reconcile_gear();   // re-assert granted gear a save/load reset
+            suppress_vanilla_grants();  // backstop for stores DecideStore can't see
             exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;
@@ -2067,6 +2213,37 @@ const char* ap_cfg_host() { return g_host; }
 int         ap_cfg_port() { return g_port; }
 const char* ap_cfg_slot() { return g_slot; }
 const char* ap_cfg_pass() { return g_pass; }
+
+// -- cutscene-skip mode, driven by the F8 menu ------------------------------- #
+int ap_cutscene_skip() { return g_cutscene_skip_mode; }
+
+// Set the mode and persist it, so the choice survives a restart. yso_ap.cfg is a
+// flat key=value file; rewrite it with the key replaced (or appended).
+void ap_set_cutscene_skip(int mode) {
+    if (mode < 0 || mode > 2) mode = 0;
+    g_cutscene_skip_mode = mode;
+    std::vector<std::string> lines;
+    bool replaced = false;
+    if (FILE* f = fopen("yso_ap.cfg", "r")) {
+        char line[512];
+        while (fgets(line, sizeof(line), f)) {
+            std::string s(line);
+            while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+            if (s.rfind("cutscene_skip=", 0) == 0) {
+                s = "cutscene_skip=" + std::to_string(mode);
+                replaced = true;
+            }
+            lines.push_back(s);
+        }
+        fclose(f);
+    }
+    if (!replaced) lines.push_back("cutscene_skip=" + std::to_string(mode));
+    if (FILE* w = fopen("yso_ap.cfg", "w")) {
+        for (const auto& s : lines) fprintf(w, "%s\n", s.c_str());
+        fclose(w);
+    }
+    mod_log("ap: cutscene skip mode -> %d", mode);
+}
 
 void ap_install() {
     for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();

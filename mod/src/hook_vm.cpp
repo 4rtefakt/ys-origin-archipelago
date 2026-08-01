@@ -412,13 +412,26 @@ __declspec(naked) static void Hook_WaitTail() {
 // cutscene. The load-guard above keeps even an always-armed window crash-safe.
 extern "C" void request_force_spawn();           // hook_ap.cpp (test hotkey)
 static const uintptr_t kCurScene = 0x0076C100;   // g_flags[0x1F9]
+
+// Player-facing cutscene-skip mode, set from the F8 Archipelago menu and
+// persisted in yso_ap.cfg. Three players asked for a skip in the release thread
+// and the one constraint everyone agreed on was "as long as it's optional", so
+// it is a mode rather than an always-on:
+//   0 = off      — never fast-forward (the New-Game intro still does, see below)
+//   1 = hold     — fast-forward while Right Ctrl is held (the old behaviour)
+//   2 = auto     — fast-forward every cutscene wait, no key needed
+// The New-Game intro window is NOT part of this: it is load-bearing for the
+// random-start force-spawn warp, so it fast-forwards in every mode.
+extern "C" int g_cutscene_skip_mode = 1;
+
 extern "C" void cutscene_ff_poll() {
     static bool intro = false;
     int scene = *(volatile int*)kCurScene;
     if (scene == 2) intro = true;          // New-Game intro cutscene seen
     else if (scene >= 1000) intro = false; // reached a real room -> stop
-    bool key = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
-    g_cutscene_ff = intro || key;
+    bool key = g_cutscene_skip_mode == 1 &&
+               (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    g_cutscene_ff = intro || key || g_cutscene_skip_mode == 2;
 
     // F9 (edge-triggered) = manually force-spawn, for testing the warp without
     // replaying the intro.
