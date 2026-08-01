@@ -124,6 +124,13 @@ class YsOriginWorld(World):
     def _active_locations(self) -> dict[str, list[str]]:
         return dt.locations_by_region(dt.enabled_categories(self.options))
 
+    def _region_names(self) -> list[str]:
+        """Regions this world will create (mode-dependent) — used to check that a
+        rule never names a region that does not exist."""
+        if getattr(self, "open_mode", False):
+            return dt.open_regions()
+        return list(ALL_REGIONS)
+
     def create_items(self) -> None:
         enabled = dt.enabled_categories(self.options)
         n_locations = sum(len(v) for v in dt.locations_by_region(enabled).values())
@@ -202,16 +209,17 @@ class YsOriginWorld(World):
         cmin = int(self.options.blessing_cost_min.value)
         cmax = max(cmin, int(self.options.blessing_cost_max.value))
         ladder = dt.blessing_price_ladder(len(slots), cmin, cmax)
-        # Only gate on a medallion this world actually creates — a rule naming an
-        # item that is never placed makes the location unreachable and fails
-        # generation outright.
-        usable = set(dt.active_gates().values())
+        # Gate on a reachable tower DEPTH, not a boss medallion: with statue warps
+        # the tower is traversable without medallions, so a medallion gate would
+        # lock a player who warped to 22F out of a slot they can easily afford.
+        # Only gate on a region this world actually creates.
+        live = set(self._region_names())
         for i, (loc_name, price) in enumerate(zip(slots, ladder)):
             self.blessing_prices[loc_name] = price
             rank = 0.0 if len(slots) == 1 else i / (len(slots) - 1)
-            gate = dt.price_gate_item(rank)
-            if gate in usable:
-                self.blessing_gates[loc_name] = gate
+            region = dt.price_gate_region(rank)
+            if region and region in live:
+                self.blessing_gates[loc_name] = region
 
     def _blessing_costs(self, active: set) -> dict[str, int]:
         """Overlay-shop SP prices as {location id: price} for slot_data."""
