@@ -619,6 +619,41 @@ static void toast_loc(int64_t loc) {
 // icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
 static const int kForeignArtId = 0x57;
 
+// -- derived-state recompute after a grant ----------------------------------- #
+//
+// Writing g_flags[id] puts the item in the inventory, but that is only the
+// RECORD. Anything derived from owning it — the equipment ability-flag word
+// DAT_0076a624, the stat block, the mobility unlocks — is rebuilt by
+// FUN_004208f0/FUN_00420C40, and only when the dirty bitfield DAT_0076b914 says
+// it is stale (CleriaCore EQUIP_EFFECTS.md §0: "the recompute runs only when the
+// dirty bit DAT_0076b914 & 0x10 is set ... so the flags persist between
+// recomputes"). The vanilla pickup tick FUN_00585ff0 ORs 0x75 into that field
+// right after it increments the item cell (ITEM_PICKUP.md §3.6) — we never did,
+// so an AP-granted item sat in the inventory with none of its effect applied.
+//
+// That is Shiro's report: "getting the ring that allows double-jump does
+// nothing, but opening the chest where that ring usually is in vanilla gives the
+// effect". The Gold Bracelet (0x5B, double-jump) and Silver Bracelet (0x5A,
+// high-speed run) are the visible cases; every derived-effect item was affected.
+//
+// The OR itself is deferred to the game's main thread: the grant runs on the AP
+// poll thread, and DAT_0076b914 is a read-modify-write the main thread also
+// touches. exp_scaling_on_frame drains this, the same way pending weapon/level
+// changes are applied.
+static const uintptr_t kRecalcFlagsAbs = 0x0076B914;
+static const int kRecalcBits = 0x75;         // exactly what FUN_00585ff0 sets
+static std::atomic<bool> g_pending_recalc{false};
+
+// Ask for a derived-state rebuild on the next frame. Safe to call repeatedly.
+static void request_recalc() { g_pending_recalc.store(true); }
+
+// Main thread only (exp_scaling_on_frame).
+static void apply_pending_recalc() {
+    if (!g_pending_recalc.exchange(false)) return;
+    *(volatile int*)kRecalcFlagsAbs |= kRecalcBits;
+    mod_log("ap: requested derived-state recompute (0x76b914 |= 0x%X)", kRecalcBits);
+}
+
 // Grant an item in g_flags. Atomic int32.
 //
 // `stack` = may this cell legitimately hold more than one (a consumable)? For
@@ -639,6 +674,7 @@ static void ap_give(int idx, int count, bool stack) {
     int next = stack ? base + (count > 0 ? count : 1) : 1;
     if (!stack && cur == 1) return;               // already owned: no-op, no log spam
     *cell = next;
+    request_recalc();   // the record is set; now make the game derive its effect
     mod_log("ap: granted g_flags[0x%X] %d -> %d%s", idx, cur, *cell,
             stack ? "" : " (key item, clamped to 1)");
 }
@@ -686,6 +722,7 @@ static void reconcile_gear() {
             mod_log("gear: restored g_flags[0x%X] %d -> %d (save/load wipe)",
                     kv.first, *cell, kv.second);
             *cell = kv.second;
+            request_recalc();   // restoring the record must re-derive its effect
         }
     }
 }
@@ -1800,6 +1837,11 @@ extern "C" void exp_scaling_on_frame() {
             }
         }
     }
+
+    // Rebuild anything derived from the inventory (ability flags, stats) after a
+    // grant — writing g_flags alone leaves the effect unapplied. Main thread, so
+    // the read-modify-write of the dirty bitfield is safe.
+    apply_pending_recalc();
 
     // Weapon upgrade (Cleria Ore) + the Butterfingers trap. Re-enforce if a save
     // load reset g_flags[0x94] below what we applied.
