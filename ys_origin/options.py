@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from Options import (
     Choice, DeathLink, DefaultOnToggle, OptionList, PerGameCommonOptions, Range,
-    Toggle,
+    Toggle, Visibility,
 )
 
 
@@ -305,7 +305,16 @@ class ExpMultiplierMax(Range):
     range_start = 1
     range_end = 20
     default = 1
-    visibility = 0  # hidden from templates/webhost — legacy compatibility only
+    # Hidden from templates/webhost — legacy compatibility only.
+    #
+    # MUST be Visibility.none, not a bare 0. Archipelago tests visibility with
+    # `visibility_level in option.visibility` (Options.py get_option_groups),
+    # which needs an IntFlag; on a plain int it raises
+    # `TypeError: argument of type 'int' is not iterable`. That aborts the whole
+    # of generate_yaml_templates — for EVERY game, not just this one — so the
+    # Launcher's "Generate Template Options" silently did nothing as soon as this
+    # apworld was installed, and worked again the moment it was removed.
+    visibility = Visibility.none
 
 
 class TrapCount(Range):
