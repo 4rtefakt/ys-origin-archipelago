@@ -619,6 +619,92 @@ static void toast_loc(int64_t loc) {
 // icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
 static const int kForeignArtId = 0x57;
 
+static void request_recalc();   // defined with the recompute block below
+
+// -- vanilla-grant suppression backstop --------------------------------------- #
+//
+// hook_vm.cpp's DecideStore is the primary suppressor and it is the good one: it
+// redirects the store BEFORE it lands, so the vanilla item never appears at all.
+// But it only sees ONE instruction — the store inside the 0x64 Flag_SetInt
+// handler. Two other paths reach the same cells:
+//
+//   * the arithmetic flag ops, which are separate inline stubs with their own
+//     stores (CleriaCore EVENTVM_HANDLERS_2 §2: 0x67 Flag_AddInt is
+//     `ADD [ESI],ECX` @0x567d78, 0x69 Flag_SubInt is `SUB [ESI],ECX` @0x567e0a);
+//   * the native pickup tick FUN_00585ff0, which increments
+//     `(&DAT_0076b91c)[itemId]` directly with no VM involved (ITEM_PICKUP.md
+//     §3.6) — field pickups rather than chests.
+//
+// A randomized location using either path handed the player its vanilla item on
+// top of the AP item. This is the same after-the-fact revert the Python client
+// has always used (client/suppression.py): keep the value each suppressed cell
+// SHOULD have from AP grants alone, and put back anything that climbs above it.
+// It costs up to one poll of visibility, which is why it is the backstop and not
+// the primary — DecideStore still catches the common case with zero flash.
+//
+// Baselines are raised by ap_give (an AP grant is legitimate) and lowered on a
+// legitimate spend, so consumables still work.
+static std::mutex g_supp_mtx;
+static std::map<int, int> g_supp_baseline;    // g_flags idx -> legitimate value
+
+// Adopt the current value of every suppressed cell as legitimate.
+//
+// WHEN this runs matters more than what it does. Priming at connect time is
+// wrong: players usually connect from the title screen, where g_flags holds
+// nothing meaningful, and the save they then load would look like a pile of
+// vanilla grants to revert — the backstop would eat their inventory. So it
+// primes on the ENTRY INTO GAMEPLAY (scene 0 -> a real room), which is exactly
+// the moment the save's inventory is loaded and by definition legitimate. Every
+// vanilla grant we care about happens later, during play.
+static void prime_suppression() {
+    std::lock_guard<std::mutex> lk(g_supp_mtx);
+    g_supp_baseline.clear();
+    for (int idx = 0; idx < 0x200; idx++)
+        if (g_supp_item[idx])
+            g_supp_baseline[idx] = *(volatile int*)(kGFlagsAbs + idx * 4);
+}
+
+// Force a re-prime on the next entry into gameplay (connect / New Game).
+static std::atomic<bool> g_supp_reprime{true};
+static void reset_suppression() { g_supp_reprime.store(true); }
+
+// Record an AP grant so it is never mistaken for a vanilla one.
+static void suppression_note_grant(int idx) {
+    std::lock_guard<std::mutex> lk(g_supp_mtx);
+    auto it = g_supp_baseline.find(idx);
+    if (it != g_supp_baseline.end())
+        it->second = *(volatile int*)(kGFlagsAbs + idx * 4);
+}
+
+// Revert vanilla grants that slipped past DecideStore. Poll thread.
+static void suppress_vanilla_grants() {
+    static int prev_scene = 0;
+    int scene = read_current_scene();
+    bool entered = (scene > 0 && prev_scene <= 0);
+    prev_scene = scene;
+    if (scene <= 0) return;                     // not in-game: the block is stale
+    // Entering gameplay (title -> room, or any save load): whatever is in the
+    // inventory right now came out of the save and is legitimate. Adopt it and
+    // fire nothing this tick.
+    if (entered || g_supp_reprime.exchange(false)) {
+        prime_suppression();
+        return;
+    }
+    std::lock_guard<std::mutex> lk(g_supp_mtx);
+    for (auto& kv : g_supp_baseline) {
+        volatile int* cell = (volatile int*)(kGFlagsAbs + kv.first * 4);
+        int live = *cell;
+        if (live > kv.second) {
+            mod_log("supp: reverted vanilla g_flags[0x%X] %d -> %d "
+                    "(store DecideStore never saw)", kv.first, live, kv.second);
+            *cell = kv.second;
+            request_recalc();
+        } else if (live < kv.second) {
+            kv.second = live;                   // legitimately spent — follow it down
+        }
+    }
+}
+
 // -- derived-state recompute after a grant ----------------------------------- #
 //
 // Writing g_flags[id] puts the item in the inventory, but that is only the
@@ -675,6 +761,7 @@ static void ap_give(int idx, int count, bool stack) {
     if (!stack && cur == 1) return;               // already owned: no-op, no log spam
     *cell = next;
     request_recalc();   // the record is set; now make the game derive its effect
+    suppression_note_grant(idx);   // an AP grant is legitimate — raise the floor
     mod_log("ap: granted g_flags[0x%X] %d -> %d%s", idx, cur, *cell,
             stack ? "" : " (key item, clamped to 1)");
 }
@@ -826,12 +913,19 @@ static void on_slot_connected(const nlohmann::json& sd) {
     if (sd.contains("skill_grants"))
         for (auto& kv : sd["skill_grants"].items())
             g_skill_grants[kv.key()] = kv.value().get<int>();
+    // A reconnect re-registers from scratch; without the clear, a previous
+    // seed's suppress set would linger and eat items this seed leaves vanilla.
+    for (int i = 0; i < 0x200; i++) g_supp_item[i] = false;
     if (sd.contains("suppress_items")) {
         for (auto& v : sd["suppress_items"]) {
             int i = v.get<int>();
             if (i >= 0 && i < 0x200) { g_supp_item[i] = true; supp++; }
         }
     }
+    // The backstop re-primes on the next entry into gameplay (see
+    // prime_suppression) — not here, because a connect usually happens at the
+    // title screen where g_flags holds nothing meaningful.
+    reset_suppression();
     std::list<int64_t> scout;
     int scenes = 0;
     // Reset detect registrations (a reconnect re-registers everything; without
@@ -1995,6 +2089,7 @@ static void poll_loop() {
             poll_deathlink();
             poll_statue_warp();
             reconcile_gear();   // re-assert granted gear a save/load reset
+            suppress_vanilla_grants();  // backstop for stores DecideStore can't see
             exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;
