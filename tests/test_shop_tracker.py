@@ -62,7 +62,7 @@ def test_floor_locations_map():
 
 def test_blessing_names_map():
     m = dt.blessing_location_names(ALL_ACTIVE, IDS)
-    assert len(m) == 24
+    assert len(m) == 25
     for k, v in m.items():
         assert k.isdigit(), k
         assert not v.startswith("Divine Blessing"), v      # short shop names
@@ -71,9 +71,10 @@ def test_blessing_names_map():
 
 def test_blessing_bit_location_ids():
     ids = dt.blessing_bit_location_ids(ALL_ACTIVE, IDS)
-    # 23 bit-method blessings (the armor blessing is flag-method -> excluded,
+    # 24 bit-method blessings, bits 0..23 contiguous (the armor blessing is
+    # flag-method -> excluded,
     # it stays vanilla-menu-only)
-    assert len(ids) == 23
+    assert len(ids) == 24
     armor = IDS["Divine Blessing: Strengthen current armor"]
     assert armor not in ids
     assert ids == sorted(ids, key=lambda i: {v: k for k, v in IDS.items()}[i])

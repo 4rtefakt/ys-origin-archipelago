@@ -16,7 +16,7 @@ Guards the two bug classes found in playtesting:
     a flag — but are asserted here explicitly so new ones are conscious choices.
 
 Also pins the blessing detect layout (the "aren't blessings broken?" audit):
-23 bitfield entries with distinct bits + the armor cell as a value flag.
+24 bitfield entries with distinct bits + the armor cell as a value flag.
 """
 
 from __future__ import annotations
@@ -91,11 +91,15 @@ def test_blessing_detect_layout():
     bless = [l for l in LOCS if l["type"] == "blessing"]
     bits = [l for l in bless if l["detect"]["method"] == "bit"]
     flags = [l for l in bless if l["detect"]["method"] == "flag"]
-    assert len(bits) == 23 and len(flags) == 1, (len(bits), len(flags))
+    assert len(bits) == 24 and len(flags) == 1, (len(bits), len(flags))
     # all bit entries watch the same bitfield cell, each a distinct bit
     assert {l["detect"]["offset"] for l in bits} == {"0x36BC80"}
     bitnums = [l["detect"]["bit"] for l in bits]
-    assert len(set(bitnums)) == 23, "duplicate blessing bits"
+    assert len(set(bitnums)) == 24, "duplicate blessing bits"
+    assert sorted(bitnums) == list(range(24)), (
+        "blessing bits must be contiguous 0..23 — bit 7 (GROW09, 8000 SP, "
+        "'Increase stun effect') was missing from the original sweep because "
+        "it was never purchased during the capture")
     # the armor blessing lives OUTSIDE g_flags (0x36A684 < base 0x36B91C): the
     # in-game mod must poll it (the VM store hook can never see it).
     assert flags[0]["detect"]["offset"] == "0x36A684"

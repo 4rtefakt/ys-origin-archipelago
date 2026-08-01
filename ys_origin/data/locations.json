@@ -1980,6 +1980,20 @@
   "items": []
  },
  {
+  "id": "blessing/bit7",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Increase stun effect",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 7
+  },
+  "items": []
+ },
+ {
   "id": "S_1000/room",
   "type": "room",
   "zone": "Wailing Blue",
