@@ -34,6 +34,31 @@ import unittest
 import warnings
 from pathlib import Path
 
+# Archipelago's ModuleUpdate scans every world's requirements on import and, for
+# anything unsatisfied, calls `confirm("Requirement ... press enter to install
+# it")` -> input(). We deliberately install a minimal dependency set (no kivy, no
+# per-world native deps), so plenty of OTHER worlds are unsatisfied and it will
+# ask. Whether that EOFs or blocks forever depends purely on what stdin happens
+# to be: /dev/null EOFs, an inherited pipe hangs until the job times out.
+#
+# SKIP_REQUIREMENTS_UPDATE is AP's own documented escape hatch (ModuleUpdate.py
+# `_skip_update`). Must be set before any AP module is imported.
+os.environ.setdefault("SKIP_REQUIREMENTS_UPDATE", "1")
+
+
+def _detach_stdin() -> None:
+    """Make any stray prompt fail fast instead of blocking the job forever.
+
+    Belt and braces on top of SKIP_REQUIREMENTS_UPDATE: a CI check that can hang
+    is worse than one that fails, because it burns the whole job timeout and
+    reports nothing.
+    """
+    try:
+        sys.stdin.close()
+    except Exception:  # noqa: BLE001 - stdin may already be unusable
+        pass
+    sys.stdin = open(os.devnull)
+
 GAME = "Ys Origin"
 # Kept alongside ours because a few of AP's generic tests reference the built-in
 # "Archipelago" world (item links, datapackage checks).
@@ -134,6 +159,7 @@ def check_fill_and_economy() -> None:
 
 def main(argv: list[str]) -> int:
     warnings.filterwarnings("ignore")
+    _detach_stdin()
     if len(argv) < 2:
         print(__doc__)
         return 2
