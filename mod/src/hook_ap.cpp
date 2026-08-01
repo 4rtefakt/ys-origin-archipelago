@@ -55,6 +55,8 @@ extern bool g_supp_item[0x200];   // vanilla item indices to suppress
 extern bool g_loc_flag[0x200];    // location flags that are checks
 // Seed-scoped save redirection (hook_saveredir.cpp).
 extern "C" void saveredir_set_seed(const char* seed);
+// Cutscene fast-forward mode (hook_vm.cpp): 0 off, 1 hold Right-Ctrl, 2 always.
+extern "C" int g_cutscene_skip_mode;
 extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
@@ -113,6 +115,8 @@ static void load_config() {
                   "# save_pattern=sav  # filename substring that marks a save file\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
+                  "# cutscene_skip=1   # 0 off, 1 hold Right-Ctrl to fast-forward,\n"
+                  "#                   # 2 always. Also settable in the F8 menu.\n"
                   "# goal_scene=7002   # ending-scene number(s), comma-separated;\n"
                   "#                   # entering one reports your goal to the server.\n"
                   "#                   # 7002 (verified on a Toal clear) is the default.\n"
@@ -155,6 +159,10 @@ static void load_config() {
             }
         }
         else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
+        else if (!strcmp(key, "cutscene_skip")) {
+            int m = atoi(val);
+            g_cutscene_skip_mode = (m < 0 || m > 2) ? 1 : m;
+        }
         else if (!strncmp(key, "bless_idx_", 10)) {
             int bit = atoi(key + 10);
             if (bit >= 0 && bit < 32) g_bless_arr_idx[bit] = atoi(val);
@@ -1878,6 +1886,37 @@ const char* ap_cfg_host() { return g_host; }
 int         ap_cfg_port() { return g_port; }
 const char* ap_cfg_slot() { return g_slot; }
 const char* ap_cfg_pass() { return g_pass; }
+
+// -- cutscene-skip mode, driven by the F8 menu ------------------------------- #
+int ap_cutscene_skip() { return g_cutscene_skip_mode; }
+
+// Set the mode and persist it, so the choice survives a restart. yso_ap.cfg is a
+// flat key=value file; rewrite it with the key replaced (or appended).
+void ap_set_cutscene_skip(int mode) {
+    if (mode < 0 || mode > 2) mode = 0;
+    g_cutscene_skip_mode = mode;
+    std::vector<std::string> lines;
+    bool replaced = false;
+    if (FILE* f = fopen("yso_ap.cfg", "r")) {
+        char line[512];
+        while (fgets(line, sizeof(line), f)) {
+            std::string s(line);
+            while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+            if (s.rfind("cutscene_skip=", 0) == 0) {
+                s = "cutscene_skip=" + std::to_string(mode);
+                replaced = true;
+            }
+            lines.push_back(s);
+        }
+        fclose(f);
+    }
+    if (!replaced) lines.push_back("cutscene_skip=" + std::to_string(mode));
+    if (FILE* w = fopen("yso_ap.cfg", "w")) {
+        for (const auto& s : lines) fprintf(w, "%s\n", s.c_str());
+        fclose(w);
+    }
+    mod_log("ap: cutscene skip mode -> %d", mode);
+}
 
 void ap_install() {
     for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
