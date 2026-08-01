@@ -233,19 +233,29 @@ class BlessingCosts(Choice):
 
 
 class BlessingCostMin(Range):
-    """Lowest possible randomized blessing price (SP)."""
+    """Price of the CHEAPEST blessing slot (SP).
+
+    The shop is priced on a geometric ladder from this value up to
+    ``blessing_cost_max``, so the early slots sit near this number and only the
+    last few approach the maximum."""
     display_name = "Blessing cost min"
     range_start = 10
-    range_end = 2000
+    range_end = 5000
     default = 100
 
 
 class BlessingCostMax(Range):
-    """Highest possible randomized blessing price (SP)."""
+    """Price of the most EXPENSIVE blessing slot (SP).
+
+    The default spans 100 -> 100,000: early slots land in the low hundreds, the
+    midgame in the low thousands, and only the last couple are a real endgame
+    investment. The old 800 ceiling made every blessing trivially affordable by
+    the midgame. Expensive slots are also gated in logic behind the tower depth
+    their price implies, so a five-figure slot can never hold a sphere-1 item."""
     display_name = "Blessing cost max"
     range_start = 10
-    range_end = 5000
-    default = 800
+    range_end = 500000
+    default = 100000
 
 
 class BlessingShopUnlock(Choice):
