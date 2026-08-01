@@ -79,6 +79,12 @@ jobs:
           python -m tools.build_apworld ../archipelago/custom_worlds/ys_origin.apworld
 
       - name: Validate against Archipelago
+        # SKIP_REQUIREMENTS_UPDATE: AP's ModuleUpdate prompts (input()) for every
+        # unsatisfied world requirement, and we install a minimal dep set on
+        # purpose. The script sets this itself and detaches stdin; belt and
+        # braces here so the job can never sit on a prompt until it times out.
+        env:
+          SKIP_REQUIREMENTS_UPDATE: "1"
         run: |
           cd apworld
-          python -m tools.ci_apworld_check ../archipelago
+          python -m tools.ci_apworld_check ../archipelago < /dev/null
