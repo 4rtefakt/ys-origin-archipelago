@@ -4393,7 +4393,13 @@
    "method": "flag",
    "offset": "0x36BDFC"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x58",
+    "name": "Cleria Ore",
+    "class": "filler"
+   }
+  ]
  },
  {
   "id": "S_2011/AGERU/0x153",
@@ -4406,7 +4412,13 @@
    "method": "flag",
    "offset": "0x36BE68"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x81",
+    "name": "Ruby",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_3104/AGERU/0x16A",
@@ -4464,7 +4476,13 @@
    "method": "flag",
    "offset": "0x36C044"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x2D",
+    "name": "Demon Greaves",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/gear/yunica/0x06",

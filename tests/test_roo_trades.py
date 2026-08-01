@@ -112,17 +112,27 @@ def test_fruit_supply_matches_roo_demand():
 
 
 def test_roo_vanilla_items_are_real_or_absent():
-    """Five Roos hand out a conversation Topic (0x93 SetTopicKnownIndex), which
-    is not a poolable item, so they carry no vanilla item and create_items pads
-    the slot with filler. The S_3104 trade is the only one granting a real item
-    (Hammer 0x60 on the generic/Hugo path)."""
+    """Four Roos hand out a real item, two only a conversation Topic
+    (0x93 SetTopicKnownIndex), which is not poolable — those carry no vanilla
+    item and create_items pads the slot with filler.
+
+    The rewards were NOT all visible in the trade script: S_1014 and S_6009 call
+    a shared child via 0xB4 StartScript, so their Cleria Ore / Demon Greaves come
+    from the guide, and S_2011 bumps the fire skill level (0x67 on 0xB7) inline,
+    which is a Ruby. Missing these let the Roo hand out its vanilla reward on top
+    of the AP item — seen live: the 4F Roo upgraded the weapon to Lv2."""
     with_items = {}
     for name in dt.ROO_LOCATIONS:
         items = _by_name(name).get("items", [])
         assert len(items) <= 1, f"{name}: unexpected multi-item Roo"
         if items:
             with_items[name] = items[0]["name"]
-    assert list(with_items.values()) == ["Hammer"], with_items
+    assert with_items == {
+        "Wailing Blue: 4F Forward Room — Roo Trade": "Cleria Ore",
+        "Flooded Prison: 8F Path 2 — Roo Trade": "Ruby",
+        "Flames of Guilt: Roo Start — Roo Trade": "Hammer",
+        "Demonic Core: 22F Mirror Path — Roo Trade": "Demon Greaves",
+    }, with_items
     # and it must be a real pool item, or the pool would be short one slot
     assert "Hammer" in dt.item_index
 
