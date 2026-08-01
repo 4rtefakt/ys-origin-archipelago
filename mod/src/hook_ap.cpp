@@ -819,16 +819,30 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla) {
         found = f->second;
     }
     if (found.empty()) return;
-    // g_loc_found is "Item  -> Owner"; the row is narrow, so keep the item and
-    // drop the owner unless it is someone else's.
+    // g_loc_found is "Item  -> Owner". Render someone else's as "Owner's Item".
+    std::string item = found, who;
     size_t arrow = found.find("  -> ");
     if (arrow != std::string::npos) {
-        std::string item = found.substr(0, arrow);
-        std::string who = found.substr(arrow + 5);
-        found = (who == g_slot) ? item : (item + " (" + who + ")");
+        item = found.substr(0, arrow);
+        who = found.substr(arrow + 5);
     }
-    if (found.size() > 180) found.resize(180);
-    memcpy(buf, found.c_str(), found.size() + 1);
+    std::string out;
+    if (!who.empty() && who != g_slot) out = who + "'s " + item;
+    else                               out = item;
+    // Mark progression so it stands out in a wall of filler. The menu draws
+    // plain text with no markup, so a leading glyph is the only styling
+    // available — the same trick the F5 shop uses.
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_flags.find(loc);
+        if (f != g_loc_flags.end() && (f->second & 1)) out = "* " + out;
+    }
+    // The vanilla label ENDS with the " - [SP:]" separator — the handler appends
+    // the formatted price straight onto this buffer — so replacing the whole
+    // string swallowed it and rows rendered as "Celcetan Panacea670".
+    out += " - [SP:]";
+    if (out.size() > 180) out.resize(180);
+    memcpy(buf, out.c_str(), out.size() + 1);
 }
 
 // -- owned-gear reconcile ---------------------------------------------------- #
