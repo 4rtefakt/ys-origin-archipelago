@@ -2072,6 +2072,27 @@ extern "C" void exp_scaling_on_frame() {
         // a fresh entity whose combat weapon defaults to Lv1 -> deals 1 dmg).
         apply_weapon_level(g_weapon_applied);
         g_weapon_entity = *kPlayerEntPtr;
+    } else if (*(volatile int*)kWeaponLevelAbs > g_weapon_applied) {
+        // Clamp DOWN to what AP has actually granted.
+        //
+        // Some vanilla scripts raise the weapon without going through an item
+        // cell at all: the 4F Roo's reward child script calls 0x7F
+        // SetWeaponLevel (-> FUN_004201d0, writing 0x76A634+ch*8) instead of
+        // handing over a Cleria Ore, so suppressing the ore item does nothing
+        // and the player got a free upgrade on top of the AP item (seen live).
+        // There is no item store to intercept, so the only place to catch it is
+        // here, against the tier AP has granted.
+        //
+        // Safe to treat any excess as illegitimate: chest and event are
+        // always-on categories, so every Cleria Ore source in the game is a
+        // randomized location and all real weapon progress arrives as an AP
+        // item. Skipped entirely during a Butterfingers window (handled above),
+        // which is the one time the record is deliberately below the real tier.
+        int had = *(volatile int*)kWeaponLevelAbs;
+        set_weapon_game(g_weapon_applied);
+        g_weapon_entity = *kPlayerEntPtr;
+        mod_log("weapon: clamped vanilla upgrade %d -> %d (not granted by AP)",
+                had, g_weapon_applied);
     }
     // Level floor.
     int t = g_pending_level.exchange(0);
