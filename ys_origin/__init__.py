@@ -314,13 +314,9 @@ class YsOriginWorld(World):
             # All statue scenes (panel trigger; statue_unlocks only ships with
             # warp locks on).
             "statue_scenes": dt.statue_scenes(),
-            # g_flags indices of the vanilla content of active chest/event
-            # locations — the in-game mod suppresses these (player gets the AP
-            # item over the network instead).
-            "suppress_items": sorted({
-                dt.item_index[dt.location_vanilla_item(n, dt.char_name(self.options))]
-                for n in active
-                if dt.location_vanilla_item(n, dt.char_name(self.options))
-                and dt.location_vanilla_item(n, dt.char_name(self.options)) in dt.item_index
-            }),
+            # g_flags indices the mod must keep the vanilla scripts from setting:
+            # each active location's vanilla content, plus the companion power
+            # cells those same scripts write (see suppress_item_indices).
+            "suppress_items": dt.suppress_item_indices(
+                active, dt.char_name(self.options)),
         }

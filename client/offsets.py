@@ -229,6 +229,20 @@ SKILL_ITEMS: frozenset[str] = frozenset({"Ventus Bracelet"})
 # this is just a floor; the real freeze risk is only for SKILL_ITEMS above).
 GRANT_SAFE_MIN = 1
 
+# Entries that may legitimately hold a count > 1. EVERYTHING ELSE IS CLAMPED TO 1.
+#
+# The event VM's test op 0x5F is `acc = (g_flags[o0] == o1) ? 1 : 0` — an exact
+# equality, with no >= variant (docs/formats/XSO.md; CleriaCore
+# EVENTVM_HANDLERS_2 §2). So a key item sitting at 2 fails its own door/altar
+# check and that gate is dead for the rest of the run. Vanilla can never produce
+# a 2 (a chest grants with 0x64 Flag_SetInt, `g_flags[idx] = 1`); only an
+# additive AP grant could, e.g. by re-granting on a reconnect. This is the Red
+# Moon Crest altar report (Yunica, v1.6.x): the crest was in the inventory and
+# the altar simply would not react.
+#
+# Extended from slot_data by apply_slot_data() when the world ships stack_items.
+STACKABLE_ITEMS: set[str] = {"Roda Fruit", "Celcetan Panacea"}
+
 
 # --------------------------------------------------------------------------- #
 # Divine Blessings (SP-bought permanent upgrades) — array, mapped via Ghidra
