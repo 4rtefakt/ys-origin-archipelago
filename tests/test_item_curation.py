@@ -46,8 +46,14 @@ def test_artifacts_grant_their_skill():
     for art, skill in dt.SKILL_GRANTS.items():
         assert art in grants, f"{art} grants no skill"
         assert grants[art] == dt.item_index[skill], f"{art} -> wrong cell"
-    # the three powers are the known bracelet cells, and are distinct
-    assert sorted(grants.values()) == [0x74, 0x75, 0x76], sorted(grants.values())
+    # the three elemental powers are the known bracelet cells, plus the two
+    # MOBILITY pairings (Gold -> 0xA3 double-jump, Silver -> 0xB5 dash), whose
+    # companion cell is a bare g_flags index rather than an item of its own.
+    assert sorted(grants.values()) == [0x74, 0x75, 0x76, 0xA3, 0xB5], sorted(grants.values())
+    assert grants["Gold Bracelet"] == 0xA3
+    assert grants["Silver Bracelet"] == 0xB5
+    # all distinct: a shared cell would make one item silently light up another
+    assert len(set(grants.values())) == len(grants)
     # the artifacts themselves stay real items; the bracelets stay out of the pool
     for art, skill in dt.SKILL_GRANTS.items():
         assert art in dt.item_name_to_id, f"{art} must remain a real item"

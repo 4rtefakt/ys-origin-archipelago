@@ -1062,11 +1062,32 @@ SKILL_GRANTS: Dict[str, str] = {
 }
 
 
+# The mobility bracelets pair the same way, but their companion cell is a bare
+# g_flags index with no item name of its own, so it can't live in SKILL_GRANTS.
+#
+# Found by disassembling the vanilla chests: S_40/S_4002/S_BOX01 (Gold Bracelet)
+# sets 0x5B *and* 0xA3; S_20/S_2002/S_BOX01 (Silver Bracelet) sets 0x5A *and*
+# 0xB5. The item cell alone is only the inventory record — 0xA3 is what actually
+# turns double-jump on, confirmed live: the bracelet sat in Toal's inventory with
+# its "allows its wearer to double-jump" description and did nothing until 0xA3
+# was set, whereupon double-jump worked immediately.
+#
+# This also puts the companion cell in the suppress set, so a randomized bracelet
+# chest can no longer hand out the real mobility for free.
+ABILITY_GRANTS: Dict[str, int] = {
+    "Gold Bracelet": 0xA3,      # double-jump
+    "Silver Bracelet": 0xB5,    # high-speed run
+}
+
+
 def skill_grants() -> Dict[str, int]:
-    """artifact item name -> g_flags index of the power it unlocks. Published in
-    slot_data so receiving the artifact also lights up its skill."""
-    return {art: item_index[skill] for art, skill in SKILL_GRANTS.items()
-            if art in item_index and skill in item_index}
+    """item name -> g_flags index of the ability it unlocks. Published in
+    slot_data so receiving the item also lights up what it is FOR: the elemental
+    artifacts' castable power, and the bracelets' mobility."""
+    out = {art: item_index[skill] for art, skill in SKILL_GRANTS.items()
+           if art in item_index and skill in item_index}
+    out.update({nm: idx for nm, idx in ABILITY_GRANTS.items() if nm in item_index})
+    return out
 
 
 def suppress_item_indices(active, char: str = "hugo") -> List[int]:
