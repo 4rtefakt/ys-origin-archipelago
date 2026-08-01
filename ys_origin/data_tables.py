@@ -726,13 +726,58 @@ def _region_of_location(l: dict) -> str:
     return zone if zone in _present else MENU
 
 
-def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
+def locations_by_region(enabled: Set[str], char: str = "") -> Dict[str, List[str]]:
+    """Active locations grouped by region.
+
+    A location may declare ``char``: it then exists ONLY for that character. The
+    gear-upgrade blessings need this — "Strengthen <piece>" is detected in the
+    raval level array at the EQUIPPED PIECE's own item index, and the armor/boots
+    pieces are disjoint per character (Yunica 0x06-0x0B, Hugo 0x0C-0x11, Toal
+    0x12-0x17), so Toal can never fire Hugo's slots. Passing no char keeps every
+    variant, which is what the offline audits want.
+    """
     out: Dict[str, List[str]] = defaultdict(list)
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
+        if char and l.get("char") and l["char"] != char:
+            continue
         out[_region_of_location(l)].append(l["name"])
     return dict(out)
+
+
+# -- gear-upgrade blessings -------------------------------------------------- #
+# "Strengthen current armor / leggings" is not a one-shot bit like every other
+# blessing: it writes a LEVEL into the raval array at +0x36A654, indexed by the
+# equipped piece's own g_flags item index (live-confirmed: Riveted Leather 0x12
+# -> slot 18, Riveted Boots 0x2A -> slot 42). So every piece can be upgraded
+# once, and each one is its own check.
+#
+# The gate is simply owning that piece. The starting armor needs no gate; every
+# other piece is a pool item, or - with progressive_armor on - the Nth step of
+# the corresponding progressive ladder.
+def gear_upgrade_gates(char: str, progressive: bool) -> Dict[str, tuple]:
+    """location name -> (item_name, count) required to reach that upgrade.
+
+    count > 1 only for the progressive ladders. An empty dict entry value of
+    ``("", 0)`` means no gate (the character starts wearing it).
+    """
+    out: Dict[str, tuple] = {}
+    for l in _LOCS:
+        if l.get("char") != char or not l["id"].startswith("blessing/gear/"):
+            continue
+        piece = l["name"].split("Strengthen ", 1)[1]
+        kind = (PROGRESSIVE_BOOTS if piece in
+                GEAR_LADDERS.get(char, {}).get(PROGRESSIVE_BOOTS, [])
+                else PROGRESSIVE_ARMOR)
+        ladder = GEAR_LADDERS.get(char, {}).get(kind, [])
+        if piece not in ladder:
+            out[l["name"]] = ("", 0)          # starting gear: worn from turn one
+        elif progressive:
+            out[l["name"]] = (kind, ladder.index(piece) + 1)
+        else:
+            out[l["name"]] = (piece, 1)
+    return out
 
 
 # -- overlay tracker maps (published in slot_data) --------------------------- #

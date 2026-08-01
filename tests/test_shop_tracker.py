@@ -62,7 +62,7 @@ def test_floor_locations_map():
 
 def test_blessing_names_map():
     m = dt.blessing_location_names(ALL_ACTIVE, IDS)
-    assert len(m) == 25
+    assert len(m) == 54          # 24 bit blessings + 30 gear upgrades
     for k, v in m.items():
         assert k.isdigit(), k
         assert not v.startswith("Divine Blessing"), v      # short shop names
@@ -75,7 +75,9 @@ def test_blessing_bit_location_ids():
     # flag-method -> excluded,
     # it stays vanilla-menu-only)
     assert len(ids) == 24
-    armor = IDS["Divine Blessing: Strengthen current armor"]
+    # the gear upgrades are flag-method (raval level array), so the bit-shop
+    # must not list them — they stay vanilla-statue-only.
+    armor = IDS["Divine Blessing: Strengthen Leather Tunic"]
     assert armor not in ids
     assert ids == sorted(ids, key=lambda i: {v: k for k, v in IDS.items()}[i])
     # deterministic: same call, same order

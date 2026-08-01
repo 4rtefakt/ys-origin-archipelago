@@ -25,6 +25,7 @@ from .data_tables import (
     RODA_FRUIT,
     ROO_LOCATIONS,
     active_gates,
+    gear_upgrade_gates,
     char_name,
     character_req,
     edge_requirements,
@@ -89,6 +90,7 @@ def set_rules(world: "YsOriginWorld") -> None:
         _set_rules_forward(world)
     _set_blessing_price_rules(world)
     _set_roo_rules(world)
+    _set_gear_upgrade_rules(world)
 
 
 def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
@@ -135,6 +137,28 @@ def _set_roo_rules(world: "YsOriginWorld") -> None:
         except KeyError:
             continue
         world.set_rule(location, Has(RODA_FRUIT, i))
+
+
+def _set_gear_upgrade_rules(world: "YsOriginWorld") -> None:
+    """Gate "Strengthen <piece>" behind owning that piece.
+
+    The upgrade writes a level into the raval array at the EQUIPPED piece's own
+    item index, so the check simply cannot fire until you have the piece — and
+    without a rule fill would treat all ten as free sphere-1 slots. The starting
+    armor is worn from turn one and takes no gate. With progressive_armor on the
+    specific piece is not in the pool at all, so the gate becomes the Nth step of
+    that ladder instead.
+    """
+    progressive = bool(world.options.progressive_armor.value)
+    for loc_name, (item, count) in gear_upgrade_gates(
+            char_name(world.options), progressive).items():
+        if not item:
+            continue                      # starting gear: reachable immediately
+        try:
+            location = world.get_location(loc_name)
+        except KeyError:
+            continue                      # blessing category off for this seed
+        world.set_rule(location, Has(item, count) if count > 1 else Has(item))
 
 
 def _set_rules_forward(world: "YsOriginWorld") -> None:

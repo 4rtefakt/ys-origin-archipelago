@@ -133,6 +133,20 @@ class YsOriginWorld(World):
         acc_key = getattr(getattr(o, "accessibility", None), "current_key", None)
         self.lean_open_progression = self.open_mode and acc_key == "minimal"
 
+        # Items that GATE a gear-upgrade blessing ("Strengthen <piece>"): you
+        # cannot buy the upgrade until you own the piece. AP's Has() reads the
+        # progression counter, so anything naming a gate must be progression or
+        # the location is unreachable and generation fails under full
+        # accessibility. Same rule as Roda Fruit: the tier follows what the item
+        # unlocks. Empty when the blessing category is off.
+        self.gear_gate_items: set[str] = set()
+        if "blessing" in dt.enabled_categories(o):
+            self.gear_gate_items = {
+                item for item, _ in dt.gear_upgrade_gates(
+                    dt.char_name(o), bool(o.progressive_armor.value)).values()
+                if item
+            }
+
         # Player-supplied per-item classification overrides (advanced). Parsed
         # once here (invalid entries dropped + logged) and applied LAST in
         # create_item so they win over every built-in default.
@@ -169,6 +183,9 @@ class YsOriginWorld(World):
         # warp network makes those locations non-critical.
         elif name == dt.RODA_FRUIT and "event" in dt.enabled_categories(self.options):
             cls = ItemClassification.progression
+        # Gear that gates a "Strengthen <piece>" blessing — see gear_gate_items.
+        elif name in getattr(self, "gear_gate_items", ()):
+            cls = ItemClassification.progression
         # Lean-progression demotion (open mode, `minimal` accessibility): keep
         # only the genuinely win-critical progression — the goal medallion, the
         # warp unlocks (the reachability spine, promoted just above) and Cleria Ore
@@ -193,7 +210,8 @@ class YsOriginWorld(World):
         return self.random.choice(dt.FILLER_POOL)
 
     def _active_locations(self) -> dict[str, list[str]]:
-        return dt.locations_by_region(dt.enabled_categories(self.options))
+        return dt.locations_by_region(dt.enabled_categories(self.options),
+                                      dt.char_name(self.options))
 
     def _region_names(self) -> list[str]:
         """Regions this world will create (mode-dependent) — used to check that a
@@ -204,7 +222,10 @@ class YsOriginWorld(World):
 
     def create_items(self) -> None:
         enabled = dt.enabled_categories(self.options)
-        n_locations = sum(len(v) for v in dt.locations_by_region(enabled).values())
+        # MUST be the character-filtered set (same call create_regions makes):
+        # the gear-upgrade blessings exist per character, so counting all of
+        # them would seed 20 more items than there are locations to hold them.
+        n_locations = sum(len(v) for v in self._active_locations().values())
 
         # One real (vanilla) item per enabled chest/event location; pad the rest
         # (boss/floor/room sanity checks) with varied filler.

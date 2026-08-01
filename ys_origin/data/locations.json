@@ -1645,19 +1645,6 @@
   "items": []
  },
  {
-  "id": "blessing/armor",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing: Strengthen current armor",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36A684"
-  },
-  "items": []
- },
- {
   "id": "blessing/bit0",
   "type": "blessing",
   "zone": "Blessings",
@@ -4428,6 +4415,426 @@
   "detect": {
    "method": "flag",
    "offset": "0x36C044"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x06",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Leather Armor",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A66C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x07",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Ring Mail",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A670"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x08",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Half Plate",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A674"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x09",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Reflex",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A678"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x0B",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Silver Dress",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A680"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x1E",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Leather Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6CC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x1F",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Hard Leggings",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6D0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x20",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Leg Guards",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6D4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x22",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Battle Guards",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6DC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x23",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Silver Leggings",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6E0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0C",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Leather Tunic",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A684"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0D",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Ebony Robe",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A688"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0E",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Chain Cloak",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A68C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0F",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Elder Robe",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A690"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x11",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Cleria Garb",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A698"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x24",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Leather Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6E4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x25",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Ebony Shoes",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6E8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x26",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Shell Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6EC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x28",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Moon Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6F4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x29",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Dark Falcon",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6F8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x12",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Riveted Leather",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A69C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x13",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Black Chain",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6A0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x14",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Banded Mail",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6A4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x15",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Gothic Suit",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6A8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x17",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Brave Armor",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6B0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2A",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Riveted Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6FC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2B",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Black Leggings",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A700"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2C",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Banded Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A704"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2E",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Phantom Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A70C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2F",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Brave Guards",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A710"
   },
   "items": []
  }
