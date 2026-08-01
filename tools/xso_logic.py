@@ -45,11 +45,20 @@ OP_LOAD = 0x41      # reg = g_flags[op0]
 # bracelets, seeds, black pearl). Consumables/gear/gold are not gates.
 PROGRESSION: Set[int] = (
     set(range(0x4E, 0x54))                       # boss medallions
+    | {0x5A, 0x5B}                               # Silver/Gold Bracelet = dash / double-jump
     | {0x5C, 0x6F}                               # Red/Blue Moon Crest
     | {0x63, 0x64, 0x65, 0x66, 0x67, 0x6E}       # keys
     | {0x68, 0x69, 0x6A, 0x6B, 0x70}             # idols, black pearl, flabellum, falcon idol
     | {0x72, 0x73}                               # seeds
     | {0x74, 0x75, 0x76}                         # elemental bracelets
+    # Roda Fruit (0x57) is filler as an ITEM, but it is the currency the Roo
+    # trades take: each Roo NPC checks for one, consumes it, and hands back a
+    # reward. Those trades are real checks that the location set is missing
+    # entirely ("the Roo checks are not randomized" — v1.6.x playtest), and
+    # mining 0x57's *gates* is how you find them: a TALK* script that checks and
+    # consumes 0x57 without granting it IS a Roo. Keep it here even though it
+    # never gates a door.
+    | {0x57}
 )
 
 # Script-name patterns that are hub/debug flag dumps, not real gates.
