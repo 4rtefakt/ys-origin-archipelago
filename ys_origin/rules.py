@@ -85,6 +85,27 @@ def set_rules(world: "YsOriginWorld") -> None:
         _set_rules_open(world)
     else:
         _set_rules_forward(world)
+    _set_blessing_price_rules(world)
+
+
+def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
+    """Gate each blessing shop slot behind the tower depth its PRICE implies.
+
+    Without this, every shop slot is reachable in sphere 1 and the fill is free to
+    park a sphere-1 progression item behind a five-figure SP wall — the playtest
+    report was a 500k-SP slot holding one. The price ladder is rolled in
+    generate_early, so by the time rules are set each slot already knows which
+    zone medallion it should sit behind; requiring that medallion makes the slot
+    genuinely late-sphere and the fill routes early items elsewhere on its own.
+
+    Cheap slots get no rule at all, so the bottom of the shop stays open from 1F.
+    """
+    for loc_name, gate_item in getattr(world, "blessing_gates", {}).items():
+        try:
+            location = world.get_location(loc_name)
+        except KeyError:
+            continue        # category disabled for this world
+        world.set_rule(location, Has(gate_item))
 
 
 def _set_rules_forward(world: "YsOriginWorld") -> None:

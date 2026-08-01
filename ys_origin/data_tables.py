@@ -719,6 +719,15 @@ def blessing_location_names(active: Set[str], name_to_id: Dict[str, int]
     return out
 
 
+def blessing_bit_location_names(active: Set[str]) -> List[str]:
+    """Names of the ACTIVE bit-method blessing locations (the ones the shop can
+    sell), sorted for deterministic price rolls. The armor blessing (flag-method,
+    a different grant mechanism) is excluded — it stays vanilla-menu-only."""
+    return [l["name"] for l in sorted(_LOCS, key=lambda x: x["name"])
+            if l["type"] == "blessing" and l["name"] in active
+            and l.get("detect", {}).get("method") == "bit"]
+
+
 def blessing_bit_location_ids(active: Set[str], name_to_id: Dict[str, int]
                               ) -> List[int]:
     """AP location ids of the ACTIVE bit-method blessing locations (the 23 the
@@ -751,31 +760,66 @@ ITEM_GATE_FLOOR.update({
 })
 
 
-def weighted_blessing_cost(item_name: str, local: bool, advancement: bool,
-                           rng, cmin: int, cmax: int) -> int:
-    """SP price for one overlay-shop slot, weighted by the tower depth of the item
-    placed there so filler/early upgrades are cheap and late medallions/skills are
-    dear. Depth 0..1 -> price across [cmin, cmax] with a small deterministic jitter
-    (rounded to 10s). Foreign (multiworld) items: we only know importance, so
-    progression rides the high band, everything else the low-mid band."""
-    if local:
-        floor = ITEM_GATE_FLOOR.get(item_name)
-        cls = _item_class.get(item_name, "useful")
-        if floor is not None:
-            d = (floor - 2) / 23.0            # 2F -> 0.0 .. 25F -> 1.0
-        elif cls == "progression":
-            d = 0.70
-        elif cls == "filler":
-            d = 0.12
-        else:                                  # useful
-            d = 0.38
-    else:
-        d = 0.70 if advancement else 0.38
-    d = min(1.0, max(0.0, d))
-    span = cmax - cmin
-    cost = cmin + d * span + rng.uniform(-0.10, 0.10) * span
-    cost = min(cmax, max(cmin, cost))
-    return int(round(cost / 10.0)) * 10
+# -- blessing shop economy --------------------------------------------------- #
+#
+# Prices are a property of the SLOT, rolled before fill, not of the item that
+# lands in it. That ordering is the whole point: a price rolled in fill_slot_data
+# (after fill) cannot inform logic, which is how a 500k-SP slot ended up holding a
+# sphere-1 progression item in the v1.6.x playtest. A slot priced for the endgame
+# now carries an access rule for the depth that price implies, so AP's fill sees
+# it as a late-sphere location and never puts an early item there.
+#
+# The ladder is GEOMETRIC, not linear. Linear across a 100..100000 range makes the
+# midgame absurd (the halfway slot would cost 50k); geometric keeps the early
+# slots in the low hundreds and only ramps hard at the top:
+#   100, 178, 316, 562, 1000, 1778, 3162, 5623, 10000, ... 100000
+PRICE_ZONE_BANDS: List[Tuple[float, Optional[str]]] = [
+    # (fraction of the way up the ladder at which this band STARTS, zone whose
+    # gate the slot then requires). None = no requirement (affordable from 1F).
+    (0.00, None),
+    (0.38, "Flooded Prison"),
+    (0.52, "Flames of Guilt"),
+    (0.66, "Silent Sands"),
+    (0.80, "Corrupted Blood"),
+    (0.92, "Demonic Core"),
+]
+
+
+def blessing_price_ladder(n: int, cmin: int, cmax: int) -> List[int]:
+    """`n` prices spanning [cmin, cmax] on a geometric curve, cheapest first.
+
+    Rounded to something readable (10s low down, 100s / 1000s higher up) so the
+    shop shows prices a player would recognise rather than 5-digit noise.
+    """
+    if n <= 0:
+        return []
+    cmin = max(1, cmin)
+    cmax = max(cmin, cmax)
+    out: List[int] = []
+    for i in range(n):
+        d = 0.0 if n == 1 else i / (n - 1)
+        raw = cmin * ((cmax / cmin) ** d)
+        step = 10 if raw < 1000 else (100 if raw < 10000 else 1000)
+        out.append(max(cmin, int(round(raw / step)) * step))
+    return out
+
+
+def price_gate_item(rank: float) -> Optional[str]:
+    """Zone-gate item a slot at `rank` (0..1 up the price ladder) should require.
+
+    Returns None for the cheap band. This is what stops a 50k slot from being
+    reachable in sphere 1 — it is not a display concern, it is the logic rail the
+    playtest asked for ("early items for others shouldn't be behind a 100k
+    paywall, only late-game ones may get 50k+ prices").
+    """
+    gate: Optional[str] = None
+    for start, zone in PRICE_ZONE_BANDS:
+        if rank >= start:
+            gate = zone
+    # Only gate on a medallion that actually exists in this world's pool.
+    if gate is not None and ZONE_GATE.get(gate) in item_name_to_id:
+        return ZONE_GATE[gate]
+    return None
 
 
 # Detection methods the live client can actually observe today. A location whose
