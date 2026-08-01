@@ -132,6 +132,34 @@ def test_cleaned_chests_seed_filler():
         assert dt.location_vanilla_item(loc) == "", loc
 
 
+def test_suppressed_items_include_the_skill_power_cells():
+    """The elemental power cells must be suppressed, not just the artifacts.
+
+    The altar scripts set the artifact cell AND its bracelet cell in one go, but
+    only the artifact is a location's vanilla item. When the bracelet cells were
+    absent from suppress_items the mod let those stores through and the player
+    kept the vanilla element on top of whatever AP had placed there — the
+    "randomization of the elements is not working" playtest report.
+    """
+    all_locs = [l["name"] for l in dt._LOCS]
+    powers = set(dt.skill_grants().values())
+    assert powers, "artifacts must publish their skill grants"
+    for char in ALL_CHARS:
+        supp = set(dt.suppress_item_indices(all_locs, char))
+        missing = powers - supp
+        assert not missing, (
+            f"{char}: power cells not suppressed: "
+            f"{sorted(hex(m) for m in missing)}")
+        # and the artifacts themselves are still there
+        for art in dt.skill_grants():
+            assert dt.item_index[art] in supp, (char, art)
+
+
+def test_suppressed_items_track_active_locations():
+    # an empty world suppresses nothing (no vanilla grant to neutralize)
+    assert dt.suppress_item_indices([], "hugo") == []
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

@@ -827,6 +827,34 @@ def skill_grants() -> Dict[str, int]:
             if art in item_index and skill in item_index}
 
 
+def suppress_item_indices(active, char: str = "hugo") -> List[int]:
+    """g_flags indices the in-game mod must stop the vanilla scripts from setting.
+
+    Two groups, and missing the second one is what let the vanilla elements leak:
+
+      * the **vanilla content** of every active chest/event location — the player
+        gets the AP item over the network instead;
+      * the **companion power cells** those pickups also write. The elemental
+        altars set the artifact cell AND its bracelet cell (0x74/0x75/0x76) in a
+        single script, but only the artifact is a location's vanilla item, so the
+        power cell was never in the suppress set and the altar handed out the
+        real element for free on top of the AP item ("I got the wind element
+        vanilla but the spoiler log says it should be in the shop", v1.6.x).
+        ``SKILL_GRANTS`` is the artifact -> power mapping.
+    """
+    out: Set[int] = set()
+    for name in active:
+        vanilla = location_vanilla_item(name, char)
+        if not vanilla:
+            continue
+        if vanilla in item_index:
+            out.add(item_index[vanilla])
+        power = skill_grants().get(vanilla)
+        if power is not None:
+            out.add(power)
+    return sorted(out)
+
+
 def start_item_indices(names) -> List[int]:
     """g_flags indices for the named starting items (resolved via item_index).
     Unknown names are skipped (so a typo can't break generation); order preserved,
