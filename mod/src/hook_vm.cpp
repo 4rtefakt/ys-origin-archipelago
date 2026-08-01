@@ -29,9 +29,30 @@ extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
 extern bool g_statue_lock[0x200];// locked statue activation flags (suppress purify)
 
-static const uintptr_t kGrantStore = 0x00567D17;  // mov [eax], ecx
+// The two VM instructions that can write a g_flags item cell.
+//
+//   0x64 Flag_SetInt  handler @0x567CDC:  ... call FUN_005659e0 (&g_flags[idx])
+//                                          mov  [eax], ecx        <- kGrantStore
+//   0x67 Flag_AddInt  handler @0x567D78:  ... call FUN_005659e0 (&g_flags[idx])
+//                                          add  [esi], ecx        <- kGrantAdd
+//
+// (Both verified by raw disassembly of yso_win.exe; CleriaCore
+// EVENTVM_HANDLERS_2 §1 documents the shared slot accessor FUN_005659e0.)
+//
+// Only the 0x64 store used to be hooked, which left `+=` grants completely
+// invisible: the player got the AP item AND the vanilla one. That is not
+// hypothetical — disassembling all 2225 scripts of the XSO corpus finds 14
+// chests that grant with 0x67, and one of them is progression:
+//   S_COMMON\BOXCRERIA.XSO         -> 0x58 Cleria Ore     (weapon-upgrade tier!)
+//   6x S_*/S_BOX*.XSO              -> 0x57 Roda Fruit
+//   7x S_*/S_BOX*.XSO              -> 0x59 Celcetan Panacea
+// Their box/location flags are set with 0x64, so DETECTION always worked and
+// only the grant leaked — which is exactly how the bug presented in the wild.
+static const uintptr_t kGrantStore = 0x00567D17;  // mov [eax], ecx  (0x64)
+static const uintptr_t kGrantAdd   = 0x00567DB3;  // add [esi], ecx  (0x67)
 static const uintptr_t kGFlagsBase = 0x0076B91C;
 static void* g_orig = nullptr;
+static void* g_orig_add = nullptr;
 
 // Scratch sink for "suppress" (a grant redirected here never touches g_flags).
 static int g_sink = 0;
@@ -69,6 +90,7 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         // (no warp/heal/save) until its unlock item arrives. The statue CHECK is
         // detected by scene-method when locks are on, so nothing is lost here.
         mod_log("statue: suppressed purification of g_flags[0x%X] (locked)", idx);
+        g_sink = 0;    // the 0x67 add-form redirects here too; don't accumulate
         return &g_sink;
     }
     if (g_supp_item[idx] && val >= 1) {    // vanilla content of a randomized loc
@@ -79,6 +101,7 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         // the menu later (g_flags=1, consistent), outside this window.
         if (idx == 0x74 || idx == 0x75 || idx == 0x76)
             g_skill_suppress_until = GetTickCount() + 600;
+        g_sink = 0;    // the 0x67 add-form redirects here too; don't accumulate
         return &g_sink;                    // suppress (player gets the AP item)
     }
 
@@ -102,6 +125,47 @@ __declspec(naked) static void Hook_Grant() {
         pop  edx
         popfd
         jmp  dword ptr [g_orig]  // trampoline: mov [eax], ecx ; jmp 0x5664c9
+    }
+}
+
+// Same decision as DecideStore, for the `add [esi], ecx` form of the grant.
+// Returns 1 when the increment must not happen. Delegating keeps ONE copy of the
+// suppress/location/statue policy — DecideStore already reports a check, emits
+// the bridge line, and returns the sink for anything it wants stopped, so "did
+// it redirect?" is exactly "should this add be dropped?".
+extern "C" int __cdecl DecideAdd(int* addr, int val) {
+    return DecideStore(addr, val) != addr ? 1 : 0;
+}
+
+// Set by the stub below on the game's main thread (the only thread that runs the
+// event VM), consumed two instructions later — same single-threaded pattern as
+// the g_apply_art box hook.
+static int g_add_suppress = 0;
+
+// Naked splice at 0x567DB3 (pre-store). esi = &g_flags[idx], ecx = addend.
+//
+// A suppressed add zeroes ECX rather than redirecting ESI to the sink: ESI is
+// the handler's live slot pointer and the dispatch tail is reached by a JMP
+// straight after this instruction, so leaving ESI exactly as the game set it is
+// the change with no reachable side effects. `add [esi], 0` writes the cell's
+// own value back — a true no-op. Flags are clobbered by the cmp/xor, which is
+// safe because the very next instruction (the relocated ADD) redefines them.
+__declspec(naked) static void Hook_GrantAdd() {
+    __asm {
+        pushfd
+        pushad
+        push ecx                     // arg2: val (the addend)
+        push esi                     // arg1: addr
+        call DecideAdd
+        add  esp, 8
+        mov  g_add_suppress, eax
+        popad
+        popfd
+        cmp  dword ptr [g_add_suppress], 0
+        je   pass
+        xor  ecx, ecx                // suppressed -> add [esi], 0
+    pass:
+        jmp  dword ptr [g_orig_add]  // trampoline: add [esi],ecx ; jmp 0x5664c9
     }
 }
 
@@ -475,6 +539,11 @@ void hook_vm_install() {
     MH_Initialize();  // may already be initialized by the D3D9 hook (returns 9)
     MH_STATUS c = MH_CreateHook((void*)kGrantStore, (void*)&Hook_Grant, &g_orig);
     MH_STATUS e = MH_EnableHook((void*)kGrantStore);
+    // The `+=` form of the same grant (0x67 Flag_AddInt) — see kGrantAdd.
+    MH_STATUS ca = MH_CreateHook((void*)kGrantAdd, (void*)&Hook_GrantAdd, &g_orig_add);
+    MH_STATUS ea = MH_EnableHook((void*)kGrantAdd);
+    mod_log("hook_vm_install: 0x67 add-store @0x%X create=%d enable=%d",
+            (unsigned)kGrantAdd, (int)ca, (int)ea);
     MH_STATUS cg = MH_CreateHook((void*)kGiveItemFn, (void*)&Hook_GiveItemFn,
                                  &g_orig_give);
     MH_STATUS eg = MH_EnableHook((void*)kGiveItemFn);
