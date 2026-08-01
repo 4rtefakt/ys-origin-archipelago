@@ -710,6 +710,13 @@ static void apply_pending_recalc() {
 // `0x69 Flag_SubInt` are 0x57/0x58 (plus the two Moon Crests, consumed at their
 // altars). So exactly three item cells are counters; the rest are booleans.
 static const int kItemCellLo = 0x40, kItemCellHi = 0x76;
+// The three elemental skill-level cells (wind/fire/thunder). Counted 1..3, not
+// boolean — the gem chests bump them with `0x67 +=`. Outside the inventory band,
+// so enforce_item_cell_invariant never touches them.
+static bool is_counted_ability_cell(int idx) {
+    return idx == 0xB6 || idx == 0xB7 || idx == 0xB8;
+}
+
 static bool is_counted_item_cell(int idx) {
     return idx == 0x57      // Roda Fruit
         || idx == 0x58      // Cleria Ore (weapon-upgrade tiers)
@@ -1303,8 +1310,11 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             // alone leaves a dead skill slot.
             auto sk = g_skill_grants.find(name);
             if (sk != g_skill_grants.end()) {
-                // The power cell is a unique unlock, never a stack.
-                ap_give(sk->second, 1, /*stack=*/false);
+                // Most companion cells are a one-shot unlock (the elemental
+                // bracelets, the mobility bracelets). The three elemental SKILL
+                // LEVELS are not: they run 1..3 and the vanilla gem chests bump
+                // them with `0x67 +=`, so an Emerald/Ruby/Topaz has to add.
+                ap_give(sk->second, 1, /*stack=*/is_counted_ability_cell(sk->second));
                 remember_gear(sk->second, tier);
                 mod_log("ap: '%s' -> also unlocked skill g_flags[0x%X]",
                         name.c_str(), sk->second);

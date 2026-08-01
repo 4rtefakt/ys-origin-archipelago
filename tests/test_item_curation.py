@@ -49,7 +49,8 @@ def test_artifacts_grant_their_skill():
     # the three elemental powers are the known bracelet cells, plus the two
     # MOBILITY pairings (Gold -> 0xA3 double-jump, Silver -> 0xB5 dash), whose
     # companion cell is a bare g_flags index rather than an item of its own.
-    assert sorted(grants.values()) == [0x74, 0x75, 0x76, 0xA3, 0xB5], sorted(grants.values())
+    assert sorted(grants.values()) == [0x74, 0x75, 0x76, 0xA3, 0xB5,
+                                       0xB6, 0xB7, 0xB8], sorted(grants.values())
     assert grants["Gold Bracelet"] == 0xA3
     assert grants["Silver Bracelet"] == 0xB5
     # all distinct: a shared cell would make one item silently light up another
@@ -163,12 +164,19 @@ def test_class_overrides_empty_and_none():
 
 
 def test_cleaned_chests_seed_filler():
-    # the chests whose only content was a hex placeholder / gold now have no
-    # vanilla item -> the pool pads them with filler instead.
-    for loc in ("Wailing Blue: 4F Forward Passage 3",
-                "Flames of Guilt: Lava Rods",
-                "Corrupted Blood: Toal's Room"):
+    # the chests whose only content was dead gold now have no vanilla item ->
+    # the pool pads them with filler instead.
+    #
+    # NOTE: two chests were removed from this list. 0x80/0x81/0x82 looked like
+    # hex placeholders because INVINFO has no name for them, but they are the
+    # real elemental upgrade gems (Emerald/Ruby/Topaz) and cleaning them left
+    # eight chests with no vanilla item to suppress — so the chest handed out
+    # the skill upgrade on top of the AP item. Seen live on the 4F Emerald.
+    for loc in ("Corrupted Blood: Toal's Room",):
         assert dt.location_vanilla_item(loc) == "", loc
+    for loc, gem in (("Wailing Blue: 4F Forward Passage 3", "Emerald"),
+                     ("Flames of Guilt: Lava Rods", "Topaz")):
+        assert dt.location_vanilla_item(loc) == gem, loc
 
 
 def test_suppressed_items_include_the_skill_power_cells():

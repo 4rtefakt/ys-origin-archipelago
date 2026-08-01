@@ -1077,7 +1077,22 @@ SKILL_GRANTS: Dict[str, str] = {
 ABILITY_GRANTS: Dict[str, int] = {
     "Gold Bracelet": 0xA3,      # double-jump
     "Silver Bracelet": 0xB5,    # high-speed run
+    # The elemental upgrade gems. Same shape, except their companion cell is a
+    # LEVEL (1..3), bumped with `0x67 +=` rather than set — see COUNTED_ABILITY
+    # cells below. INVINFO has no name for 0x80/0x81/0x82, which is why the
+    # catalog dropped them as junk "hex placeholder" items and their eight chests
+    # were left with an empty vanilla-item list; the chest then handed out the
+    # real skill upgrade on top of the AP item (seen live on the 4F Emerald).
+    # Names from the guide: Emerald powers Wind, Ruby Fire, Topaz Thunder.
+    "Emerald": 0xB6,            # wind skill level
+    "Ruby": 0xB7,               # fire skill level
+    "Topaz": 0xB8,              # thunder skill level
 }
+
+# Ability cells that are COUNTED, not boolean: the three elemental skill levels
+# cap at 3 and the chests bump them with `0x67 +=`. Everything else in
+# ABILITY_GRANTS / SKILL_GRANTS is a one-shot unlock.
+COUNTED_ABILITY_CELLS: Set[int] = {0xB6, 0xB7, 0xB8}
 
 
 def skill_grants() -> Dict[str, int]:

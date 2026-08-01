@@ -91,7 +91,13 @@
    "method": "flag",
    "offset": "0x36C038"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x80",
+    "name": "Emerald",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_1010/S_BOX01",
@@ -291,7 +297,13 @@
    "method": "flag",
    "offset": "0x36BE3C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x80",
+    "name": "Emerald",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_2008/S_BOX01",
@@ -480,7 +492,13 @@
    "method": "flag",
    "offset": "0x36BEAC"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x81",
+    "name": "Ruby",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_3008/S_BOX01",
@@ -493,7 +511,13 @@
    "method": "flag",
    "offset": "0x36BEB4"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x82",
+    "name": "Topaz",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_3010/S_BOX01",
@@ -654,7 +678,13 @@
    "method": "flag",
    "offset": "0x36BF24"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x82",
+    "name": "Topaz",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_4003/S_BOX01",
@@ -771,7 +801,13 @@
    "method": "flag",
    "offset": "0x36BF5C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x80",
+    "name": "Emerald",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_4006/S_BOX03",
@@ -924,7 +960,13 @@
    "method": "flag",
    "offset": "0x36BFA0"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x81",
+    "name": "Ruby",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_5007/S_BOX01",
@@ -1009,7 +1051,13 @@
    "method": "flag",
    "offset": "0x36C03C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x82",
+    "name": "Topaz",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_5080/S_BOX01",
