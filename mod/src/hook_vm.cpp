@@ -198,6 +198,7 @@ __declspec(naked) static void Hook_GrantAdd() {
 // — keeps running vanilla even though two of those rungs collide with real
 // blessing prices, which a price-keyed hook would otherwise have re-priced.
 extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
+extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
 
 static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
 static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
@@ -210,6 +211,7 @@ static void* g_orig_blessmenu = nullptr;
 // Scratch the menu hook points the push at. Main-thread only (the event VM), so
 // a single slot is enough — same assumption as the box-relabel hook above.
 static int g_bless_menu_price = 0;
+static int g_bless_vanilla = 0;
 
 // 0x61 affordability. Spliced ON the operand-accessor call, where the flag index
 // and base are already pushed: [esp] = 0x76b91c, [esp+4] = index. EDI holds op2,
@@ -255,15 +257,26 @@ __declspec(naked) static void Hook_BlessSub() {
 // Point eax at our scratch instead of writing through it — [eax] is the script's
 // own operand table and a write there would persist for the rest of the run.
 // Clobbering eax is free: the very next instruction (0x56A186) reloads it.
+// Also RELABELS the row. By this instruction the script's own label has already
+// been copied into the handler's buffer at [ebp-0x3F8] (the strcpy loop at
+// 0x56A162) and the formatted price has not been appended yet, so overwriting
+// the buffer here swaps the name and still gets " - [SP:]nnn" added after it.
+// EBP is the handler's frame and untouched by pushfd/pushad, so it is valid.
 __declspec(naked) static void Hook_BlessMenu() {
     __asm {
         pushfd
         pushad
         mov  eax, [eax]                 // the vanilla price operand
+        mov  g_bless_vanilla, eax       // keep it: it keys BOTH substitutions
         push eax
         call ap_substitute_bless_price
         add  esp, 4
         mov  g_bless_menu_price, eax
+        lea  eax, [ebp - 0x3F8]         // the label buffer the script filled
+        push g_bless_vanilla
+        push eax
+        call ap_bless_relabel           // no-op for rows we don't recognise
+        add  esp, 8
         popad
         popfd
         lea  eax, g_bless_menu_price    // push [eax] now reads our price

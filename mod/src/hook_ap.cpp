@@ -276,6 +276,11 @@ struct BlessShopItem { int64_t loc; std::string name; int bit; int cost; };
 static std::mutex g_bless_price_mtx;
 static std::map<int, int> g_bless_price_map;
 
+// vanilla SP price -> the AP location that slot really is, so the menu row can
+// be RELABELLED with what the seed actually placed there instead of the vanilla
+// blessing's own name. Same key and same guarantee as g_bless_price_map.
+static std::map<int, int64_t> g_bless_price_to_loc;
+
 extern "C" int ap_substitute_bless_price(int vanilla) {
     std::lock_guard<std::mutex> lk(g_bless_price_mtx);
     auto it = g_bless_price_map.find(vanilla);
@@ -784,6 +789,48 @@ static void enforce_item_cell_invariant() {
 }
 
 
+// Rewrite a vanilla statue-menu row to show what the seed placed there.
+//
+// Called from the 0xdd menu hook at the moment the price is fetched: the label
+// the script supplied has already been copied into the handler's buffer, and the
+// formatted price has not been appended yet, so overwriting the buffer here
+// replaces the name and still gets " - [SP:]nnn" tacked on after it.
+//
+// Falls back to the vanilla label (writes nothing) for any row we don't
+// recognise — including the armor/leggings upgrades, whose price is not in the
+// map because they run on the game's own cost ladder.
+//
+// `buf` is the handler's on-stack label buffer; the price string lands 0x12C
+// bytes further up, so the cap is what keeps the two from colliding.
+extern "C" void ap_bless_relabel(char* buf, int vanilla) {
+    if (!buf) return;
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        auto it = g_bless_price_to_loc.find(vanilla);
+        if (it == g_bless_price_to_loc.end()) return;
+        loc = it->second;
+    }
+    std::string found;
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f == g_loc_found.end()) return;      // not scouted (yet) — keep vanilla
+        found = f->second;
+    }
+    if (found.empty()) return;
+    // g_loc_found is "Item  -> Owner"; the row is narrow, so keep the item and
+    // drop the owner unless it is someone else's.
+    size_t arrow = found.find("  -> ");
+    if (arrow != std::string::npos) {
+        std::string item = found.substr(0, arrow);
+        std::string who = found.substr(arrow + 5);
+        found = (who == g_slot) ? item : (item + " (" + who + ")");
+    }
+    if (found.size() > 180) found.resize(180);
+    memcpy(buf, found.c_str(), found.size() + 1);
+}
+
 // -- owned-gear reconcile ---------------------------------------------------- #
 // Granted items live in g_flags, but the game rebuilds that block on every save
 // load — and a DeathLink death reloads constantly. Any item granted since the
@@ -1084,6 +1131,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
     {
         std::lock_guard<std::mutex> lk(g_bless_price_mtx);
         g_bless_price_map.clear();
+        g_bless_price_to_loc.clear();
         if (sd.contains("blessing_vanilla_price_map")) {
             for (auto& kv : sd["blessing_vanilla_price_map"].items()) {
                 int vanilla = atoi(kv.key().c_str());
@@ -1092,6 +1140,12 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     g_bless_price_map[vanilla] = repriced;
             }
         }
+        // Which location each vanilla price belongs to, for the row relabel.
+        // g_shop_items carries (loc, cost) at the SEED's price, so match on that.
+        for (const auto& it : g_shop_items)
+            for (const auto& pm : g_bless_price_map)
+                if (pm.second == it.cost)
+                    g_bless_price_to_loc[pm.first] = it.loc;
         mod_log("ap: vanilla statue menu re-pricing: %d prices mapped",
                 (int)g_bless_price_map.size());
     }
