@@ -620,9 +620,28 @@ typedef HANDLE (WINAPI* CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUT
 static CreateFileW_t g_orig_cfw = nullptr;
 static CreateFileA_t g_orig_cfa = nullptr;
 
+// The exact set the game can open, read out of the movie path tables at
+// 0x6a05b0..0x6a0650 (one table per language, 8 entries each, indexed by the
+// media object's +0x294):
+//
+//   0  release\<lang>_pro.avi   prologue — en_/fr_/de_/sp_/it_ prefixed!
+//   1  release\yso_op.avi       opening
+//   2  release\yso_ins01.dat    insert movies
+//   3  release\yso_ins02.dat
+//   4  release\yso_ins03.dat
+//   5  release\yso_logo.avi     Falcom logo
+//   6  release\yso_ed01.dat     ENDING — never block (goal detection)
+//   7  release\yso_ed02.dat     ENDING — never block
+//
+// The prologue was missed: the filter looked for "yso_pro", but the game asks
+// for "en_pro.avi" (or the local-language equivalent), which never matches.
+// yso_ins04 is deliberately absent — it is font data, not a movie (8 MB, with a
+// .fot sibling), and blocking it would break text.
 static bool is_intro_movie(const char* low) {
-    return strstr(low, "yso_logo") || strstr(low, "yso_op") || strstr(low, "yso_pro")
-        || strstr(low, "yso_ins01") || strstr(low, "yso_ins02") || strstr(low, "yso_ins03");
+    return strstr(low, "yso_logo") || strstr(low, "yso_op")
+        || strstr(low, "yso_ins01") || strstr(low, "yso_ins02")
+        || strstr(low, "yso_ins03")
+        || strstr(low, "_pro.avi");     // en_/fr_/de_/sp_/it_/yso_ prologue
 }
 static bool blocked_a(const char* p) {
     if (!p) return false;
@@ -640,12 +659,18 @@ static bool blocked_w(const wchar_t* p) {
 }
 static HANDLE WINAPI Hook_CreateFileW(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
                                       DWORD c, DWORD f, HANDLE t) {
-    if (blocked_w(n)) { SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE; }
+    if (blocked_w(n)) {
+        mod_log("movie: blocked (W) — reported not-found");
+        SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE;
+    }
     return g_orig_cfw(n, a, s, sa, c, f, t);
 }
 static HANDLE WINAPI Hook_CreateFileA(LPCSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
                                       DWORD c, DWORD f, HANDLE t) {
-    if (blocked_a(n)) { SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE; }
+    if (blocked_a(n)) {
+        mod_log("movie: blocked (A) '%s' — reported not-found", n);
+        SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE;
+    }
     return g_orig_cfa(n, a, s, sa, c, f, t);
 }
 
@@ -688,6 +713,8 @@ void hook_vm_install() {
     // Intro-movie skip: report the opening AVIs as not-found.
     if (HMODULE k = GetModuleHandleA("kernel32.dll")) {
         void* cfw = (void*)GetProcAddress(k, "CreateFileW");
+        mod_log("hook_vm_install: CreateFileW=%p CreateFileA=%p (kernel32)",
+                cfw, (void*)GetProcAddress(k, "CreateFileA"));
         void* cfa = (void*)GetProcAddress(k, "CreateFileA");
         if (cfw) { MH_CreateHook(cfw, (void*)&Hook_CreateFileW, (void**)&g_orig_cfw); MH_EnableHook(cfw); }
         if (cfa) { MH_CreateHook(cfa, (void*)&Hook_CreateFileA, (void**)&g_orig_cfa); MH_EnableHook(cfa); }
