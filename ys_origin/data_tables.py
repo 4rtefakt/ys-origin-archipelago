@@ -773,15 +773,30 @@ ITEM_GATE_FLOOR.update({
 # midgame absurd (the halfway slot would cost 50k); geometric keeps the early
 # slots in the low hundreds and only ramps hard at the top:
 #   100, 178, 316, 562, 1000, 1778, 3162, 5623, 10000, ... 100000
-PRICE_ZONE_BANDS: List[Tuple[float, Optional[str]]] = [
-    # (fraction of the way up the ladder at which this band STARTS, zone whose
-    # gate the slot then requires). None = no requirement (affordable from 1F).
+# The gate is a REACHABLE TOWER DEPTH, not a boss medallion.
+#
+# Medallions look like a depth proxy but are not one: with statue warps on
+# (``random_start``) the whole tower is traversable without them — ``_set_rules_open``
+# deliberately drops the medallion backbone and gates the warp hub on statue
+# unlocks + Cleria Ore + a floor anchor instead, so only the final medallion is
+# actually forced. A medallion gate would therefore lock a player who has warped
+# to 22F out of a shop slot they can trivially afford.
+#
+# Reachability of a floor anchor region is the real thing we mean, and it is
+# correct in BOTH graph modes: in linear mode you reach floor N by climbing, in
+# open mode by climbing or warping. Same primitive the warp network already uses
+# (``warp_skip_anchor`` / ``_FLOOR_ANCHOR``).
+PRICE_FLOOR_BANDS: List[Tuple[float, Optional[int]]] = [
+    # (fraction of the way up the price ladder at which this band STARTS,
+    #  tower floor the player must be able to reach). None = no requirement.
     (0.00, None),
-    (0.38, "Flooded Prison"),
-    (0.52, "Flames of Guilt"),
-    (0.66, "Silent Sands"),
-    (0.80, "Corrupted Blood"),
-    (0.92, "Demonic Core"),
+    (0.38, 6),      # Flooded Prison
+    (0.52, 10),     # Flames of Guilt
+    (0.66, 14),     # Silent Sands
+    (0.80, 19),     # Corrupted Blood — 19, not 18: floor 18's anchor is
+                    # S_4104 Rado Tower, which is labelled 18F but sits in
+                    # Silent Sands, so it would gate a whole zone too shallow.
+    (0.92, 22),     # Demonic Core
 ]
 
 
@@ -804,21 +819,31 @@ def blessing_price_ladder(n: int, cmin: int, cmax: int) -> List[int]:
     return out
 
 
-def price_gate_item(rank: float) -> Optional[str]:
-    """Zone-gate item a slot at `rank` (0..1 up the price ladder) should require.
-
-    Returns None for the cheap band. This is what stops a 50k slot from being
-    reachable in sphere 1 — it is not a display concern, it is the logic rail the
-    playtest asked for ("early items for others shouldn't be behind a 100k
-    paywall, only late-game ones may get 50k+ prices").
-    """
-    gate: Optional[str] = None
-    for start, zone in PRICE_ZONE_BANDS:
+def price_gate_floor(rank: float) -> Optional[int]:
+    """Tower floor a slot at `rank` (0..1 up the price ladder) should require."""
+    floor: Optional[int] = None
+    for start, fl in PRICE_FLOOR_BANDS:
         if rank >= start:
-            gate = zone
-    # Only gate on a medallion that actually exists in this world's pool.
-    if gate is not None and ZONE_GATE.get(gate) in item_name_to_id:
-        return ZONE_GATE[gate]
+            floor = fl
+    return floor
+
+
+def price_gate_region(rank: float) -> Optional[str]:
+    """Region a slot at `rank` must be able to reach before it is in logic.
+
+    None for the cheap band. This is the rail that stops the fill parking a
+    sphere-1 progression item behind a five-figure SP wall, and — unlike a
+    medallion gate — it tracks how deep the player can actually get, warps
+    included.
+    """
+    fl = price_gate_floor(rank)
+    if not fl:
+        return None
+    # Snap to the deepest anchored floor at or below the target, so a band whose
+    # exact floor has no scene of its own still gates on something real.
+    for f in range(fl, 1, -1):
+        if f in _FLOOR_ANCHOR:
+            return _FLOOR_ANCHOR[f]
     return None
 
 

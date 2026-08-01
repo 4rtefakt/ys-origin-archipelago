@@ -93,19 +93,25 @@ def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
 
     Without this, every shop slot is reachable in sphere 1 and the fill is free to
     park a sphere-1 progression item behind a five-figure SP wall — the playtest
-    report was a 500k-SP slot holding one. The price ladder is rolled in
-    generate_early, so by the time rules are set each slot already knows which
-    zone medallion it should sit behind; requiring that medallion makes the slot
-    genuinely late-sphere and the fill routes early items elsewhere on its own.
+    report was a 500k-SP slot holding one.
+
+    The gate is REACHABILITY OF A FLOOR, not possession of a boss medallion.
+    Medallions look like a depth proxy but aren't one: with statue warps on, the
+    tower is traversable without them (_set_rules_open drops the medallion
+    backbone entirely and gates the hub on statue unlocks + Cleria Ore + a floor
+    anchor), so only the final medallion is really forced. Gating on a medallion
+    would lock a player who warped to 22F out of a slot they can trivially
+    afford. Reaching the floor anchor is the thing we actually mean, and it is
+    correct in both graph modes because reachability already includes the warps.
 
     Cheap slots get no rule at all, so the bottom of the shop stays open from 1F.
     """
-    for loc_name, gate_item in getattr(world, "blessing_gates", {}).items():
+    for loc_name, anchor_region in getattr(world, "blessing_gates", {}).items():
         try:
             location = world.get_location(loc_name)
         except KeyError:
             continue        # category disabled for this world
-        world.set_rule(location, Has(gate_item))
+        world.set_rule(location, CanReachRegion(anchor_region))
 
 
 def _set_rules_forward(world: "YsOriginWorld") -> None:

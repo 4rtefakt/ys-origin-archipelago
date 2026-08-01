@@ -101,7 +101,7 @@ def test_blessing_price_ladder_shape():
 
 
 def test_expensive_blessing_slots_are_gated():
-    """Every slot priced for the endgame must carry a zone-gate requirement.
+    """Every slot priced for the endgame must require reaching real tower depth.
 
     This is the rail that stops the fill parking a sphere-1 progression item
     behind a five-figure SP wall (the playtest saw a 500k slot holding one).
@@ -110,14 +110,50 @@ def test_expensive_blessing_slots_are_gated():
     lad = dt.blessing_price_ladder(n, 100, 100_000)
     for i, price in enumerate(lad):
         rank = i / (n - 1)
-        gate = dt.price_gate_item(rank)
+        floor = dt.price_gate_floor(rank)
         if price >= 10_000:
-            assert gate is not None, f"{price} SP slot has no logic gate"
+            assert floor, f"{price} SP slot has no depth gate"
         if price >= 50_000:
-            # deep-tower medallions only
-            assert gate in ("Creeper Medallion", "Mantid Medallion"), (price, gate)
+            assert floor and floor >= 19, (price, floor)
     # the cheapest slot is always free to reach
-    assert dt.price_gate_item(0.0) is None
+    assert dt.price_gate_floor(0.0) is None
+    assert dt.price_gate_region(0.0) is None
+
+
+def test_price_gate_is_depth_not_medallion():
+    """The gate must be a reachable REGION, never an item.
+
+    Medallions are not a depth proxy: with statue warps on, _set_rules_open drops
+    the medallion backbone and the tower is traversable without them, so a
+    medallion gate would lock a warped-ahead player out of a slot they can
+    trivially afford. Regressing to an item gate would silently reintroduce that.
+    """
+    assert not hasattr(dt, "price_gate_item"), \
+        "price_gate_item is the old medallion gate; use price_gate_region"
+    n = len(dt.blessing_bit_location_names({l["name"] for l in dt._LOCS}))
+    seen = []
+    for i in range(n):
+        reg = dt.price_gate_region(i / (n - 1))
+        if reg:
+            seen.append(reg)
+            # a region, not an item name
+            assert ":" in reg and reg.startswith("S_"), reg
+    assert seen, "no slot is gated at all"
+    # bands must get strictly deeper as price rises (never step backwards)
+    floors = [dt.price_gate_floor(i / (n - 1)) or 0 for i in range(n)]
+    assert floors == sorted(floors), floors
+
+
+def test_gate_regions_exist_in_both_graph_modes():
+    """A rule naming a region the world never creates fails generation."""
+    linear = set(dt.ALL_REGIONS)
+    open_regions = set(dt.open_regions())
+    n = len(dt.blessing_bit_location_names({l["name"] for l in dt._LOCS}))
+    for i in range(n):
+        reg = dt.price_gate_region(i / (n - 1))
+        if reg:
+            assert reg in linear, f"{reg} missing from linear-mode ALL_REGIONS"
+            assert reg in open_regions, f"{reg} missing from open-mode regions"
 
 
 def _run_all() -> int:
