@@ -22,6 +22,8 @@ from .data_tables import (
     CLERIA_ORE,
     CONNECTIONS,
     GOAL_ITEM,
+    RODA_FRUIT,
+    ROO_LOCATIONS,
     active_gates,
     char_name,
     character_req,
@@ -86,6 +88,7 @@ def set_rules(world: "YsOriginWorld") -> None:
     else:
         _set_rules_forward(world)
     _set_blessing_price_rules(world)
+    _set_roo_rules(world)
 
 
 def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
@@ -112,6 +115,26 @@ def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
         except KeyError:
             continue        # category disabled for this world
         world.set_rule(location, CanReachRegion(anchor_region))
+
+
+def _set_roo_rules(world: "YsOriginWorld") -> None:
+    """Gate each Roo trade behind the Roda Fruits it costs.
+
+    Every Roo consumes ONE fruit (`0x69 Flag_SubInt` on 0x57 in its AGERU script)
+    and vanilla stocks exactly six fruits for six Roos, so the supply is exact.
+    The fruits are interchangeable and the player picks the order, so the correct
+    encoding is by COUNT: the k-th Roo location requires k fruits. Without this,
+    fill would treat the Roos as free sphere-1 locations and could strand
+    progression behind fruits the player has no reason to have collected.
+
+    Skipped silently when the `event` category is off for this seed.
+    """
+    for i, loc_name in enumerate(ROO_LOCATIONS, start=1):
+        try:
+            location = world.get_location(loc_name)
+        except KeyError:
+            continue
+        world.set_rule(location, Has(RODA_FRUIT, i))
 
 
 def _set_rules_forward(world: "YsOriginWorld") -> None:

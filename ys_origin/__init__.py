@@ -158,6 +158,17 @@ class YsOriginWorld(World):
         # (it's merely "useful" convenience in normal, on-foot seeds).
         elif getattr(self, "open_mode", False) and name in dt.STATUE_UNLOCKS:
             cls = ItemClassification.progression
+        # Roda Fruit takes the tier of what it unlocks. It is flavour filler on
+        # its own, but each fruit BUYS a Roo trade (one consumed per trade, six
+        # fruits for six Roos — see _set_roo_rules), so when the Roo checks are
+        # active it gates real locations and has to be progression or fill may
+        # strand advancement behind fruits it thinks are worthless. With the
+        # event category off there are no Roo locations, nothing is gated, and it
+        # stays filler. The lean-progression demotion below then applies to it
+        # like any other gate item, so it drops back to useful exactly when the
+        # warp network makes those locations non-critical.
+        elif name == dt.RODA_FRUIT and "event" in dt.enabled_categories(self.options):
+            cls = ItemClassification.progression
         # Lean-progression demotion (open mode, `minimal` accessibility): keep
         # only the genuinely win-critical progression — the goal medallion, the
         # warp unlocks (the reachability spine, promoted just above) and Cleria Ore

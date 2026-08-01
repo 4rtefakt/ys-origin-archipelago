@@ -4332,5 +4332,89 @@
     "class": "progression"
    }
   ]
+ },
+ {
+  "id": "S_1014/AGERU/0x138",
+  "type": "event",
+  "zone": "Wailing Blue",
+  "floor": "",
+  "room": "4F Forward Room",
+  "name": "Wailing Blue: 4F Forward Room — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BDFC"
+  },
+  "items": []
+ },
+ {
+  "id": "S_2011/AGERU/0x153",
+  "type": "event",
+  "zone": "Flooded Prison",
+  "floor": "",
+  "room": "8F Path 2",
+  "name": "Flooded Prison: 8F Path 2 — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BE68"
+  },
+  "items": []
+ },
+ {
+  "id": "S_3104/AGERU/0x16A",
+  "type": "event",
+  "zone": "Flames of Guilt",
+  "floor": "",
+  "room": "Roo Start",
+  "name": "Flames of Guilt: Roo Start — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BEC4"
+  },
+  "items": [
+   {
+    "id": "0x60",
+    "name": "Hammer",
+    "class": "filler"
+   }
+  ]
+ },
+ {
+  "id": "S_4004/AGERU/0x184",
+  "type": "event",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Roo End",
+  "name": "Silent Sands: Roo End — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BF2C"
+  },
+  "items": []
+ },
+ {
+  "id": "S_5100/AGERU/0x19E",
+  "type": "event",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Outer Corridor 1",
+  "name": "Corrupted Blood: Outer Corridor 1 — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BF94"
+  },
+  "items": []
+ },
+ {
+  "id": "S_6009/AGERU/0x1CA",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "",
+  "room": "22F Mirror Path",
+  "name": "Demonic Core: 22F Mirror Path — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36C044"
+  },
+  "items": []
  }
 ]

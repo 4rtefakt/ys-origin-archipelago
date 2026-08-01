@@ -518,6 +518,36 @@ def weapon_value_for_level(level: int) -> int:
 
 CLERIA_ORE = "Cleria Ore"
 
+# -- Roo trades -------------------------------------------------------------- #
+# The sacred animals: each takes ONE Roda Fruit and gives something back. Six of
+# them, and vanilla has exactly six Roda Fruit chests — so the fruits are a
+# consumable KEY, not filler, and the pool must never be short.
+#
+# Found by disassembling the XSO corpus: the trade scripts are `AGERU.XSO`
+# ("あげる", to give) and the `TALKRUU_*` per-character variants — NOT the `TALK*`
+# pattern the chest catalog keys on, which is why they were missing from
+# locations.json entirely and the trades still ran vanilla with no check firing.
+# Each sets its own flag when fed, which is the location's detect offset.
+#
+# What they give in vanilla is mostly NOT an item: five hand out a conversation
+# Topic (`0x93 SetTopicKnownIndex`), and S_3104 varies by character (Hammer 0x60
+# on the generic/Hugo path, a Topic for Toal, a BGM unlock for Yunica). Only the
+# Hammer is poolable, so it is the only one carrying a vanilla item; the other
+# five contribute a filler slot instead, which create_items already pads.
+RODA_FRUIT = "Roda Fruit"
+
+# In feed order. The Nth Roo the player trades at needs N fruits banked, whatever
+# order they visit them in — the fruits are interchangeable and consumed one per
+# trade, so "the k-th of these locations requires k fruits" is the exact rule.
+ROO_LOCATIONS: List[str] = [
+    "Wailing Blue: 4F Forward Room — Roo Trade",
+    "Flooded Prison: 8F Path 2 — Roo Trade",
+    "Flames of Guilt: Roo Start — Roo Trade",
+    "Silent Sands: Roo End — Roo Trade",
+    "Corrupted Blood: Outer Corridor 1 — Roo Trade",
+    "Demonic Core: 22F Mirror Path — Roo Trade",
+]
+
 # Cleria Ore (= weapon-upgrade) count required to ENTER each zone, per the
 # weapon_requirements option: (casual, strict). 5 ore exist (one per zone in
 # vanilla), so a normal climb hands you up to 4 before the final zone. Gating on
