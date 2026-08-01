@@ -81,6 +81,45 @@ def test_blessing_bit_location_ids():
     assert ids == dt.blessing_bit_location_ids(ALL_ACTIVE, IDS)
 
 
+def test_blessing_price_ladder_shape():
+    """Cheap early, steep only at the end, and never below the floor.
+
+    A LINEAR ladder over the default 100..100,000 range would put the midpoint at
+    ~50k, which is exactly the "grind 30k SP on Floor 4" complaint. The geometric
+    curve has to keep the bottom of the shop in the low hundreds.
+    """
+    n = len(dt.blessing_bit_location_names({l["name"] for l in dt._LOCS}))
+    assert n >= 10, n
+    lad = dt.blessing_price_ladder(n, 100, 100_000)
+    assert len(lad) == n
+    assert lad == sorted(lad), "ladder must be cheapest-first"
+    assert lad[0] == 100 and lad[-1] == 100_000
+    # the cheapest third stays affordable for an early-tower player
+    assert lad[n // 3] <= 1500, lad[:n // 3 + 1]
+    # and the midpoint is nowhere near half the maximum (that would be linear)
+    assert lad[n // 2] < 10_000, lad[n // 2]
+
+
+def test_expensive_blessing_slots_are_gated():
+    """Every slot priced for the endgame must carry a zone-gate requirement.
+
+    This is the rail that stops the fill parking a sphere-1 progression item
+    behind a five-figure SP wall (the playtest saw a 500k slot holding one).
+    """
+    n = len(dt.blessing_bit_location_names({l["name"] for l in dt._LOCS}))
+    lad = dt.blessing_price_ladder(n, 100, 100_000)
+    for i, price in enumerate(lad):
+        rank = i / (n - 1)
+        gate = dt.price_gate_item(rank)
+        if price >= 10_000:
+            assert gate is not None, f"{price} SP slot has no logic gate"
+        if price >= 50_000:
+            # deep-tower medallions only
+            assert gate in ("Creeper Medallion", "Mantid Medallion"), (price, gate)
+    # the cheapest slot is always free to reach
+    assert dt.price_gate_item(0.0) is None
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

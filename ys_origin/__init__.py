@@ -94,6 +94,15 @@ class YsOriginWorld(World):
         else:
             self.start_statue_scene = 0             # locks off: no forced start
 
+        # Blessing shop prices, rolled HERE (pre-fill) so set_rules can gate an
+        # expensive slot behind the tower depth its price implies. Rolling them in
+        # fill_slot_data, as before, was too late to inform logic — which is how a
+        # 500k-SP slot ended up holding a sphere-1 item in the playtest.
+        self.blessing_prices: dict[str, int] = {}
+        self.blessing_gates: dict[str, str] = {}
+        if o.blessing_costs.value:
+            self._roll_blessing_prices()
+
     # -- items --------------------------------------------------------------- #
 
     def create_item(self, name: str) -> YsOriginItem:
@@ -175,20 +184,39 @@ class YsOriginWorld(World):
         set_rules(self)
         set_completion_condition(self)
 
-    def _blessing_costs(self, active: set) -> dict[str, int]:
-        """Overlay-shop SP prices (loc id -> price), weighted by the tower depth of
-        the item placed at each slot so early/filler is cheap and late medallions
-        and skills are expensive. Deterministic (uses self.random)."""
+    def _roll_blessing_prices(self) -> None:
+        """Assign each blessing shop slot an SP price and the zone gate it implies.
+
+        Slots are shuffled, then priced along a geometric ladder, so which
+        blessing is cheap varies per seed while the *shape* of the economy (a few
+        cheap, a long tail, one or two very dear) is stable. The gate is derived
+        from a slot's rank on the ladder, and set_rules turns it into a real
+        access rule — that is what keeps other players' early items out of the
+        expensive slots.
+        """
+        active = {n for names in self._active_locations().values() for n in names}
+        slots = dt.blessing_bit_location_names(active)
+        if not slots:
+            return
+        self.random.shuffle(slots)
         cmin = int(self.options.blessing_cost_min.value)
         cmax = max(cmin, int(self.options.blessing_cost_max.value))
-        id_to_name = {i: n for n, i in self.location_name_to_id.items()}
-        costs: dict[str, int] = {}
-        for loc_id in dt.blessing_bit_location_ids(active, self.location_name_to_id):
-            item = self.get_location(id_to_name[loc_id]).item
-            costs[str(loc_id)] = dt.weighted_blessing_cost(
-                item.name, item.player == self.player, bool(item.advancement),
-                self.random, cmin, cmax)
-        return costs
+        ladder = dt.blessing_price_ladder(len(slots), cmin, cmax)
+        # Only gate on a medallion this world actually creates — a rule naming an
+        # item that is never placed makes the location unreachable and fails
+        # generation outright.
+        usable = set(dt.active_gates().values())
+        for i, (loc_name, price) in enumerate(zip(slots, ladder)):
+            self.blessing_prices[loc_name] = price
+            rank = 0.0 if len(slots) == 1 else i / (len(slots) - 1)
+            gate = dt.price_gate_item(rank)
+            if gate in usable:
+                self.blessing_gates[loc_name] = gate
+
+    def _blessing_costs(self, active: set) -> dict[str, int]:
+        """Overlay-shop SP prices as {location id: price} for slot_data."""
+        return {str(self.location_name_to_id[n]): p
+                for n, p in self.blessing_prices.items() if n in active}
 
     def fill_slot_data(self) -> dict[str, Any]:
         # The client builds its detection map from slot data:
