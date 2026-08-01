@@ -169,6 +169,108 @@ __declspec(naked) static void Hook_GrantAdd() {
     }
 }
 
+// --- vanilla statue blessing shop: charge the SEED's price ------------------ #
+//
+// Each blessing is one S_COMMON/GROWnn.XSO, and its price is a baked immediate
+// used at THREE places (CleriaCore build/menu_re/BLESSING_SHOP.md):
+//
+//   0x0056A184  push [eax]        the 0xdd Menu_AddSpShop entry -> what you SEE
+//   0x00567C43  call FUN_005659e0 the 0x61 affordability compare -> MAY you buy
+//   0x00567E45  sub [esi],ecx     the 0x69 deduction             -> what you PAY
+//
+// Only the F5 overlay shop used the seed's prices, so the goddess statue kept
+// selling at vanilla ones: "SP cost reduction in shop doesn't seem to work" and
+// "progression balancing does not seem to affect Vanilla SP". All three sites
+// have to move together — re-pricing the display alone makes the menu lie, and
+// re-pricing the deduction alone still forces you to AFFORD the vanilla price
+// (fatal for the 500,000 SP entry).
+//
+// The lookup is keyed on the VANILLA price because that is the only thing these
+// sites know: the blessing's 0xAF index does not appear in the script until
+// after the money has moved. The world pins the three colliding vanilla prices
+// (30000, 8000, 20000, each shared by two blessings) to a single randomized
+// price so the key stays unambiguous.
+//
+// The armor/leggings upgrades are deliberately NOT caught by any of this, and
+// not by accident: GROWAR/GROWLE compare with `0x62` (flag vs flag, SP against
+// the scaling cost cell g_flags[0xDA] that `0xb0 SetRavalCostToFlag` fills) and
+// never use `0x61`/`0x69` at all. So their ladder — 100/300/1000/3000/6000/12000
+// — keeps running vanilla even though two of those rungs collide with real
+// blessing prices, which a price-keyed hook would otherwise have re-priced.
+extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
+
+static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
+static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
+static const uintptr_t kBlessMenu = 0x0056A184;  // push [eax]        (0xdd)
+static const uintptr_t kSpShadow  = kGFlagsBase + 0xD8 * 4;  // 0x76BC7C
+static void* g_orig_blesscmp  = nullptr;
+static void* g_orig_blesssub  = nullptr;
+static void* g_orig_blessmenu = nullptr;
+
+// Scratch the menu hook points the push at. Main-thread only (the event VM), so
+// a single slot is enough — same assumption as the box-relabel hook above.
+static int g_bless_menu_price = 0;
+
+// 0x61 affordability. Spliced ON the operand-accessor call, where the flag index
+// and base are already pushed: [esp] = 0x76b91c, [esp+4] = index. EDI holds op2,
+// the price. Overwriting EDI is safe — this handler already clobbered it at
+// 0x567C0E and the dispatcher re-establishes it after the tail jump.
+__declspec(naked) static void Hook_BlessCmp() {
+    __asm {
+        pushfd
+        pushad                          // esp -= 32; orig [esp+4] is now [esp+40]
+        mov  eax, [esp + 40]            // the flag index being compared
+        cmp  eax, 0xD8                  // the SP (zenny shadow) cell?
+        jne  bc_done
+        push edi                        // arg: the vanilla price
+        call ap_substitute_bless_price
+        add  esp, 4
+        mov  [esp], eax                 // pushad slot 0 = saved EDI
+    bc_done:
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blesscmp]
+    }
+}
+
+// 0x69 deduction: esi = &g_flags[idx], ecx = amount to subtract.
+__declspec(naked) static void Hook_BlessSub() {
+    __asm {
+        pushfd
+        pushad
+        cmp  esi, kSpShadow
+        jne  bs_done
+        push ecx                        // arg: the vanilla price
+        call ap_substitute_bless_price
+        add  esp, 4
+        mov  [esp + 24], eax            // pushad slot 6 = saved ECX
+    bs_done:
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blesssub]
+    }
+}
+
+// 0xdd menu entry: the next instruction pushes [eax] into the price sprintf.
+// Point eax at our scratch instead of writing through it — [eax] is the script's
+// own operand table and a write there would persist for the rest of the run.
+// Clobbering eax is free: the very next instruction (0x56A186) reloads it.
+__declspec(naked) static void Hook_BlessMenu() {
+    __asm {
+        pushfd
+        pushad
+        mov  eax, [eax]                 // the vanilla price operand
+        push eax
+        call ap_substitute_bless_price
+        add  esp, 4
+        mov  g_bless_menu_price, eax
+        popad
+        popfd
+        lea  eax, g_bless_menu_price    // push [eax] now reads our price
+        jmp  dword ptr [g_orig_blessmenu]
+    }
+}
+
 // --- suppress the native "Acquired X" popup for randomized (suppressed) items #
 //
 // The chest's VM sub-op 0x116 (give-item) calls the give/popup native function
@@ -557,6 +659,15 @@ void hook_vm_install() {
     MH_STATUS ea = MH_EnableHook((void*)kGrantAdd);
     mod_log("hook_vm_install: 0x67 add-store @0x%X create=%d enable=%d",
             (unsigned)kGrantAdd, (int)ca, (int)ea);
+    // Vanilla statue blessing shop: display / affordability / deduction.
+    MH_STATUS cbc = MH_CreateHook((void*)kBlessCmp,  (void*)&Hook_BlessCmp,  &g_orig_blesscmp);
+    MH_STATUS ebc = MH_EnableHook((void*)kBlessCmp);
+    MH_STATUS cbs = MH_CreateHook((void*)kBlessSub,  (void*)&Hook_BlessSub,  &g_orig_blesssub);
+    MH_STATUS ebs = MH_EnableHook((void*)kBlessSub);
+    MH_STATUS cbm = MH_CreateHook((void*)kBlessMenu, (void*)&Hook_BlessMenu, &g_orig_blessmenu);
+    MH_STATUS ebm = MH_EnableHook((void*)kBlessMenu);
+    mod_log("hook_vm_install: statue shop cmp=%d/%d sub=%d/%d menu=%d/%d",
+            (int)cbc, (int)ebc, (int)cbs, (int)ebs, (int)cbm, (int)ebm);
     MH_STATUS cg = MH_CreateHook((void*)kGiveItemFn, (void*)&Hook_GiveItemFn,
                                  &g_orig_give);
     MH_STATUS eg = MH_EnableHook((void*)kGiveItemFn);

@@ -258,6 +258,29 @@ static std::map<int64_t, int> g_loc_flags;
 // mapped, its purchase still registers (bit + check + SP) and the effect
 // applies after the next save+reload (g_flags persists the bit).
 struct BlessShopItem { int64_t loc; std::string name; int bit; int cost; };
+
+// -- VANILLA statue-menu re-pricing ------------------------------------------ #
+// vanilla SP price -> the price to charge instead, from slot_data. Read by the
+// three hooks in hook_vm.cpp that sit on the places a GROWnn.XSO script uses its
+// baked price: the 0xdd menu entry (what you SEE), the 0x61 affordability
+// compare (whether you may buy), and the 0x69 deduction (what you PAY).
+//
+// The vanilla price is the only key those sites have: the blessing's 0xAF index
+// does not appear in the script until after the money has already moved. The
+// world guarantees the map is a function — three vanilla prices are shared by
+// two blessings each, and _roll_blessing_prices pins those pairs to one
+// randomized price precisely so this lookup can't be ambiguous.
+//
+// Guarded because the poll thread rebuilds it on connect while the game's main
+// thread reads it from the VM hooks.
+static std::mutex g_bless_price_mtx;
+static std::map<int, int> g_bless_price_map;
+
+extern "C" int ap_substitute_bless_price(int vanilla) {
+    std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+    auto it = g_bless_price_map.find(vanilla);
+    return it == g_bless_price_map.end() ? vanilla : it->second;
+}
 static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap first
 static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
 static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
@@ -1051,6 +1074,20 @@ static void on_slot_connected(const nlohmann::json& sd) {
         g_shop_items.clear();
     }
     g_shop_unlock_mode = sd.value("blessing_shop_unlock", 0);
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        g_bless_price_map.clear();
+        if (sd.contains("blessing_vanilla_price_map")) {
+            for (auto& kv : sd["blessing_vanilla_price_map"].items()) {
+                int vanilla = atoi(kv.key().c_str());
+                int repriced = kv.value().get<int>();
+                if (vanilla > 0 && repriced >= 0)
+                    g_bless_price_map[vanilla] = repriced;
+            }
+        }
+        mod_log("ap: vanilla statue menu re-pricing: %d prices mapped",
+                (int)g_bless_price_map.size());
+    }
     if (sd.contains("blessing_costs")) {
         std::vector<BlessShopItem> items;
         for (auto& kv : sd["blessing_costs"].items()) {

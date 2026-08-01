@@ -306,7 +306,20 @@ class YsOriginWorld(World):
         # lock a player who warped to 22F out of a slot they can easily afford.
         # Only gate on a region this world actually creates.
         live = set(self._region_names())
+        # Three vanilla prices are shared by two blessings each (30000, 8000,
+        # 20000). The in-game price hook substitutes inside GROWnn, where the
+        # only thing it can key on is the VANILLA price — the 0xAF blessing index
+        # does not appear until after the money has moved. So a colliding pair
+        # must land on the SAME randomized price, or the hook would charge one of
+        # them the other's. Whichever of the pair is priced first wins; the
+        # second is pinned to it (and keeps its own gate, which is derived from
+        # its own rank).
+        by_vanilla: dict[int, int] = {}
         for i, (loc_name, price) in enumerate(zip(slots, ladder)):
+            bit = dt.blessing_bit_of(loc_name)
+            if bit is not None:
+                vanilla = dt.vanilla_price_for_bit(bit)
+                price = by_vanilla.setdefault(vanilla, price)
             self.blessing_prices[loc_name] = price
             rank = 0.0 if len(slots) == 1 else i / (len(slots) - 1)
             region = dt.price_gate_region(rank)
@@ -439,6 +452,17 @@ class YsOriginWorld(World):
                 if self.options.blessing_costs.value else {}
             ),
             "blessing_shop_unlock": int(self.options.blessing_shop_unlock.value),
+            # VANILLA statue menu re-pricing: vanilla SP price -> the price to
+            # charge instead. The mod substitutes this at the three places a
+            # GROWnn script uses its baked price (the 0xdd menu entry, the 0x61
+            # affordability compare and the 0x69 deduction), so the goddess
+            # statue sells at the seed's prices instead of the game's. Empty in
+            # vanilla-cost mode. See CleriaCore build/menu_re/BLESSING_SHOP.md.
+            "blessing_vanilla_price_map": (
+                {str(k): v for k, v in
+                 dt.vanilla_price_map(self.blessing_prices).items()}
+                if self.options.blessing_costs.value else {}
+            ),
             # All statue scenes (panel trigger; statue_unlocks only ships with
             # warp locks on).
             "statue_scenes": dt.statue_scenes(),

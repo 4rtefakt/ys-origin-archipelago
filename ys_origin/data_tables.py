@@ -746,6 +746,66 @@ def locations_by_region(enabled: Set[str], char: str = "") -> Dict[str, List[str
     return dict(out)
 
 
+# -- vanilla blessing prices ------------------------------------------------- #
+# Each blessing is one S_COMMON/GROWnn.XSO, nn = its 0xAF index, and the price is
+# a baked immediate that appears TWICE in the script (the 0x61 affordability
+# compare and the 0x69 deduction) plus a third time in the 0xdd menu entry. Read
+# straight out of the extracted corpus.
+#
+# index <-> bit: identity up to 6, +2 from 7 up, because indices 7/8 are the
+# armor/leggings raval escapes and set no bit (CleriaCore BLESSING_SHOP.md,
+# decoded from the 0xAF jump table at 0x56E6F0 and live-confirmed).
+VANILLA_BLESSING_PRICE_BY_INDEX: Dict[int, int] = {
+    0: 1000, 1: 4000, 2: 1500, 3: 24000, 4: 3000, 5: 10000, 6: 30000,
+    9: 8000, 10: 16000, 11: 2500, 12: 20000, 13: 80000, 14: 2000,
+    15: 500000, 16: 160000, 17: 60000, 18: 120000, 19: 20000, 20: 100000,
+    21: 200000, 22: 15000, 23: 8000, 24: 25000, 25: 30000,
+}
+
+
+def blessing_index_for_bit(bit: int) -> int:
+    return bit if bit <= 6 else bit + 2
+
+
+def vanilla_price_for_bit(bit: int) -> int:
+    return VANILLA_BLESSING_PRICE_BY_INDEX[blessing_index_for_bit(bit)]
+
+
+def blessing_bit_of(loc_name: str) -> Optional[int]:
+    """The bitfield bit a bit-method blessing location watches, else None."""
+    meta = LOC_META.get(loc_name, {})
+    det = meta.get("detect", {})
+    return det.get("bit") if det.get("method") == "bit" else None
+
+
+def vanilla_price_map(randomized: Dict[str, int]) -> Dict[int, int]:
+    """vanilla SP price -> the price the mod should charge instead.
+
+    The mod substitutes at three sites inside GROWnn (menu entry, affordability
+    compare, deduction) and at NONE of them does it know which blessing is being
+    bought — the 0xAF index only appears after the money has already moved. The
+    vanilla price is therefore the only key available.
+
+    Three vanilla prices are shared by two blessings each (30000, 8000, 20000).
+    `_roll_blessing_prices` forces those pairs onto the SAME randomized price so
+    this map stays a function; assert it here rather than trust that.
+    """
+    out: Dict[int, int] = {}
+    for loc_name, new_price in randomized.items():
+        bit = blessing_bit_of(loc_name)
+        if bit is None:
+            continue                       # gear upgrades: cost ladder, not GROWnn
+        vanilla = vanilla_price_for_bit(bit)
+        if vanilla in out and out[vanilla] != new_price:
+            raise ValueError(
+                f"two blessings share vanilla price {vanilla} but were given "
+                f"different randomized prices ({out[vanilla]} vs {new_price}); "
+                "the in-game price hook keys on the vanilla price and cannot "
+                "tell them apart")
+        out[vanilla] = new_price
+    return out
+
+
 # -- gear-upgrade blessings -------------------------------------------------- #
 # "Strengthen current armor / leggings" is not a one-shot bit like every other
 # blessing: it writes a LEVEL into the raval array at +0x36A654, indexed by the
