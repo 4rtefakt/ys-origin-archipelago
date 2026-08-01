@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  offline:
+    # The tests/ suite never imports Archipelago, so it runs anywhere in seconds.
+    name: Offline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run every tests/test_*.py
+        run: |
+          fail=0
+          for f in tests/test_*.py; do
+            mod="tests.$(basename "$f" .py)"
+            echo "::group::$mod"
+            python -m "$mod" || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
+      - name: Build the apworld
+        run: python -m tools.build_apworld dist/ys_origin.apworld
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ys_origin.apworld
+          path: dist/ys_origin.apworld
+
+  apworld:
+    # The offline suite cannot see bugs that only appear once Archipelago itself
+    # handles the world. A bare `visibility = 0` once aborted template generation
+    # for EVERY installed game with no traceback (#20); this job is what catches
+    # that class of thing.
+    name: Archipelago integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: apworld
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Read the AP version this apworld targets
+        id: apver
+        working-directory: apworld
+        run: |
+          v=$(python -c "import re,pathlib; \
+            print(re.search(r'MIN_AP_VERSION\s*=\s*\"([^\"]+)\"', \
+            pathlib.Path('tools/build_apworld.py').read_text()).group(1))")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "targeting Archipelago $v"
+
+      - name: Check out that Archipelago release
+        uses: actions/checkout@v4
+        with:
+          repository: ArchipelagoMW/Archipelago
+          ref: ${{ steps.apver.outputs.version }}
+          path: archipelago
+
+      - name: Install the dependencies AP needs to load worlds
+        # Deliberately NOT requirements.txt: that pulls kivy and every world's
+        # native deps, which are irrelevant here and slow/fragile to build.
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyYAML jinja2 schema typing_extensions colorama websockets \
+                      platformdirs certifi orjson jellyfish pathspec
+
+      - name: Build and install the apworld
+        run: |
+          cd apworld
+          python -m tools.build_apworld ../archipelago/custom_worlds/ys_origin.apworld
+
+      - name: Validate against Archipelago
+        run: |
+          cd apworld
+          python -m tools.ci_apworld_check ../archipelago
