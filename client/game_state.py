@@ -229,34 +229,43 @@ def detect_checks(prev: GameState, curr: GameState) -> List[str]:
         if a is not None and b is not None and a != b and b != 0:
             checks.append(f"{attr.replace('_id', '').title()} #{b}")
 
-    # newly-set per-location pickup flags — the primary check signal. The signal
-    # string is the raw flag name, which equals the apworld location name (so the
-    # AP client maps it via slot_data['location_signals']).
+    # Per-location pickup flags — the primary check signal. The signal string is
+    # the raw flag name, which equals the apworld location name (so the AP client
+    # maps it via slot_data['location_signals']).
+    #
+    # LEVEL-triggered, not edge-triggered: report every watched cell that is
+    # currently "done", and let the caller dedupe against what it has actually
+    # sent. These flags are persistent save state, so "set" is the truth at any
+    # instant, and an edge can be missed for reasons that have nothing to do with
+    # the player — a read that failed for one tick, a save reload, the client
+    # attaching after the chest was opened, or a collection during a reconnect.
+    # Each of those permanently lost a check under the old diff ("a few checks did
+    # not send even though I collected them", v1.6.x playtest).
     for loc, val in curr.location_flags.items():
-        # Fire when a watched cell crosses into "done": box flags 0->1, item /
-        # blessing flags -1/0 -> >=1. (prev has all keys after the first poll.)
-        if val >= 1 and prev.location_flags.get(loc, 1) < 1:
+        if val >= 1:
             checks.append(loc)
 
-    # Floor checks: fire when the current floor first reaches the threshold.
+    # Floor checks: same reasoning. "Reach NF" is satisfied by standing on floor N
+    # at any point, so report it whenever the live floor is N. Note this is
+    # deliberately `== fl`, not `>= fl`: reaching 20F must not back-fill floors
+    # the player warped over and never visited.
     if curr.current_floor is not None and FLOOR_CHECKS:
-        pf = prev.current_floor if prev.current_floor is not None else 0
         for name, fl in FLOOR_CHECKS.items():
-            if curr.current_floor >= fl > pf:
+            if curr.current_floor == fl:
                 checks.append(name)
 
-    # Named blessing checks: fire when that blessing's bit flips 0 -> 1.
+    # Named blessing checks: a purchase bit is permanent, so report it whenever
+    # it is set (level-triggered, same reasoning as the location flags above —
+    # this also catches purchases made while the client was disconnected).
     if curr.blessing_bits is not None and BLESSING_BIT_CHECKS:
-        pbits = prev.blessing_bits if prev.blessing_bits is not None else 0
         for name, bit in BLESSING_BIT_CHECKS.items():
-            if (curr.blessing_bits >> bit) & 1 and not (pbits >> bit) & 1:
+            if (curr.blessing_bits >> bit) & 1:
                 checks.append(name)
 
     # Legacy progressive blessing checks (if a seed still uses them).
     if curr.blessing_total is not None and BLESSING_COUNT_CHECKS:
-        pb = prev.blessing_total if prev.blessing_total is not None else 0
         for name, n in BLESSING_COUNT_CHECKS.items():
-            if curr.blessing_total >= n > pb:
+            if curr.blessing_total >= n:
                 checks.append(name)
 
     # newly-obtained items/skills (entry goes from <1 to >=1).
