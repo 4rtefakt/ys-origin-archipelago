@@ -199,10 +199,21 @@ __declspec(naked) static void Hook_GrantAdd() {
 // blessing prices, which a price-keyed hook would otherwise have re-priced.
 extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
 extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
+extern "C" int  ap_on_blessing_purchase(int index);        // hook_ap.cpp
 
 static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
 static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
 static const uintptr_t kBlessMenu = 0x0056A184;  // push [eax]        (0xdd)
+// The 0xAF grant dispatch. EAX already holds the blessing INDEX here, and every
+// case jumps to the shared tail 0x5664C9, so this one splice both detects the
+// purchase and can skip the grant for all 26 blessings.
+//   00568D5B  mov  eax,[eax]        ; EAX = blessing index
+//   00568D5D  cmp  eax,0x21         <- spliced (3 bytes) + ja rel32 (6) = 9
+//   00568D66  jmp  [eax*4+0x56E6F0]
+static const uintptr_t kBlessGrant = 0x00568D5D;
+static const uintptr_t kVmTail     = 0x005664C9;  // where every 0xAF case lands
+static void* g_orig_blessgrant = nullptr;
+static int g_bless_skip = 0;
 static const uintptr_t kSpShadow  = kGFlagsBase + 0xD8 * 4;  // 0x76BC7C
 static void* g_orig_blesscmp  = nullptr;
 static void* g_orig_blesssub  = nullptr;
@@ -281,6 +292,28 @@ __declspec(naked) static void Hook_BlessMenu() {
         popfd
         lea  eax, g_bless_menu_price    // push [eax] now reads our price
         jmp  dword ptr [g_orig_blessmenu]
+    }
+}
+
+// 0xAF blessing grant. Reports the purchase as a check, and when the seed shuffles
+// blessing EFFECTS into the item pool, skips the vanilla grant entirely by jumping
+// to the dispatch tail instead of the jump table.
+__declspec(naked) static void Hook_BlessGrant() {
+    __asm {
+        pushfd
+        pushad
+        push eax                        // the blessing index
+        call ap_on_blessing_purchase
+        add  esp, 4
+        mov  g_bless_skip, eax
+        popad
+        popfd
+        cmp  dword ptr [g_bless_skip], 0
+        jne  bg_skip
+        jmp  dword ptr [g_orig_blessgrant]   // trampoline: cmp/ja, then the table
+    bg_skip:
+        mov  eax, kVmTail
+        jmp  eax                        // straight to the shared tail: no grant
     }
 }
 
@@ -718,6 +751,11 @@ void hook_vm_install() {
     MH_STATUS ebm = MH_EnableHook((void*)kBlessMenu);
     mod_log("hook_vm_install: statue shop cmp=%d/%d sub=%d/%d menu=%d/%d",
             (int)cbc, (int)ebc, (int)cbs, (int)ebs, (int)cbm, (int)ebm);
+    MH_STATUS cbg = MH_CreateHook((void*)kBlessGrant, (void*)&Hook_BlessGrant,
+                                  &g_orig_blessgrant);
+    MH_STATUS ebg = MH_EnableHook((void*)kBlessGrant);
+    mod_log("hook_vm_install: 0xAF blessing grant @0x%X create=%d enable=%d",
+            (unsigned)kBlessGrant, (int)cbg, (int)ebg);
     MH_STATUS cg = MH_CreateHook((void*)kGiveItemFn, (void*)&Hook_GiveItemFn,
                                  &g_orig_give);
     MH_STATUS eg = MH_EnableHook((void*)kGiveItemFn);

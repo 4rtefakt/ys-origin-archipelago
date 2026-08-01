@@ -516,6 +516,12 @@ def weapon_value_for_level(level: int) -> int:
     return _WEAPON_LEVEL_VALUE[lvl]
 
 
+# Blessing EFFECT items. A blessing is one bit in g_flags[0xD9], not an item
+# cell, so the pool item gets a synthetic id above the g_flags range and the mod
+# recognises it by that range: index - BLESS_ITEM_BASE == the bit to set.
+BLESS_ITEM_BASE = 0x200
+
+
 CLERIA_ORE = "Cleria Ore"
 
 # -- Roo trades -------------------------------------------------------------- #
@@ -1130,7 +1136,12 @@ def suppress_item_indices(active, char: str = "hugo") -> List[int]:
         power = skill_grants().get(vanilla)
         if power is not None:
             out.add(power)
-    return sorted(out)
+    # Blessing EFFECT items carry a synthetic id (BLESS_ITEM_BASE + bit) because
+    # a blessing is a bit in g_flags[0xD9], not a cell of its own. They are not
+    # g_flags indices, and the mod's suppress array is only 0x200 wide, so they
+    # must never reach it — the blessing purchase is suppressed at the 0xAF
+    # grant instead, which is also where its check is detected.
+    return sorted(i for i in out if 0 <= i < 0x200)
 
 
 def start_item_indices(names) -> List[int]:
@@ -1148,8 +1159,13 @@ def start_item_indices(names) -> List[int]:
     return out
 
 
+def is_blessing_effect_item(name: str) -> bool:
+    return name.startswith("Blessing: ")
+
+
 def vanilla_items(enabled: Set[str], char: str = "hugo",
-                  progressive_gear: bool = False) -> List[str]:
+                  progressive_gear: bool = False,
+                  blessing_items: bool = False) -> List[str]:
     """The real items to seed the pool (one per enabled chest/event location),
     using the selected character's variant at each location. With
     ``progressive_gear`` on, armor/boots pieces seed Progressive Armor/Boots
@@ -1160,6 +1176,12 @@ def vanilla_items(enabled: Set[str], char: str = "hugo",
             continue
         it = location_vanilla_item(l["name"], char)
         if not it:
+            continue
+        # Blessing EFFECT items only exist when the seed shuffles them. With the
+        # option off the purchase grants the blessing exactly as vanilla does, so
+        # the slot carries no item and create_items pads it with filler — same as
+        # before the effects were poolable.
+        if is_blessing_effect_item(it) and not blessing_items:
             continue
         if progressive_gear:
             prog = _progressive_name_for(it, char)

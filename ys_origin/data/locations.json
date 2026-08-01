@@ -1704,7 +1704,13 @@
    "offset": "0x36BC80",
    "bit": 0
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x200",
+    "name": "Blessing: Increase stationary heal rate",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit1",
@@ -1718,7 +1724,13 @@
    "offset": "0x36BC80",
    "bit": 1
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x201",
+    "name": "Blessing: Reduce damage from terrain",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit2",
@@ -1732,7 +1744,13 @@
    "offset": "0x36BC80",
    "bit": 2
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x202",
+    "name": "Blessing: Reduce bad status duration LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit3",
@@ -1746,7 +1764,13 @@
    "offset": "0x36BC80",
    "bit": 3
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x203",
+    "name": "Blessing: Increase item drop rate",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit4",
@@ -1760,7 +1784,13 @@
    "offset": "0x36BC80",
    "bit": 4
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x204",
+    "name": "Blessing: Extend drop item effects LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit5",
@@ -1774,7 +1804,13 @@
    "offset": "0x36BC80",
    "bit": 5
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x205",
+    "name": "Blessing: Increase Boost recovery LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit6",
@@ -1788,7 +1824,13 @@
    "offset": "0x36BC80",
    "bit": 6
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x206",
+    "name": "Blessing: Reduce MP usage LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit8",
@@ -1802,7 +1844,13 @@
    "offset": "0x36BC80",
    "bit": 8
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x208",
+    "name": "Blessing: Increase SP gain",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit9",
@@ -1816,7 +1864,13 @@
    "offset": "0x36BC80",
    "bit": 9
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x209",
+    "name": "Blessing: Bolster bad status resists LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit10",
@@ -1830,7 +1884,13 @@
    "offset": "0x36BC80",
    "bit": 10
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20A",
+    "name": "Blessing: Hasten Skill recovery LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit11",
@@ -1844,7 +1904,13 @@
    "offset": "0x36BC80",
    "bit": 11
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20B",
+    "name": "Blessing: Hasten Skill recovery LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit12",
@@ -1858,7 +1924,13 @@
    "offset": "0x36BC80",
    "bit": 12
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20C",
+    "name": "Blessing: Increase effect of herbs LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit13",
@@ -1872,7 +1944,13 @@
    "offset": "0x36BC80",
    "bit": 13
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20D",
+    "name": "Blessing: Increase movement speed",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit14",
@@ -1886,7 +1964,13 @@
    "offset": "0x36BC80",
    "bit": 14
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20E",
+    "name": "Blessing: Hasten Skill recovery LV3",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit15",
@@ -1900,7 +1984,13 @@
    "offset": "0x36BC80",
    "bit": 15
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20F",
+    "name": "Blessing: Increase Boost recovery LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit16",
@@ -1914,7 +2004,13 @@
    "offset": "0x36BC80",
    "bit": 16
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x210",
+    "name": "Blessing: Increase Boost recovery LV3",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit17",
@@ -1928,7 +2024,13 @@
    "offset": "0x36BC80",
    "bit": 17
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x211",
+    "name": "Blessing: Increase effect of herbs LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit18",
@@ -1942,7 +2044,13 @@
    "offset": "0x36BC80",
    "bit": 18
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x212",
+    "name": "Blessing: Reduce MP usage LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit19",
@@ -1956,7 +2064,13 @@
    "offset": "0x36BC80",
    "bit": 19
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x213",
+    "name": "Blessing: Reduce MP usage LV3",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit20",
@@ -1970,7 +2084,13 @@
    "offset": "0x36BC80",
    "bit": 20
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x214",
+    "name": "Blessing: Reduce bad status duration LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit21",
@@ -1984,7 +2104,13 @@
    "offset": "0x36BC80",
    "bit": 21
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x215",
+    "name": "Blessing: Strengthen Eyes of Fact",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit22",
@@ -1998,7 +2124,13 @@
    "offset": "0x36BC80",
    "bit": 22
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x216",
+    "name": "Blessing: Bolster bad status resists LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit23",
@@ -2012,7 +2144,13 @@
    "offset": "0x36BC80",
    "bit": 23
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x217",
+    "name": "Blessing: Extend drop item effects LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit7",
@@ -2026,7 +2164,13 @@
    "offset": "0x36BC80",
    "bit": 7
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x207",
+    "name": "Blessing: Increase stun effect",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_1000/room",

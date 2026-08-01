@@ -281,6 +281,7 @@ static std::map<int, int> g_bless_price_map;
 // blessing's own name. Same key and same guarantee as g_bless_price_map.
 static std::map<int, int64_t> g_bless_price_to_loc;
 
+
 extern "C" int ap_substitute_bless_price(int vanilla) {
     std::lock_guard<std::mutex> lk(g_bless_price_mtx);
     auto it = g_bless_price_map.find(vanilla);
@@ -303,6 +304,52 @@ static std::mutex g_sp_mtx;
 static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
 static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
 static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
+
+static void ap_fire_location(int64_t loc);   // defined with ap_on_check below
+
+// -- blessings as pool items ------------------------------------------------- #
+// A blessing is one bit in g_flags[0xD9], which is BOTH its effect and the
+// menu's "already bought" marker. To make the effect a shuffled item we have to
+// stop the purchase setting it — and that means the bit can no longer be what
+// detects the check either. Detection moves to the 0xAF grant op (choke point
+// 0x568D5D, blessing index live in EAX), which is upstream of the bit.
+//
+// blessing bit -> the AP location that purchase corresponds to.
+static std::mutex g_bless_mtx;
+static std::map<int, int64_t> g_bless_bit_to_loc;
+static bool g_bless_as_items = false;   // slot_data: are effects in the pool?
+
+// Grant a blessing EFFECT (received as an item): set its bit + recompute.
+static void grant_blessing_bit(int bit) {
+    if (bit < 0 || bit > 31) return;
+    volatile int* cell = (volatile int*)kBlessBitsAbs;
+    if (*cell & (1 << bit)) return;
+    *cell |= (1 << bit);
+    *(volatile int*)kBlessDirtyAbs |= 0x10;
+    mod_log("ap: blessing effect granted — bit %d set", bit);
+}
+
+// Called from the 0xAF hook on the game thread. Returns true when the vanilla
+// grant must be SKIPPED (the effect belongs to whoever the seed gave it to).
+extern "C" int ap_on_blessing_purchase(int index) {
+    // index -> bit: identity up to 6, +2 from 7 up (7/8 are the armor/leggings
+    // raval escapes and set no bit at all).
+    if (index == 7 || index == 8) return 0;      // gear upgrades: never ours
+    int bit = (index <= 6) ? index : index - 2;
+    if (bit < 0 || bit > 31) return 0;
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_bless_mtx);
+        auto it = g_bless_bit_to_loc.find(bit);
+        if (it == g_bless_bit_to_loc.end()) return 0;
+        loc = it->second;
+    }
+    ap_fire_location(loc);                        // the purchase IS the check
+    mod_log("ap: blessing purchase — index %d (bit %d) -> location %lld%s",
+            index, bit, (long long)loc,
+            g_bless_as_items ? " (effect suppressed)" : "");
+    return g_bless_as_items ? 1 : 0;
+}
 // Goal reporting: entering a known ending scene (g_goal_scenes) sends
 // StatusUpdate(GOAL) once. The ending shares the 7xxx range with the New-Game
 // intro cutscenes (Toal's especially), so the scene alone can't tell "the game
@@ -901,15 +948,13 @@ static bool claim_flag_loc(int64_t loc) {
 // Called by the VM grant hook (game main thread) when a watched location flag
 // fires. Queue its AP location id; the poll loop sends the LocationCheck. Also
 // show what was here (item + owning world), from the scout map.
-void ap_on_check(int flag_idx) {
-    if (flag_idx < 0 || flag_idx >= 0x200) return;
-    std::vector<int64_t> locs;
+// Fire ONE location id: queue the LocationCheck and toast what was there. Split
+// out of ap_on_check so the blessing-purchase hook (which knows a location, not
+// a g_flags index) reports through exactly the same path — same dedupe, same
+// toast, same scout lookup.
+static void ap_fire_location(int64_t loc) {
     {
-        std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
-        locs = g_flag_to_loc[flag_idx];
-    }
-    for (int64_t loc : locs) {
-        if (!claim_flag_loc(loc)) continue;          // the sweep beat us to it
+        if (!claim_flag_loc(loc)) return;            // already reported
         {
             std::lock_guard<std::mutex> lk(g_check_mtx);
             g_checks.push_back(loc);
@@ -950,6 +995,20 @@ void ap_on_check(int flag_idx) {
     }
 }
 
+// Called by the VM grant hook (game main thread) when a watched location flag
+// fires: one flag can map to several AP locations (the elemental altars grant
+// two things in one script).
+void ap_on_check(int flag_idx) {
+    if (flag_idx < 0 || flag_idx >= 0x200) return;
+    std::vector<int64_t> locs;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
+        locs = g_flag_to_loc[flag_idx];
+    }
+    for (int64_t loc : locs)
+        ap_fire_location(loc);
+}
+
 // Reply to LocationScouts: learn the item + recipient at each of our locations.
 static void on_location_info(const std::list<APClient::NetworkItem>& items) {
     std::lock_guard<std::mutex> lk(g_scout_mtx);
@@ -975,6 +1034,13 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
 
 static void on_slot_connected(const nlohmann::json& sd) {
     int supp = 0, locs = 0, names = 0;
+    // Are blessing EFFECTS shuffled into the item pool? Read FIRST: the detect
+    // registration below branches on it.
+    g_bless_as_items = sd.value("blessing_items", false);
+    {
+        std::lock_guard<std::mutex> lk(g_bless_mtx);
+        g_bless_bit_to_loc.clear();
+    }
     if (sd.contains("item_index")) {
         for (auto& kv : sd["item_index"].items()) {
             g_name_to_idx[kv.key()] = kv.value().get<int>();
@@ -1084,8 +1150,17 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     mod_log("ap: WARN dropped bit detect, offset 0x%X out of range", off);
                     continue;
                 }
-                g_poll_bits.push_back({kImageBase + (uintptr_t)off,
-                                       d["bit"].get<int>(), loc});
+                // When blessing effects are shuffled, the bit is no longer set
+                // by a purchase, so polling it would never fire — and WOULD
+                // false-fire when the player later receives the effect item.
+                // Detection comes from the 0xAF grant hook instead.
+                if (!g_bless_as_items)
+                    g_poll_bits.push_back({kImageBase + (uintptr_t)off,
+                                           d["bit"].get<int>(), loc});
+                {
+                    std::lock_guard<std::mutex> lk(g_bless_mtx);
+                    g_bless_bit_to_loc[d["bit"].get<int>()] = loc;
+                }
                 g_loc_bitmap[loc] = d["bit"].get<int>();
                 scout.push_back(loc);
                 locs++;
@@ -1378,6 +1453,11 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             mod_log("ap: replay '%s' — trap already fired, skipped", name.c_str());
         } else if (apply_trap(name)) {
             // Trap effect armed above; the red trap toast fires below like any item.
+        } else if (f != g_name_to_idx.end() && f->second >= 0x200) {
+            // Blessing EFFECT item: the id is BLESS_ITEM_BASE + bit, not a
+            // g_flags cell, so it is granted by setting the bit rather than by
+            // ap_give (which is bounded to the 0x200-wide flag array).
+            grant_blessing_bit(f->second - 0x200);
         } else if (f != g_name_to_idx.end()) {
             ap_give_tier(f->second, 1, tier);
             remember_gear(f->second, tier);   // survive save/load wipes

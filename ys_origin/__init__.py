@@ -231,7 +231,8 @@ class YsOriginWorld(World):
         # (boss/floor/room sanity checks) with varied filler.
         char = dt.char_name(self.options)
         pool = [self.create_item(n) for n in dt.vanilla_items(
-            enabled, char, bool(self.options.progressive_armor.value))]
+            enabled, char, bool(self.options.progressive_armor.value),
+            bool(self.options.blessing_items.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
@@ -452,6 +453,10 @@ class YsOriginWorld(World):
                 if self.options.blessing_costs.value else {}
             ),
             "blessing_shop_unlock": int(self.options.blessing_shop_unlock.value),
+            # Blessing EFFECTS shuffled into the pool: the statue sells checks
+            # only. The mod then suppresses the grant at the 0xAF opcode and
+            # detects the purchase there instead of by watching the effect bit.
+            "blessing_items": bool(self.options.blessing_items.value),
             # VANILLA statue menu re-pricing: vanilla SP price -> the price to
             # charge instead. The mod substitutes this at the three places a
             # GROWnn script uses its baked price (the 0xdd menu entry, the 0x61

@@ -276,6 +276,23 @@ class ShopHints(DefaultOnToggle):
     display_name = "Blessing shop hints"
 
 
+class BlessingItems(Toggle):
+    """Shuffle the divine-blessing EFFECTS into the item pool.
+
+    Off (default): buying a blessing at a goddess statue sends the check AND
+    gives you that blessing, as it does today.
+
+    On: the statue sells checks only — the purchase reports the location and
+    the blessing itself does nothing. The 24 effects become real items that can
+    land anywhere in the multiworld, so someone else's chest might hand you
+    "Increase SP gain".
+
+    The purchase is detected at the grant opcode rather than by watching the
+    effect bit, so a bought slot still reads as bought and cannot be re-bought.
+    """
+    display_name = "Blessing effects in the item pool"
+
+
 class ProgressiveArmor(DefaultOnToggle):
     """Make defensive gear progressive. Ys Origin has two gear slots — Armor and
     Boots — each a strict tier ladder per character. When on, every gear chest
@@ -378,6 +395,7 @@ class YsOriginOptions(PerGameCommonOptions):
     exp_catchup_margin: ExpCatchupMargin
     exp_multiplier_max: ExpMultiplierMax  # deprecated no-op (legacy yaml compat)
     progressive_armor: ProgressiveArmor
+    blessing_items: BlessingItems
     shop_hints: ShopHints
     blessing_costs: BlessingCosts
     blessing_cost_min: BlessingCostMin
