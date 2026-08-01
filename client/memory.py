@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ctypes
 import struct
+import sys
 from ctypes import wintypes
 from typing import Optional
 
@@ -67,7 +68,22 @@ TH32CS_SNAPMODULE32 = 0x00000010
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 MAX_PATH = 260
 
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+# The Win32 bindings below are only *loadable* on Windows. Importing this module
+# on another OS must still work: the tests that exercise the pure logic
+# (suppression baselines, item grants, check detection) have no business needing
+# a Windows box, and CI runs on Linux. So the DLL handle is optional and every
+# entry point that touches it raises a clear error instead.
+IS_WINDOWS = hasattr(ctypes, "WinDLL")
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True) if IS_WINDOWS else None
+
+
+def _require_windows() -> None:
+    if not IS_WINDOWS:
+        raise MemoryError_(
+            "Reading Ys Origin's memory requires Windows "
+            f"(running on {sys.platform!r}). This module imports anywhere so the "
+            "logic can be unit-tested off-Windows, but attaching cannot work."
+        )
 
 
 class PROCESSENTRY32(ctypes.Structure):
@@ -101,74 +117,80 @@ class MODULEENTRY32(ctypes.Structure):
 
 
 # Explicit prototypes so 64-bit pointers are not truncated to 32-bit ints.
-_kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-_kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+def _bind_prototypes() -> None:
+    """Attach argtypes/restypes to the kernel32 entry points (Windows only)."""
+    _kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    _kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
 
-_kernel32.Process32First.restype = wintypes.BOOL
-_kernel32.Process32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32)]
-_kernel32.Process32Next.restype = wintypes.BOOL
-_kernel32.Process32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32)]
+    _kernel32.Process32First.restype = wintypes.BOOL
+    _kernel32.Process32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32)]
+    _kernel32.Process32Next.restype = wintypes.BOOL
+    _kernel32.Process32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32)]
 
-_kernel32.Module32First.restype = wintypes.BOOL
-_kernel32.Module32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(MODULEENTRY32)]
-_kernel32.Module32Next.restype = wintypes.BOOL
-_kernel32.Module32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(MODULEENTRY32)]
+    _kernel32.Module32First.restype = wintypes.BOOL
+    _kernel32.Module32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(MODULEENTRY32)]
+    _kernel32.Module32Next.restype = wintypes.BOOL
+    _kernel32.Module32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(MODULEENTRY32)]
 
-_kernel32.OpenProcess.restype = wintypes.HANDLE
-_kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    _kernel32.OpenProcess.restype = wintypes.HANDLE
+    _kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
 
-_kernel32.CloseHandle.restype = wintypes.BOOL
-_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _kernel32.CloseHandle.restype = wintypes.BOOL
+    _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 
-_kernel32.ReadProcessMemory.restype = wintypes.BOOL
-_kernel32.ReadProcessMemory.argtypes = [
-    wintypes.HANDLE,
-    wintypes.LPCVOID,
-    wintypes.LPVOID,
-    ctypes.c_size_t,
-    ctypes.POINTER(ctypes.c_size_t),
-]
+    _kernel32.ReadProcessMemory.restype = wintypes.BOOL
+    _kernel32.ReadProcessMemory.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPCVOID,
+        wintypes.LPVOID,
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
 
-_kernel32.WriteProcessMemory.restype = wintypes.BOOL
-_kernel32.WriteProcessMemory.argtypes = [
-    wintypes.HANDLE,
-    wintypes.LPVOID,
-    wintypes.LPCVOID,
-    ctypes.c_size_t,
-    ctypes.POINTER(ctypes.c_size_t),
-]
+    _kernel32.WriteProcessMemory.restype = wintypes.BOOL
+    _kernel32.WriteProcessMemory.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        wintypes.LPCVOID,
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
 
-# -- VirtualQueryEx (memory-region enumeration, used by the scanners) -------- #
+    # -- VirtualQueryEx (memory-region enumeration, used by the scanners) -------- #
 
-MEM_COMMIT = 0x1000
-PAGE_GUARD = 0x100
-PAGE_NOACCESS = 0x01
-# Page protections we are willing to read from (R, RW, ExR, ExRW, ExWC).
-PAGE_READABLE = 0x02 | 0x04 | 0x20 | 0x40 | 0x80
-USERSPACE_MAX = 0x7FFF0000  # 32-bit user-space ceiling
+    MEM_COMMIT = 0x1000
+    PAGE_GUARD = 0x100
+    PAGE_NOACCESS = 0x01
+    # Page protections we are willing to read from (R, RW, ExR, ExRW, ExWC).
+    PAGE_READABLE = 0x02 | 0x04 | 0x20 | 0x40 | 0x80
+    USERSPACE_MAX = 0x7FFF0000  # 32-bit user-space ceiling
 
 
-class MEMORY_BASIC_INFORMATION(ctypes.Structure):
-    _fields_ = [
-        ("BaseAddress", ctypes.c_void_p),
-        ("AllocationBase", ctypes.c_void_p),
-        ("AllocationProtect", wintypes.DWORD),
-        ("__alignment1", wintypes.DWORD),
-        ("RegionSize", ctypes.c_size_t),
-        ("State", wintypes.DWORD),
-        ("Protect", wintypes.DWORD),
-        ("Type", wintypes.DWORD),
-        ("__alignment2", wintypes.DWORD),
+    class MEMORY_BASIC_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("BaseAddress", ctypes.c_void_p),
+            ("AllocationBase", ctypes.c_void_p),
+            ("AllocationProtect", wintypes.DWORD),
+            ("__alignment1", wintypes.DWORD),
+            ("RegionSize", ctypes.c_size_t),
+            ("State", wintypes.DWORD),
+            ("Protect", wintypes.DWORD),
+            ("Type", wintypes.DWORD),
+            ("__alignment2", wintypes.DWORD),
+        ]
+
+
+    _kernel32.VirtualQueryEx.restype = ctypes.c_size_t
+    _kernel32.VirtualQueryEx.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPCVOID,
+        ctypes.POINTER(MEMORY_BASIC_INFORMATION),
+        ctypes.c_size_t,
     ]
 
 
-_kernel32.VirtualQueryEx.restype = ctypes.c_size_t
-_kernel32.VirtualQueryEx.argtypes = [
-    wintypes.HANDLE,
-    wintypes.LPCVOID,
-    ctypes.POINTER(MEMORY_BASIC_INFORMATION),
-    ctypes.c_size_t,
-]
+if IS_WINDOWS:
+    _bind_prototypes()
 
 
 def find_process(name: str) -> int:
@@ -176,6 +198,7 @@ def find_process(name: str) -> int:
 
     Matching is case-insensitive. Raises :class:`ProcessNotFound` if absent.
     """
+    _require_windows()
     snapshot = _kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if snapshot == INVALID_HANDLE_VALUE:
         raise ProcessNotFound("CreateToolhelp32Snapshot failed")
