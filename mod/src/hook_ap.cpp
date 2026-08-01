@@ -207,7 +207,6 @@ static int  g_req_port = 0;
 static char g_req_slot[128] = "";
 static char g_req_pass[128] = "";
 static void create_client();  // defined below; builds g_ap on the poll thread
-static void reset_floor_prev();  // clears the Reach-NF crossing baseline (poll section)
 
 // flag index -> AP location ids (set in slot_connected, read in ap_on_check).
 // A VECTOR per flag: one event flag can be several AP locations (the elemental
@@ -539,14 +538,24 @@ static int g_applied_through = -1;
 // seed or slot starts clean.
 static int g_replay_through = -1;
 
-// Where the watermark lives. The seed comes from the save-redirect module (it is
-// already sanitized for use in a filename); slot is the connect config.
+// Where the watermark lives. The seed comes from the save-redirect module; the
+// slot is player-chosen free text, so both go through a WHITELIST — a blacklist
+// of the four obvious separators would let a slot called e.g. `Adol?` through,
+// fopen would fail on the illegal name, the watermark would silently never
+// persist, and the SP faucet / re-firing traps this file exists to stop would be
+// back with no diagnostic. Anything not [A-Za-z0-9._-] becomes '_'.
 static void applied_path(char* out, size_t n) {
     const char* seed = saveredir_seed_cstr();
     snprintf(out, n, "yso_ap_applied_%s_%s.cfg",
              (seed && seed[0]) ? seed : "noseed", g_slot);
-    for (char* p = out; *p; ++p)                    // keep it a legal filename
-        if (*p == '/' || *p == '\\' || *p == ':' || *p == ' ') *p = '_';
+    // Keep the "yso_ap_applied_" prefix and the ".cfg" suffix intact; scrub the
+    // seed/slot middle, which is the only attacker-ish/user-chosen part.
+    for (char* p = out; *p; ++p) {
+        char c = *p;
+        bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                  (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+        if (!ok) *p = '_';
+    }
 }
 
 static void load_replay_through() {
@@ -654,6 +663,28 @@ static void apply_pending_recalc() {
     mod_log("ap: requested derived-state recompute (0x76b914 |= 0x%X)", kRecalcBits);
 }
 
+// -- which item cells are COUNTED, and which are boolean --------------------- #
+//
+// Decided by the GAME's own data, not by the seed's item classification. The
+// classification is now player-overridable per item (options: item_classification
+// overrides), and getting this wrong in either direction is severe: stacking a
+// key item re-creates the run-ending altar bug below, and clamping a counted one
+// would cap Cleria Ore at a single weapon upgrade.
+//
+// Verified by disassembling all 2225 scripts of the extracted XSO corpus:
+// inventory cells 0x40..0x76 are written by `0x64 Flag_SetInt` with an immediate
+// of 0 or 1 everywhere, with EXACTLY ONE exception — 0x57 in the S_0100
+// SARA_ROO_* debug flag-dumps. The only cells ever incremented with
+// `0x67 Flag_AddInt` are 0x57/0x58/0x59, and the only ones decremented with
+// `0x69 Flag_SubInt` are 0x57/0x58 (plus the two Moon Crests, consumed at their
+// altars). So exactly three item cells are counters; the rest are booleans.
+static const int kItemCellLo = 0x40, kItemCellHi = 0x76;
+static bool is_counted_item_cell(int idx) {
+    return idx == 0x57      // Roda Fruit
+        || idx == 0x58      // Cleria Ore (weapon-upgrade tiers)
+        || idx == 0x59;     // Celcetan Panacea
+}
+
 // Grant an item in g_flags. Atomic int32.
 //
 // `stack` = may this cell legitimately hold more than one (a consumable)? For
@@ -663,8 +694,9 @@ static void apply_pending_recalc() {
 // lists no >= variant for it). A key item sitting at 2 therefore fails its own
 // door/altar check and the gate is dead FOREVER — the Red Moon Crest altar
 // bug report (Yunica, v1.6.x): "he equipped it and tried to use it on the altar
-// but it wasn't activating at all". Vanilla can never produce a 2 here (a chest
-// grants with 0x64 Flag_SetInt = `g_flags[idx] = 1`), so clamping is also the
+// but it wasn't activating at all". The crests are genuinely consumed there
+// (`0x69 Flag_SubInt` on 0x5C/0x6F in the altar scripts), so an off-by-one is
+// not cosmetic. Vanilla can never produce a 2 here, so clamping is also the
 // faithful behaviour. Consumables are unaffected — they are counted, not tested.
 static void ap_give(int idx, int count, bool stack) {
     if (idx < 0 || idx >= 0x200) return;
@@ -679,10 +711,38 @@ static void ap_give(int idx, int count, bool stack) {
             stack ? "" : " (key item, clamped to 1)");
 }
 
-// Classification-driven overload: progression(1)/useful(2) items are unique key
-// items/gear (clamped); filler(0)/trap(4) are the stackable consumables.
+// Overload used by the receive path. Stackability comes from the cell (above),
+// falling back to the AP classification for anything outside the inventory band
+// — those are event/story cells the corpus survey doesn't cover.
 static void ap_give_tier(int idx, int count, int tier) {
-    ap_give(idx, count, /*stack=*/!(tier & 3));
+    bool stack = (idx >= kItemCellLo && idx <= kItemCellHi)
+                     ? is_counted_item_cell(idx)
+                     : !(tier & 3);
+    ap_give(idx, count, stack);
+}
+
+// Enforce the boolean invariant on every inventory cell that is not one of the
+// three counters. This is what REPAIRS a save already carrying an inflated count
+// — the clamp in ap_give only prevents new inflation, and the prog_gear receive
+// path skips a cell it already considers owned, so an inflated one would never
+// be rewritten and its gate would stay dead for the rest of the run.
+//
+// Safe to run every tick rather than once at connect: vanilla never puts >1 in
+// these cells, so with no bug present this never writes anything. Running it
+// continuously (instead of once) also catches a save LOADED after connect, which
+// a connect-time-only migration would miss entirely.
+static void enforce_item_cell_invariant() {
+    for (int idx = kItemCellLo; idx <= kItemCellHi; idx++) {
+        if (is_counted_item_cell(idx)) continue;
+        volatile int* cell = (volatile int*)(kGFlagsAbs + idx * 4);
+        int v = *cell;
+        if (v > 1) {
+            *cell = 1;
+            request_recalc();
+            mod_log("repair: g_flags[0x%X] was %d -> clamped to 1 (key item; "
+                    "an inflated count fails its own 0x5F == test)", idx, v);
+        }
+    }
 }
 
 
@@ -872,7 +932,6 @@ static void on_slot_connected(const nlohmann::json& sd) {
         std::lock_guard<std::mutex> lk(g_gear_mtx);
         g_owned_gear.clear();
     }
-    reset_floor_prev();
     // Re-arm force-spawn from the connect point: discard any intro scene the
     // title/attract screen showed BEFORE the player connected, so a fresh F8
     // connect at the title can't burn the one-shot warp on nothing (which left
@@ -1448,14 +1507,16 @@ static void sweep_flag_locations(std::vector<int64_t>& fire) {
 // Membership has none of those holes and still cannot back-fill a floor the
 // player never stood on, which is the property the crossing rule existed for.
 // Only polled once a scene is loaded, so New-Game/menu garbage can't misfire.
-// Kept as the "this jump wasn't the player walking" signal. It no longer needs to
-// swallow a tick — a warp destination IS a floor you are standing on, so it joins
-// g_floors_seen like any other — but New Game / force-spawn still want the
-// visited set cleared so a previous run's floors can't leak into this one.
-static std::atomic<bool> g_reprime_floor{false};
-static void reset_floor_prev() { g_reprime_floor.store(true); }
+//
+// The floor is resolved from the CURRENT SCENE (g_scene_floors), not from the
+// raw floor cell: poll_scene already feeds the shop pacing that way precisely
+// because "the floor cell is wrong for warp destinations", and Reach-NF has the
+// same requirement — a warp/force-spawn arrival must count the floor you land
+// on. The raw cell stays as the fallback for a scene the table doesn't map.
 static void poll_value_checks() {
-    if (read_current_scene() <= 0) return;
+    int scene = read_current_scene();
+    if (scene <= 0) return;
+    enforce_item_cell_invariant();   // repair inflated key-item counts (run-ending)
     std::vector<int64_t> fire;
     for (const auto& pb : g_poll_bits)
         if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&
@@ -1464,19 +1525,20 @@ static void poll_value_checks() {
     for (const auto& pv : g_poll_vals)
         if (*(volatile int*)pv.abs >= 1 && g_poll_fired.insert(pv.loc).second)
             fire.push_back(pv.loc);
-    if (g_reprime_floor.exchange(false)) {
-        std::lock_guard<std::mutex> lk(g_checked_mtx);
-        g_floors_seen.clear();            // New Game / force-spawn: start fresh
-    }
-    for (const auto& pf : g_poll_floors) {
-        int cur = *(volatile int*)pf.abs;
-        if (cur >= 1 && cur <= 26) {
-            std::lock_guard<std::mutex> lk(g_checked_mtx);
-            g_floors_seen.insert(cur);    // also drives shop one-per-floor pacing
-        }
+    int scene_floor = 0;
+    {
+        auto it = g_scene_floors.find(scene);
+        if (it != g_scene_floors.end()) scene_floor = it->second;
     }
     {
         std::lock_guard<std::mutex> lk(g_checked_mtx);
+        for (const auto& pf : g_poll_floors) {
+            int cur = scene_floor > 0 ? scene_floor : *(volatile int*)pf.abs;
+            if (cur >= 1 && cur <= 26)
+                g_floors_seen.insert(cur);   // also drives shop one-per-floor pacing
+        }
+        // Fire on MEMBERSHIP of the visited set, which poll_scene also feeds on
+        // every room change — so a floor entered between two polls still counts.
         for (const auto& pf : g_poll_floors)
             if (g_floors_seen.count(pf.floor_n) &&
                 g_poll_fired.insert(pf.loc).second)
@@ -1837,9 +1899,9 @@ static void force_spawn() {
     g_warp_idx = g_spawn_reg_idx;
     do_warp_native();
     if (g_start_weapon > 0) g_pending_weapon.store(g_start_weapon);
-    // The warp jumps the floor cell for a non-climb reason — rebaseline the
-    // Reach-NF crossing detector so it doesn't spray floor checks on arrival.
-    reset_floor_prev();
+    // Reach-NF is presence-based off the scene's floor (poll section), so a warp
+    // needs no rebaselining: the spawn floor's own check legitimately fires (the
+    // spawn region is sphere-0 reachable) and intermediates never can.
     mod_log("force-spawn: warped to spawn S_%d (reg idx %d), weapon=%d, crystal idx 0x%X",
             g_start_statue_scene, g_spawn_reg_idx, g_start_weapon, crystal_idx);
 }
@@ -1926,7 +1988,6 @@ extern "C" void exp_scaling_on_frame() {
             if (nc > 0) {
                 g_warp_idx = cand[GetTickCount() % (unsigned)nc];
                 do_warp_native();
-                reset_floor_prev();
                 mod_log("trap: Chaos Warp -> reg idx %d", g_warp_idx);
             }
         }
