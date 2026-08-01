@@ -55,6 +55,7 @@ extern bool g_supp_item[0x200];   // vanilla item indices to suppress
 extern bool g_loc_flag[0x200];    // location flags that are checks
 // Seed-scoped save redirection (hook_saveredir.cpp).
 extern "C" void saveredir_set_seed(const char* seed);
+extern "C" const char* saveredir_seed_cstr();
 extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
@@ -411,6 +412,13 @@ static std::atomic<unsigned long> g_fog_until{0};    // Blinding Fog: overlay ha
 static std::atomic<unsigned long> g_butter_until{0}; // Butterfingers: weapon-Lv1 window end
 static const uintptr_t kExpAbs = 0x0076A748;         // current EXP (float)
 
+// Is `name` one of our traps? Used to skip re-arming a trap whose effect already
+// fired in an earlier session (see the replay watermark in on_items_received).
+static bool is_trap_item(const std::string& name) {
+    return name == "EXP Leech" || name == "Chaos Warp"
+        || name == "Butterfingers" || name == "Blinding Fog";
+}
+
 // Set the effect for a received trap. Returns true if `name` was a trap.
 static bool apply_trap(const std::string& name) {
     unsigned long now = GetTickCount();
@@ -518,6 +526,51 @@ static std::mutex g_check_mtx;
 static std::vector<int64_t> g_checks;
 // highest received-item index already granted (dedupe replays this session).
 static int g_applied_through = -1;
+// Highest received-item index granted in ANY session of this seed+slot —
+// PERSISTED to disk, unlike g_applied_through.
+//
+// On every (re)connect the server replays the whole ReceivedItems list from
+// index 0, and we deliberately walk all of it so the idempotent state (g_flags
+// ownership, the gear-reconcile watermark, statue unlocks, weapon tier) is
+// rebuilt after a restart. But some effects are NOT idempotent, and replaying
+// those was destructive: SP fillers added their amount again (reconnecting was
+// free SP) and traps re-fired. Items at or below this watermark are replayed in
+// "quiet" mode — state yes, side effects no. Keyed by seed+slot so a different
+// seed or slot starts clean.
+static int g_replay_through = -1;
+
+// Where the watermark lives. The seed comes from the save-redirect module (it is
+// already sanitized for use in a filename); slot is the connect config.
+static void applied_path(char* out, size_t n) {
+    const char* seed = saveredir_seed_cstr();
+    snprintf(out, n, "yso_ap_applied_%s_%s.cfg",
+             (seed && seed[0]) ? seed : "noseed", g_slot);
+    for (char* p = out; *p; ++p)                    // keep it a legal filename
+        if (*p == '/' || *p == '\\' || *p == ':' || *p == ' ') *p = '_';
+}
+
+static void load_replay_through() {
+    char path[320];
+    applied_path(path, sizeof(path));
+    g_replay_through = -1;
+    if (FILE* f = fopen(path, "r")) {
+        int v = -1;
+        if (fscanf(f, "%d", &v) == 1 && v >= -1) g_replay_through = v;
+        fclose(f);
+    }
+    mod_log("ap: replay watermark = %d (%s)", g_replay_through, path);
+}
+
+static void save_replay_through(int through) {
+    if (through <= g_replay_through) return;
+    g_replay_through = through;
+    char path[320];
+    applied_path(path, sizeof(path));
+    if (FILE* f = fopen(path, "w")) {
+        fprintf(f, "%d\n", through);
+        fclose(f);
+    }
+}
 // AP location id -> "what's here" display string (from LocationScouts), so when
 // a chest is opened we can show the real item + owning world (incl. other games).
 static std::mutex g_scout_mtx;
@@ -566,15 +619,36 @@ static void toast_loc(int64_t loc) {
 // icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
 static const int kForeignArtId = 0x57;
 
-// Grant an item in g_flags (give semantics: -1 -> 1, else +count). Atomic int32.
-static void ap_give(int idx, int count) {
+// Grant an item in g_flags. Atomic int32.
+//
+// `stack` = may this cell legitimately hold more than one (a consumable)? For
+// everything else the grant is a SET to 1, never an add, because the scripts
+// gate on EXACT EQUALITY: the event VM's test op 0x5F is
+// `acc = (g_flags[o0] == o1)` (docs/formats/XSO.md; CleriaCore EVENTVM_HANDLERS_2
+// lists no >= variant for it). A key item sitting at 2 therefore fails its own
+// door/altar check and the gate is dead FOREVER — the Red Moon Crest altar
+// bug report (Yunica, v1.6.x): "he equipped it and tried to use it on the altar
+// but it wasn't activating at all". Vanilla can never produce a 2 here (a chest
+// grants with 0x64 Flag_SetInt = `g_flags[idx] = 1`), so clamping is also the
+// faithful behaviour. Consumables are unaffected — they are counted, not tested.
+static void ap_give(int idx, int count, bool stack) {
     if (idx < 0 || idx >= 0x200) return;
     volatile int* cell = (volatile int*)(kGFlagsAbs + idx * 4);
     int cur = *cell;
     int base = (cur >= 1) ? cur : 0;
-    *cell = base + (count > 0 ? count : 1);
-    mod_log("ap: granted g_flags[0x%X] %d -> %d", idx, cur, *cell);
+    int next = stack ? base + (count > 0 ? count : 1) : 1;
+    if (!stack && cur == 1) return;               // already owned: no-op, no log spam
+    *cell = next;
+    mod_log("ap: granted g_flags[0x%X] %d -> %d%s", idx, cur, *cell,
+            stack ? "" : " (key item, clamped to 1)");
 }
+
+// Classification-driven overload: progression(1)/useful(2) items are unique key
+// items/gear (clamped); filler(0)/trap(4) are the stackable consumables.
+static void ap_give_tier(int idx, int count, int tier) {
+    ap_give(idx, count, /*stack=*/!(tier & 3));
+}
+
 
 // -- owned-gear reconcile ---------------------------------------------------- #
 // Granted items live in g_flags, but the game rebuilds that block on every save
@@ -871,6 +945,10 @@ static void on_slot_connected(const nlohmann::json& sd) {
     }
     // Seed-scoped save redirection: hand the room seed to the file hook.
     saveredir_set_seed(g_ap->get_seed().c_str());
+    // Now that the seed is known, load this seed+slot's replay watermark so the
+    // ReceivedItems replay that follows rebuilds state without re-adding SP or
+    // re-firing traps.
+    load_replay_through();
     int statues = 0;
     if (sd.value("statue_warp_locks", false) && sd.contains("statue_unlocks")) {
         g_statue_locks_on = true;
@@ -991,6 +1069,11 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
     bool batch = fresh > 6;
     for (const auto& it : items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
+        // A replay is an item we granted in an EARLIER session (the server
+        // re-sends the whole list on connect). Walk it so the idempotent state
+        // rebuilds — g_flags ownership, the gear watermark, statue unlocks, the
+        // weapon tier — but skip the effects that would stack a second time.
+        const bool replay = (it.index <= g_replay_through);
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
         std::string from = g_ap->get_player_alias(it.player);
         int tier = tier_or(name, it.flags);   // classification: 1 prog, 2 useful, 4 trap
@@ -998,7 +1081,12 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         auto f = g_name_to_idx.find(name);
         auto sp = g_sp_items.find(name);
         auto pg = g_prog_gear.find(name);
-        if (sp != g_sp_items.end()) {
+        if (sp != g_sp_items.end() && replay) {
+            // SP was already added in the session that first received this item,
+            // and it is spendable currency — re-adding it on every reconnect was
+            // an unlimited SP faucet.
+            mod_log("ap: replay '%s' — SP already granted, skipped", name.c_str());
+        } else if (sp != g_sp_items.end()) {
             // SP filler: add to the REAL SP currency cell (kSpAbs = 0x76A75C, the
             // HUD value), not g_flags[0xD8] which the game never spends.
             std::lock_guard<std::mutex> lk(g_sp_mtx);   // vs main-thread shop buy
@@ -1011,7 +1099,7 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             for (int idx : pg->second)
                 if (idx >= 0 && idx < 0x200 &&
                     *(volatile int*)(kGFlagsAbs + idx * 4) < 1) {
-                    ap_give(idx, 1);
+                    ap_give_tier(idx, 1, tier);
                     remember_gear(idx, tier);   // survive save/load wipes
                     granted = true;
                     break;
@@ -1035,17 +1123,22 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             int wtier = kWeaponTier[(n < 5 ? n : 5) - 1];
             g_pending_weapon.store(wtier);
             mod_log("ap: Cleria Ore #%d -> weapon tier value %d (pending)", n, wtier);
+        } else if (replay && is_trap_item(name)) {
+            // A trap is a one-shot effect that already happened. Re-arming it on
+            // every reconnect meant restarting the client punished the player.
+            mod_log("ap: replay '%s' — trap already fired, skipped", name.c_str());
         } else if (apply_trap(name)) {
             // Trap effect armed above; the red trap toast fires below like any item.
         } else if (f != g_name_to_idx.end()) {
-            ap_give(f->second, 1);
+            ap_give_tier(f->second, 1, tier);
             remember_gear(f->second, tier);   // survive save/load wipes
             // A sacred artifact also unlocks its power (the bracelet cell) —
             // that's what the game checks to let you cast. Granting the artifact
             // alone leaves a dead skill slot.
             auto sk = g_skill_grants.find(name);
             if (sk != g_skill_grants.end()) {
-                ap_give(sk->second, 1);
+                // The power cell is a unique unlock, never a stack.
+                ap_give(sk->second, 1, /*stack=*/false);
                 remember_gear(sk->second, tier);
                 mod_log("ap: '%s' -> also unlocked skill g_flags[0x%X]",
                         name.c_str(), sk->second);
@@ -1056,10 +1149,13 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         // Your own items already print as "Found: X (yours)" when their location
         // fires (ap_on_check), so only surface items coming FROM another player
         // (or the server) here — avoids showing every self-item twice.
-        if (!batch && from != g_slot)
+        // A replay is silent: the player already saw it in the session that
+        // granted it.
+        if (!batch && !replay && from != g_slot)
             overlay::push_toast(name, from, tier, /*sent=*/false);
         g_applied_through = it.index;
     }
+    save_replay_through(g_applied_through);   // one write per batch, not per item
     if (batch) {
         char buf[64];
         snprintf(buf, sizeof(buf), "Received %d items", fresh);

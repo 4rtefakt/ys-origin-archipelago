@@ -42,7 +42,12 @@ from typing import List, Optional, Tuple
 
 from .game_state import GameState
 from .memory import ProcessMemory
-from .offsets import GRANT_SAFE_MIN, ITEM_OFFSETS, SKILL_ITEMS
+from .offsets import (
+    GRANT_SAFE_MIN,
+    ITEM_OFFSETS,
+    SKILL_ITEMS,
+    STACKABLE_ITEMS,
+)
 
 log = logging.getLogger("ys_origin.suppression")
 
@@ -97,14 +102,19 @@ class Suppressor:
         """Apply an AP grant by raising the baseline and writing it to memory.
 
         Returns the new value. Mirrors ``game_state._grant_item`` semantics
-        (key items become 1, consumables add ``count``, never below the floor)
-        but computes the target from the *baseline*, not the live cell — so the
-        grant overwrites any un-suppressed vanilla value rather than stacking on
-        top of it.
+        (key items are SET to 1, consumables add ``count``, never below the
+        floor) but computes the target from the *baseline*, not the live cell —
+        so the grant overwrites any un-suppressed vanilla value rather than
+        stacking on top of it.
         """
         floor = self.baseline.get(name, NEVER)
         base = floor if floor >= 1 else 0          # treat -1 ("never") as 0
-        target = max(base + count, GRANT_SAFE_MIN)
+        if name in STACKABLE_ITEMS:
+            target = max(base + count, GRANT_SAFE_MIN)
+        else:
+            # Unique key item: exactly 1. Accumulating past 1 kills its own
+            # script gate (the VM tests `g_flags[idx] == 1`). See STACKABLE_ITEMS.
+            target = GRANT_SAFE_MIN
         memory.write_offset_int32(ITEM_OFFSETS[name], target)
         self.baseline[name] = target
         log.info("AP-granted %r: %d -> %d (baseline)", name, floor, target)

@@ -36,6 +36,7 @@ from .offsets import (
     ITEM_OFFSETS,
     LOCATION_FLAG_OFFSETS,
     OFFSETS,
+    STACKABLE_ITEMS,
     Offsets,
     OffsetNotMapped,
     require,
@@ -301,14 +302,22 @@ def _set_tier(memory: ProcessMemory, name: str, off: Optional[int],
 def _grant_item(memory: ProcessMemory, name: str, count: int = 1) -> None:
     """Grant an entry in the confirmed item/skill array.
 
-    Adds ``count`` (key items become 1, consumables increment). NEVER writes
-    below :data:`GRANT_SAFE_MIN` — clearing a key-item/skill entry leaves a
-    dangling skill-object pointer and freezes the game (learned the hard way).
+    Consumables (:data:`STACKABLE_ITEMS`) add ``count``; everything else is a
+    unique key item and is SET to 1, never accumulated — the scripts gate on
+    exact equality, so a count of 2 permanently breaks that item's own gate (see
+    STACKABLE_ITEMS). NEVER writes below :data:`GRANT_SAFE_MIN` — clearing a
+    key-item/skill entry leaves a dangling skill-object pointer and freezes the
+    game (learned the hard way).
     """
     off = ITEM_OFFSETS[name]
     cur = memory.read_offset_int32(off)
     base = cur if cur >= 1 else 0          # treat -1 ("never obtained") as 0
-    target = max(base + count, GRANT_SAFE_MIN)
+    if name in STACKABLE_ITEMS:
+        target = max(base + count, GRANT_SAFE_MIN)
+    else:
+        target = GRANT_SAFE_MIN
+        if cur == target:
+            return                          # already owned — nothing to do
     memory.write_offset_int32(off, target)
     log.info("granted %r: %d -> %d (+0x%X)", name, cur, target, off)
 
