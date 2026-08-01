@@ -665,6 +665,18 @@ static HANDLE WINAPI Hook_CreateFileW(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_AT
     }
     return g_orig_cfw(n, a, s, sa, c, f, t);
 }
+// KERNELBASE's CreateFileW needs its own trampoline: it is a DIFFERENT function
+// from kernel32's forwarder, so it cannot share g_orig_cfw.
+static CreateFileW_t g_orig_cfw_kb = nullptr;
+static HANDLE WINAPI Hook_CreateFileW_KB(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
+                                         DWORD c, DWORD f, HANDLE t) {
+    if (blocked_w(n)) {
+        mod_log("movie: blocked (KERNELBASE W) — reported not-found");
+        SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE;
+    }
+    return g_orig_cfw_kb(n, a, s, sa, c, f, t);
+}
+
 static HANDLE WINAPI Hook_CreateFileA(LPCSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
                                       DWORD c, DWORD f, HANDLE t) {
     if (blocked_a(n)) {
@@ -711,14 +723,43 @@ void hook_vm_install() {
     MH_STATUS ct = MH_CreateHook((void*)kWaitTail, (void*)&Hook_WaitTail, &g_orig_waittail);
     MH_STATUS et = MH_EnableHook((void*)kWaitTail);
     // Intro-movie skip: report the opening AVIs as not-found.
-    if (HMODULE k = GetModuleHandleA("kernel32.dll")) {
-        void* cfw = (void*)GetProcAddress(k, "CreateFileW");
-        mod_log("hook_vm_install: CreateFileW=%p CreateFileA=%p (kernel32)",
-                cfw, (void*)GetProcAddress(k, "CreateFileA"));
-        void* cfa = (void*)GetProcAddress(k, "CreateFileA");
-        if (cfw) { MH_CreateHook(cfw, (void*)&Hook_CreateFileW, (void**)&g_orig_cfw); MH_EnableHook(cfw); }
-        if (cfa) { MH_CreateHook(cfa, (void*)&Hook_CreateFileA, (void**)&g_orig_cfa); MH_EnableHook(cfa); }
-        mod_log("hook_movies: CreateFileW/A hooked (intro movies -> not found)");
+    //
+    // Hook BOTH kernel32 and KERNELBASE. The movie is not opened by the game's
+    // own code path: FUN_005773e0 can read the file itself, but for the intro it
+    // takes the DirectShow branch, and the filter graph (quartz / xvid.ax) opens
+    // the file from ITS module — which imports CreateFileW from KERNELBASE, not
+    // from the kernel32 export. Hooking only kernel32 therefore installs fine and
+    // is simply never called, which is exactly what the log showed: the resolved
+    // address was recorded at install and no "movie: blocked" line ever appeared
+    // while the intro played.
+    //
+    // On modern Windows kernel32's CreateFileW is a thin forwarder to
+    // KERNELBASE's, so hooking both can double-invoke the detour for callers that
+    // go through kernel32. That is harmless here: the detour is a pure filename
+    // test with no state, and the inner call simply sees a name it already
+    // rejected (or passes it through twice).
+    {
+        void* cfw32 = nullptr; void* cfa32 = nullptr;
+        if (HMODULE k = GetModuleHandleA("kernel32.dll")) {
+            cfw32 = (void*)GetProcAddress(k, "CreateFileW");
+            cfa32 = (void*)GetProcAddress(k, "CreateFileA");
+            if (cfw32) { MH_CreateHook(cfw32, (void*)&Hook_CreateFileW, (void**)&g_orig_cfw); MH_EnableHook(cfw32); }
+            if (cfa32) { MH_CreateHook(cfa32, (void*)&Hook_CreateFileA, (void**)&g_orig_cfa); MH_EnableHook(cfa32); }
+        }
+        // KERNELBASE — the one the DirectShow filter actually calls.
+        void* cfwB = nullptr;
+        if (HMODULE kb = GetModuleHandleA("kernelbase.dll")) {
+            cfwB = (void*)GetProcAddress(kb, "CreateFileW");
+            if (cfwB && cfwB != cfw32) {
+                MH_STATUS c = MH_CreateHook(cfwB, (void*)&Hook_CreateFileW_KB,
+                                            (void**)&g_orig_cfw_kb);
+                MH_STATUS e = MH_EnableHook(cfwB);
+                mod_log("hook_movies: KERNELBASE CreateFileW=%p create=%d enable=%d",
+                        cfwB, (int)c, (int)e);
+            }
+        }
+        mod_log("hook_movies: kernel32 CFW=%p CFA=%p, kernelbase CFW=%p",
+                cfw32, cfa32, cfwB);
     }
     mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d exp=%d/%d wait-ff=%d/%d tail-ff=%d/%d (+box)",
             (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es, (int)cx, (int)ex, (int)cw, (int)ew, (int)ct, (int)et);
