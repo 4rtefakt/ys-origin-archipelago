@@ -1140,12 +1140,6 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     g_bless_price_map[vanilla] = repriced;
             }
         }
-        // Which location each vanilla price belongs to, for the row relabel.
-        // g_shop_items carries (loc, cost) at the SEED's price, so match on that.
-        for (const auto& it : g_shop_items)
-            for (const auto& pm : g_bless_price_map)
-                if (pm.second == it.cost)
-                    g_bless_price_to_loc[pm.first] = it.loc;
         mod_log("ap: vanilla statue menu re-pricing: %d prices mapped",
                 (int)g_bless_price_map.size());
     }
@@ -1166,6 +1160,20 @@ static void on_slot_connected(const nlohmann::json& sd) {
         {
             std::lock_guard<std::mutex> lk(g_reg_mtx);
             g_shop_items.swap(items);
+            // Which location each vanilla price belongs to, for the menu-row
+            // relabel. MUST be after the swap above: g_shop_items is what
+            // carries (loc, cost), and building this earlier silently produced
+            // an empty map, so every row kept its vanilla name.
+            {
+                std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+                g_bless_price_to_loc.clear();
+                for (const auto& si : g_shop_items)
+                    for (const auto& pm : g_bless_price_map)
+                        if (pm.second == si.cost)
+                            g_bless_price_to_loc[pm.first] = si.loc;
+                mod_log("ap: statue menu relabel: %d of %d rows mapped",
+                        (int)g_bless_price_to_loc.size(), (int)g_shop_items.size());
+            }
         }
         mod_log("ap: blessing shop — %d items, unlock mode %d",
                 (int)g_shop_items.size(), g_shop_unlock_mode);
