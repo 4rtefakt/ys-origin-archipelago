@@ -249,18 +249,29 @@ def build_context_class():
                 self.mem = None
                 return False
 
-        async def send_location_signal(self, signal: str):
-            """Map a game signal string to an AP location id and send it."""
+        async def send_location_signal(self, signal: str) -> bool:
+            """Map a game signal string to an AP location id and send it.
+
+            Returns True only when the check is accounted for (sent, or already
+            known-checked by the server). The caller must NOT mark the signal as
+            done on a False — the two failure paths here are both transient
+            (slot data not in yet; socket down mid-reconnect) and used to lose
+            the check permanently, because the caller marked it sent regardless.
+            """
             loc_id = self.location_signal_to_id.get(signal)
             if loc_id is None:
-                log.debug("signal %r has no location id yet", signal)
-                return
+                log.debug("signal %r has no location id yet — will retry", signal)
+                return False
             if loc_id in self.locations_checked:
-                return
+                return True
+            if self.server is None or self.slot is None:
+                log.debug("not connected; deferring LocationCheck %r", signal)
+                return False
             await self.send_msgs(
                 [{"cmd": "LocationChecks", "locations": [loc_id]}]
             )
             log.info("sent LocationCheck %r -> %d", signal, loc_id)
+            return True
 
     return YsOriginContext, server_loop, gui_enabled, ClientStatus
 
@@ -287,11 +298,15 @@ async def game_watcher(ctx) -> None:
             ctx.suppressor.prime(state)  # fallback if attach-time prime failed
         if ctx.prev_state is not None:
             # Detect FIRST: location/event flags are our check signals and must
-            # fire before the item-array gets reverted.
+            # fire before the item-array gets reverted. detect_checks is
+            # level-triggered for the persistent signals, so an unsent signal is
+            # simply re-offered next poll — only record it once it really went
+            # out, otherwise a blip while reconnecting drops the check for good.
             for signal in detect_checks(ctx.prev_state, state):
-                if signal not in ctx.checked_signals:
+                if signal in ctx.checked_signals:
+                    continue
+                if await ctx.send_location_signal(signal):
                     ctx.checked_signals.add(signal)
-                    await ctx.send_location_signal(signal)
         # Then neutralize any vanilla item grant (mutates state.items so prev_state
         # stays consistent). No-op when suppression is disabled.
         ctx.suppressor.suppress(ctx.mem, state)
