@@ -26,11 +26,15 @@ Ys Origin:
                          #   gives (scouted) while you're at a goddess statue;
                          #   false = blind buys
 
-  # --- blessing shop economy (the mod's own F5 shop overlay) ---
+  # --- blessing shop economy ---
   blessing_costs: vanilla # vanilla | shuffled
-                          #   vanilla  = buy from the game's statue menu as usual
-                          #   shuffled = the mod's F5 shop sells blessings at
-                          #              seed-randomized SP prices (min/max below)
+                          #   vanilla  = blessings cost what the game charges
+                          #   shuffled = seed-randomized SP prices (min/max below),
+                          #              applied at BOTH the goddess statue's own
+                          #              menu and the mod's F5 overlay — the statue
+                          #              shows and charges the seed's price
+                          #   (the armor/leggings upgrades are not affected: they
+                          #    run on the game's own scaling ladder, 100 -> 12000)
   blessing_cost_min: 100  # cheapest possible randomized price (SP)
   blessing_cost_max: 800  # priciest possible randomized price (SP)
   blessing_shop_unlock: all # all | one_per_floor
