@@ -120,9 +120,14 @@ bool on_wm_key(UINT msg, WPARAM wp) {
     }
     switch (wp) {
         case VK_F8: case VK_ESCAPE:  g_open = false; return true;
-        case VK_F5: case VK_RETURN:
-            // Enter on the toggle row cycles it instead of connecting, so you
-            // can't fire a connect by trying to change the setting.
+        case VK_F5:
+            // F5 is the global connect accelerator — it means "connect" on every
+            // row, including the toggle. Only Enter is row-sensitive.
+            do_connect();
+            return true;
+        case VK_RETURN:
+            // Enter activates the FOCUSED row, so on the toggle it cycles rather
+            // than firing a connect the player did not ask for.
             if (is_toggle(g_focus)) cycle_toggle(g_focus, +1);
             else do_connect();
             return true;
@@ -213,7 +218,7 @@ void draw() {
     y += lh * 0.5f;
     text_centered(dl, f, fs * 0.85f, cx, y, gold,
                   is_toggle(g_focus)
-                      ? "[Left/Right] Change     [Tab/Up/Down] Field     [Esc] Close"
+                      ? "[Left/Right] Change   [F5] Connect   [Tab] Field   [Esc] Close"
                       : "[Enter/F5] Connect     [Tab/Up/Down] Field     [Esc] Close");
     y += lh;
     std::string st = "Status: " + overlay::get_status();
