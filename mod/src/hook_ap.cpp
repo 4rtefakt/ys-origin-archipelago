@@ -290,13 +290,39 @@ static const uintptr_t kRavalBase   = 0x0076A654;
 static const uintptr_t kArmorSelAbs = 0x0076BB7C;
 static const uintptr_t kBootsSelAbs = 0x0076BB80;
 
-// The AP location for a gear row, given the 0xdd ITEM operand: 1 = armor,
-// 4 = leggings. That operand is the row's own identity, straight out of the
-// menu op — no guessing from prices or from 0xb0 ordering.
-static int64_t gear_row_location(int item_operand) {
-    int kind = (item_operand == 1) ? 0 : (item_operand == 4) ? 1 : -1;
-    if (kind < 0) return -1;
-    int sel = *(volatile int*)(kind == 0 ? kArmorSelAbs : kBootsSelAbs);
+// GROWMENU emits the gear rows FIRST (armor rungs, then leggings rungs), before
+// any blessing row, and exactly one rung of each passes its guard — so at most
+// two gear rows appear and they are the first two of the menu.
+//
+// The 0xdd operands cannot identify them: operand 1 turned out to be another
+// STRING, not the item index (it read back as ASCII). What IS reliable is the
+// pair of selector globals plus the cost ladder, both of which the menu has
+// already resolved by this point.
+static const int kGearLadder[] = {100, 300, 1000, 3000, 6000, 12000};
+static bool is_gear_price(int p) {
+    for (int v : kGearLadder) if (v == p) return true;
+    return false;
+}
+
+// Row counter for the current menu build. A menu is emitted in one burst, so a
+// gap since the last row means a new menu — simpler and more robust than trying
+// to hook the menu open, which shares its opcode with everything else.
+static int g_menu_row = 0;
+static unsigned long g_menu_last_tick = 0;
+
+static int64_t gear_row_location(int price) {
+    unsigned long now = GetTickCount();
+    if (now - g_menu_last_tick > 250) g_menu_row = 0;   // new menu
+    g_menu_last_tick = now;
+    int row = g_menu_row++;
+    if (row > 1 || !is_gear_price(price)) return -1;
+    int armor = *(volatile int*)kArmorSelAbs;
+    int boots = *(volatile int*)kBootsSelAbs;
+    // row 0 is armor when something is equipped, otherwise leggings takes it.
+    int sel;
+    if (row == 0) sel = (armor >= 0) ? armor : boots;
+    else          sel = (armor >= 0) ? boots : -1;
+    if (sel < 0 || sel > 0x200) return -1;
     if (sel < 0 || sel > 0x200) return -1;
     uintptr_t cell = kRavalBase + (uintptr_t)sel * 4;
     std::lock_guard<std::mutex> lk(g_bless_price_mtx);
@@ -898,15 +924,8 @@ static void enforce_item_cell_invariant() {
 // is not fetched until then. So we rebuild the entire line, price suffix and all.
 extern "C" void ap_gear_relabel(char* buf, int item_operand, int price) {
     if (!buf) return;
-    int64_t loc = gear_row_location(item_operand);
-    static int dbg = 0;
-    if (dbg < 24) {
-        dbg++;
-        mod_log("gear-relabel: item_operand=%d price=%d -> loc=%lld (armorSel=%d "
-                "bootsSel=%d map=%d)", item_operand, price, (long long)loc,
-                *(volatile int*)kArmorSelAbs, *(volatile int*)kBootsSelAbs,
-                (int)g_gear_cell_to_loc.size());
-    }
+    (void)item_operand;                 // unreliable: it is a string, not an id
+    int64_t loc = gear_row_location(price);
     if (loc < 0) return;
     std::string found;
     int flags = 0;
@@ -1183,6 +1202,10 @@ static void on_slot_connected(const nlohmann::json& sd) {
     // Are blessing EFFECTS shuffled into the item pool? Read FIRST: the detect
     // registration below branches on it.
     g_bless_as_items = sd.value("blessing_items", false);
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        g_gear_cell_to_loc.clear();     // filled by the detect registration below
+    }
     g_prog_skills.clear();
     g_prog_skill_count.clear();
     if (sd.contains("progressive_skills")) {
@@ -1393,7 +1416,6 @@ static void on_slot_connected(const nlohmann::json& sd) {
         std::lock_guard<std::mutex> lk(g_bless_price_mtx);
         g_bless_price_map.clear();
         g_bless_price_to_loc.clear();
-        g_gear_cell_to_loc.clear();
         if (sd.contains("blessing_vanilla_price_map")) {
             for (auto& kv : sd["blessing_vanilla_price_map"].items()) {
                 int vanilla = atoi(kv.key().c_str());
