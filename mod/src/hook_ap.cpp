@@ -1311,6 +1311,26 @@ static void on_slot_connected(const nlohmann::json& sd) {
             if (i >= 0 && i < 0x200) g_supp_give[i] = true;
         }
     }
+    // Degraded item VARIANTS, applied mod-side so an OLDER apworld still gets
+    // them. The Evil Ring is stored under two ids: 0x5D "emits a power" and 0x5E
+    // "its power seems to have been drained". The Mask-of-Eyes chest gives 0x5E
+    // and the three Zelkarons upgrade it in place to 0x5D, which is what the
+    // Rado's Annex door tests. Only the id our item table names (0x5D) reaches
+    // the suppress list, so the chest still handed out the drained ring: a dead
+    // item that can never be charged (the upgrade writes 0x5D, which IS
+    // suppressed) yet reads as the real thing in the inventory.
+    //
+    // The apworld publishes 0x5E from 2.0.0-beta.4 on. Deriving it here as well
+    // means a client updated ahead of its seed behaves identically, and it is
+    // idempotent when slot_data already carries it.
+    if (g_supp_item[0x5D] && !g_supp_item[0x5E]) {
+        g_supp_item[0x5E] = true;
+        g_supp_give[0x5E] = true;
+        supp++;
+        mod_log("ap: paired the drained Evil Ring (0x5E) with the suppressed "
+                "charged one (0x5D) — pre-beta.4 apworld");
+    }
+
     std::list<int64_t> scout;
     int scenes = 0;
     // Reset detect registrations (a reconnect re-registers everything; without
