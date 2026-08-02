@@ -20,6 +20,7 @@ from rule_builder.rules import And, CanReachRegion, Has, HasAny, True_
 
 from .data_tables import (
     CLERIA_ORE,
+    PROGRESSIVE_SKILLS,
     CONNECTIONS,
     GOAL_ITEM,
     RODA_FRUIT,
@@ -53,6 +54,22 @@ def _all_of(terms: list):
     return And(*terms)
 
 
+# artifact name -> the progressive chain that now carries it. When the chain is
+# in the pool the artifact itself is not, so a rule naming it would gate on an
+# item that can never be found — which made most of the tower unreachable and
+# fill error out with 15 unplaced progression items.
+_SKILL_SUBST = {str(d["artifact"]): prog for prog, d in PROGRESSIVE_SKILLS.items()}
+
+
+# Set once at the top of set_rules; empty when the option is off. Module-level so
+# the two rule builders below need no signature change.
+_ACTIVE_SUBST: dict = {}
+
+
+def _sub(name: str) -> str:
+    return _ACTIVE_SUBST.get(name, name)
+
+
 def _req_rule(req: list):
     """Room-logic requirement expr -> Rule Builder rule.
 
@@ -62,7 +79,8 @@ def _req_rule(req: list):
     counter, so a name that is not a real item is simply never satisfied.
     """
     return _all_of(
-        [HasAny(*t) if isinstance(t, (list, tuple)) else Has(t) for t in req]
+        [HasAny(*[_sub(x) for x in t]) if isinstance(t, (list, tuple))
+         else Has(_sub(t)) for t in req]
     )
 
 
@@ -70,7 +88,7 @@ def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
     """(item AND ore-count AND reach-anchor), skipping the parts that don't apply."""
     terms = []
     if item is not None:
-        terms.append(Has(item))
+        terms.append(Has(_sub(item)))
     if ore_n:
         terms.append(Has(CLERIA_ORE, ore_n))
     if anchor is not None:
@@ -84,6 +102,8 @@ def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
 def set_rules(world: "YsOriginWorld") -> None:
     """Forward (linear) rules by default; the bidirectional warp-network rules
     when random spawn is on."""
+    global _ACTIVE_SUBST
+    _ACTIVE_SUBST = dict(_SKILL_SUBST) if world.options.progressive_skills.value else {}
     if getattr(world, "open_mode", False):
         _set_rules_open(world)
     else:

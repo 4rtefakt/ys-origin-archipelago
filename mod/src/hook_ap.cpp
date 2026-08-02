@@ -899,6 +899,14 @@ static void enforce_item_cell_invariant() {
 extern "C" void ap_gear_relabel(char* buf, int item_operand, int price) {
     if (!buf) return;
     int64_t loc = gear_row_location(item_operand);
+    static int dbg = 0;
+    if (dbg < 24) {
+        dbg++;
+        mod_log("gear-relabel: item_operand=%d price=%d -> loc=%lld (armorSel=%d "
+                "bootsSel=%d map=%d)", item_operand, price, (long long)loc,
+                *(volatile int*)kArmorSelAbs, *(volatile int*)kBootsSelAbs,
+                (int)g_gear_cell_to_loc.size());
+    }
     if (loc < 0) return;
     std::string found;
     int flags = 0;
@@ -1040,6 +1048,37 @@ static void reconcile_gear() {
     }
 }
 
+// -- progressive elemental skills -------------------------------------------- #
+// One chain per element: the FIRST receipt unlocks the skill (artifact cell +
+// power cell, exactly what the altar does), each later one raises the level cell.
+// Without this the three gems and the artifact shuffle independently and you can
+// hold three Emeralds with no Wind skill to use them on.
+struct ProgSkill { int artifact, power, level_cell; };
+static std::map<std::string, ProgSkill> g_prog_skills;
+static std::map<std::string, int> g_prog_skill_count;   // receipts so far
+
+static void grant_progressive_skill(const std::string& name) {
+    auto it = g_prog_skills.find(name);
+    if (it == g_prog_skills.end()) return;
+    const ProgSkill& ps = it->second;
+    int n = ++g_prog_skill_count[name];
+    if (n == 1) {
+        ap_give(ps.artifact, 1, /*stack=*/false);
+        ap_give(ps.power,    1, /*stack=*/false);
+        remember_gear(ps.artifact, 1);
+        remember_gear(ps.power, 1);
+        mod_log("ap: %s #1 -> skill unlocked (0x%X + power 0x%X)",
+                name.c_str(), ps.artifact, ps.power);
+    } else {
+        volatile int* cell = (volatile int*)(kGFlagsAbs + ps.level_cell * 4);
+        int cur = *cell < 0 ? 0 : *cell;
+        if (cur < 3) *cell = cur + 1;           // the game caps these at 3
+        request_recalc();
+        mod_log("ap: %s #%d -> level cell 0x%X now %d",
+                name.c_str(), n, ps.level_cell, *cell);
+    }
+}
+
 // Flag-method locations already fired, shared by the two paths that can fire
 // them: the VM store hook (instant, on the game main thread) and the poll-thread
 // sweep below (the safety net). Guarded because those are different threads.
@@ -1144,6 +1183,17 @@ static void on_slot_connected(const nlohmann::json& sd) {
     // Are blessing EFFECTS shuffled into the item pool? Read FIRST: the detect
     // registration below branches on it.
     g_bless_as_items = sd.value("blessing_items", false);
+    g_prog_skills.clear();
+    g_prog_skill_count.clear();
+    if (sd.contains("progressive_skills")) {
+        for (auto& kv : sd["progressive_skills"].items()) {
+            const auto& d = kv.value();
+            g_prog_skills[kv.key()] = ProgSkill{
+                d.value("artifact", -1), d.value("power", -1),
+                d.value("level_cell", -1)};
+        }
+        mod_log("ap: %d progressive skill chains", (int)g_prog_skills.size());
+    }
     {
         std::lock_guard<std::mutex> lk(g_bless_mtx);
         g_bless_bit_to_loc.clear();
@@ -1576,6 +1626,8 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             mod_log("ap: replay '%s' — trap already fired, skipped", name.c_str());
         } else if (apply_trap(name)) {
             // Trap effect armed above; the red trap toast fires below like any item.
+        } else if (g_prog_skills.count(name)) {
+            grant_progressive_skill(name);
         } else if (f != g_name_to_idx.end() && f->second >= 0x200) {
             // Blessing EFFECT item: the id is BLESS_ITEM_BASE + bit, not a
             // g_flags cell, so it is granted by setting the bit rather than by

@@ -421,9 +421,18 @@ for _l in _LOCS:
         "location": _l["name"],
     }
 
+PROGRESSIVE_SKILLS: Dict[str, Dict[str, object]] = {
+    "Progressive Wind Skill": {
+        "artifact": "Cerulean Flabellum", "gem": "Emerald", "level_cell": 0xB6},
+    "Progressive Lightning Skill": {
+        "artifact": "Levinstrike Warhammer", "gem": "Ruby", "level_cell": 0xB7},
+    "Progressive Fire Skill": {
+        "artifact": "Crimson Lotusblade", "gem": "Topaz", "level_cell": 0xB8},
+}
+
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
     | set(FILLER_POOL) | set(TRAP_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
-    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS}
+    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS} | set(PROGRESSIVE_SKILLS)
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
@@ -539,6 +548,43 @@ BLESS_ITEM_BASE = 0x200
 # skill-level cell via ABILITY_GRANTS), and the real ids are published separately
 # for the give-item hook, which is keyed on the item id and does need them.
 GEM_GIVE_IDS: Dict[str, int] = {"Emerald": 0x80, "Ruby": 0x81, "Topaz": 0x82}
+
+# -- progressive elemental skills -------------------------------------------- #
+# Each element is an artifact plus three gems, and the vanilla order is the only
+# one that makes sense: the artifact UNLOCKS the skill (its altar script sets the
+# level cell to 0) and each gem raises the level. Shuffled independently you can
+# collect three Emeralds and still not have the Wind skill.
+#
+# So they become one progressive chain of four. Pairing confirmed from the altar
+# scripts, each of which zeroes its own level cell:
+#   S_1004 TALKITEM  -> 0xB6   Cerulean Flabellum  + Emerald
+#   S_2009 TALKC940  -> 0xB7   Levinstrike Warhammer + Ruby
+#   S_3007 TALKSAUL  -> 0xB8   Crimson Lotusblade  + Topaz
+
+
+def progressive_skill_for(item_name: str) -> Optional[str]:
+    """The progressive chain an artifact or gem belongs to, if any."""
+    for prog, d in PROGRESSIVE_SKILLS.items():
+        if item_name in (d["artifact"], d["gem"]):
+            return prog
+    return None
+
+
+def progressive_skill_slot_data() -> Dict[str, dict]:
+    """chain name -> what the mod must do per receipt: the artifact + power cells
+    for the FIRST one, then the level cell for each subsequent one."""
+    out: Dict[str, dict] = {}
+    for prog, d in PROGRESSIVE_SKILLS.items():
+        art = str(d["artifact"])
+        power = SKILL_GRANTS.get(art)
+        if art not in item_index or power not in item_index:
+            continue
+        out[prog] = {
+            "artifact": item_index[art],
+            "power": item_index[power],
+            "level_cell": int(d["level_cell"]),
+        }
+    return out
 
 
 def suppress_give_ids(active, char: str = "hugo") -> List[int]:
@@ -1195,7 +1241,8 @@ def is_blessing_effect_item(name: str) -> bool:
 
 def vanilla_items(enabled: Set[str], char: str = "hugo",
                   progressive_gear: bool = False,
-                  blessing_items: bool = False) -> List[str]:
+                  blessing_items: bool = False,
+                  progressive_skills: bool = False) -> List[str]:
     """The real items to seed the pool (one per enabled chest/event location),
     using the selected character's variant at each location. With
     ``progressive_gear`` on, armor/boots pieces seed Progressive Armor/Boots
@@ -1213,6 +1260,10 @@ def vanilla_items(enabled: Set[str], char: str = "hugo",
         # before the effects were poolable.
         if is_blessing_effect_item(it) and not blessing_items:
             continue
+        if progressive_skills:
+            chain = progressive_skill_for(it)
+            if chain:
+                it = chain
         if progressive_gear:
             prog = _progressive_name_for(it, char)
             if prog:

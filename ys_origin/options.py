@@ -276,6 +276,16 @@ class ShopHints(DefaultOnToggle):
     display_name = "Blessing shop hints"
 
 
+class ProgressiveSkills(DefaultOnToggle):
+    """Make the three elemental skills progressive.
+
+    Each element is an artifact plus three gems. Shuffled independently you can
+    collect three Emeralds and still not have the Wind skill, which they only
+    upgrade. On, each element becomes one chain of four: the first grants the
+    skill, the rest raise its level."""
+    display_name = "Progressive elemental skills"
+
+
 class BlessingItems(Toggle):
     """Shuffle the divine-blessing EFFECTS into the item pool.
 
@@ -396,6 +406,7 @@ class YsOriginOptions(PerGameCommonOptions):
     exp_multiplier_max: ExpMultiplierMax  # deprecated no-op (legacy yaml compat)
     progressive_armor: ProgressiveArmor
     blessing_items: BlessingItems
+    progressive_skills: ProgressiveSkills
     shop_hints: ShopHints
     blessing_costs: BlessingCosts
     blessing_cost_min: BlessingCostMin

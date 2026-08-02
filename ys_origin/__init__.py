@@ -186,6 +186,12 @@ class YsOriginWorld(World):
         # Gear that gates a "Strengthen <piece>" blessing — see gear_gate_items.
         elif name in getattr(self, "gear_gate_items", ()):
             cls = ItemClassification.progression
+        # A progressive elemental skill REPLACES the artifact in the pool, and the
+        # room logic gates on it (rules._SKILL_SUBST). AP's Has() reads the
+        # progression counter, so leaving it filler made every artifact gate
+        # unsatisfiable and most of the tower unreachable.
+        elif name in dt.PROGRESSIVE_SKILLS:
+            cls = ItemClassification.progression
         # Lean-progression demotion (open mode, `minimal` accessibility): keep
         # only the genuinely win-critical progression — the goal medallion, the
         # warp unlocks (the reachability spine, promoted just above) and Cleria Ore
@@ -232,7 +238,8 @@ class YsOriginWorld(World):
         char = dt.char_name(self.options)
         pool = [self.create_item(n) for n in dt.vanilla_items(
             enabled, char, bool(self.options.progressive_armor.value),
-            bool(self.options.blessing_items.value))]
+            bool(self.options.blessing_items.value),
+            bool(self.options.progressive_skills.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
@@ -479,6 +486,9 @@ class YsOriginWorld(World):
             # ITEM ids (not g_flags cells) the give-item hook must swallow: the
             # elemental gems. Kept out of suppress_items on purpose — 0x82 is the
             # boss-battle flag 130, and suppressing that would break every boss.
+            # progressive elemental skills: chain -> {artifact, power, level cell}
+            "progressive_skills": (dt.progressive_skill_slot_data()
+                                   if self.options.progressive_skills.value else {}),
             "suppress_give_ids": dt.suppress_give_ids(
                 active, dt.char_name(self.options)),
         }
