@@ -310,25 +310,43 @@ static bool is_gear_price(int p) {
 static int g_menu_row = 0;
 static unsigned long g_menu_last_tick = 0;
 
-static int64_t gear_row_location(int price) {
-    unsigned long now = GetTickCount();
-    if (now - g_menu_last_tick > 250) g_menu_row = 0;   // new menu
-    g_menu_last_tick = now;
-    int row = g_menu_row++;
-    if (row > 1 || !is_gear_price(price)) return -1;
-    int armor = *(volatile int*)kArmorSelAbs;
-    int boots = *(volatile int*)kBootsSelAbs;
-    // row 0 is armor when something is equipped, otherwise leggings takes it.
-    int sel;
-    if (row == 0) sel = (armor >= 0) ? armor : boots;
-    else          sel = (armor >= 0) ? boots : -1;
+static int64_t gear_cell_loc(int sel) {
     if (sel < 0 || sel > 0x200) return -1;
-    if (sel < 0 || sel > 0x200) return -1;
-    uintptr_t cell = kRavalBase + (uintptr_t)sel * 4;
     std::lock_guard<std::mutex> lk(g_bless_price_mtx);
-    auto it = g_gear_cell_to_loc.find(cell);
+    auto it = g_gear_cell_to_loc.find(kRavalBase + (uintptr_t)sel * 4);
     return it == g_gear_cell_to_loc.end() ? -1 : it->second;
 }
+
+static bool loc_checked(int64_t loc) {
+    if (loc < 0) return false;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return g_checked.count(loc) != 0;
+}
+
+// Which gear location a priced row belongs to.
+//
+// Row ORDER alone does not work: once a gear upgrade is bought the script emits
+// that row through 0xD8 Menu_Add (the "[Done]" form) instead of 0xDD, so this
+// hook never sees it and the counter slid, labelling the leggings row as armor.
+//
+// Instead, a row is matched against the gear slots that are still BUYABLE, in
+// script order (armor then leggings). A bought slot drops out of the running
+// exactly as it drops out of the priced rows, so the two stay in step without
+// counting anything.
+static int64_t gear_row_location(int price) {
+    unsigned long now = GetTickCount();
+    if (now - g_menu_last_tick > 250) g_menu_row = 0;   // menus arrive in one burst
+    g_menu_last_tick = now;
+    if (!is_gear_price(price)) return -1;
+    int64_t armor = gear_cell_loc(*(volatile int*)kArmorSelAbs);
+    int64_t boots = gear_cell_loc(*(volatile int*)kBootsSelAbs);
+    int64_t cand[2]; int n = 0;
+    if (armor >= 0 && !loc_checked(armor)) cand[n++] = armor;
+    if (boots >= 0 && !loc_checked(boots)) cand[n++] = boots;
+    int slot = g_menu_row++;
+    return (slot < n) ? cand[slot] : -1;
+}
+
 
 
 extern "C" int ap_substitute_bless_price(int vanilla) {
