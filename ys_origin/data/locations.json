@@ -5047,5 +5047,119 @@
    "offset": "0x36A710"
   },
   "items": []
+ },
+ {
+  "id": "S_4005/EV_4005/0x38",
+  "type": "event",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Rear Bend Room",
+  "name": "Silent Sands: Rear Bend Room — Silver Chimes",
+  "detect": {
+   "method": "scene",
+   "scene": "S_4005"
+  },
+  "items": [
+   {
+    "id": "0x38",
+    "name": "Silver Chimes",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_5097/EV5097/0x55",
+  "type": "event",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Staircase",
+  "name": "Corrupted Blood: Staircase — Lila Shell",
+  "detect": {
+   "method": "scene",
+   "scene": "S_5097"
+  },
+  "items": [
+   {
+    "id": "0x55",
+    "name": "Lila Shell",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6080/EV_6080/0x62",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "23F",
+  "room": "23F Midboss 1",
+  "name": "Demonic Core: 23F Midboss 1 — Rod",
+  "detect": {
+   "method": "scene",
+   "scene": "S_6080"
+  },
+  "items": [
+   {
+    "id": "0x62",
+    "name": "Rod",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6082/EV_6082/0x3E",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "24F",
+  "room": "24F Yog & Om",
+  "name": "Demonic Core: 24F Yog & Om — Spirit Necklace",
+  "detect": {
+   "method": "scene",
+   "scene": "S_6082"
+  },
+  "items": [
+   {
+    "id": "0x3E",
+    "name": "Spirit Necklace",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6099/EV_6099/0x3B",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "25F",
+  "room": "25F Midboss 2",
+  "name": "Demonic Core: 25F Midboss 2 — Goddess Ring",
+  "detect": {
+   "method": "scene",
+   "scene": "S_6099"
+  },
+  "items": [
+   {
+    "id": "0x3B",
+    "name": "Goddess Ring",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_4017/EV_4017_HARMONICA/0x5F",
+  "type": "event",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Rado Inside 4 (Feena)",
+  "name": "Silent Sands: Rado Inside 4 (Feena) — Silver Harmonica",
+  "detect": {
+   "method": "scene",
+   "scene": "S_4017"
+  },
+  "items": [
+   {
+    "id": "0x5F",
+    "name": "Silver Harmonica",
+    "class": "useful"
+   }
+  ]
  }
 ]
