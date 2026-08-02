@@ -26,6 +26,9 @@
  "Banded Mail": [
   "toal"
  ],
+ "Battle Armor": [
+  "yunica"
+ ],
  "Battle Guards": [
   "yunica"
  ],
@@ -88,6 +91,9 @@
  "Creeper Medallion": [
   "shared"
  ],
+ "Crimson Coat": [
+  "hugo"
+ ],
  "Crimson Key": [
   "shared"
  ],
@@ -96,6 +102,9 @@
  ],
  "Dark Falcon": [
   "hugo"
+ ],
+ "Demon Greaves": [
+  "toal"
  ],
  "Devil Medallion": [
   "shared"
@@ -118,6 +127,9 @@
  "Elder Robe": [
   "hugo"
  ],
+ "Elder Shoes": [
+  "hugo"
+ ],
  "Evil Ring": [
   "yunica",
   "hugo"
@@ -130,6 +142,10 @@
  ],
  "Half Plate": [
   "yunica"
+ ],
+ "Hammer": [
+  "yunica",
+  "hugo"
  ],
  "Hard Leggings": [
   "yunica"
@@ -168,6 +184,9 @@
  "Phantom Boots": [
   "toal"
  ],
+ "Phantom Mail": [
+  "toal"
+ ],
  "Plate Mail": [
   "shared"
  ],
@@ -185,6 +204,9 @@
  ],
  "Ring Mail": [
   "yunica"
+ ],
+ "Ring of Ease": [
+  "toal"
  ],
  "Riveted Boots": [
   "toal"
@@ -209,6 +231,9 @@
  ],
  "Spirit Cape": [
   "shared"
+ ],
+ "Sylphen Boots": [
+  "yunica"
  ],
  "Water Dragon's Scales": [
   "shared"

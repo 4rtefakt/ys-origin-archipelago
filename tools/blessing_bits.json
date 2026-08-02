@@ -1,7 +1,7 @@
 {
- "_storage": "armor -> array slot +0x36A684; every other blessing/level -> one bit in the bitfield at +0x36BC80 (g_flags 0xD9).",
- "_status": "COMPLETE: all 23 blessing bits clear-test verified (bit7 unused). + armor (array 0x36A684). Blessing menu fully mapped.",
- "armor_array_+0x36A684": "Strengthen current armor",
+ "_storage": "bit blessings -> one bit in the bitfield at +0x36BC80 (g_flags 0xD9). armor/leggings are NOT bits: they write a LEVEL into the raval array at +0x36A654, indexed by the EQUIPPED PIECE's own item index (live-confirmed: Riveted Leather 0x12 -> slot 18, Riveted Boots 0x2A -> slot 42), which is why a bit sweep never sees them and why they are repeatable.",
+ "_status": "COMPLETE: 24 bit blessings (bits 0-23). Bit 7 was missing from the original sweep and is live-confirmed as the 8000 SP entry (GROW09). Blessing index <-> bit: index = bit for bit <= 6, index = bit + 2 from bit 7 up (indices 7/8 are the armor/leggings raval escapes) - decoded from the 0xAF jump table at 0x56E6F0, see CleriaCore build/menu_re/BLESSING_SHOP.md.",
+ "armor_array_+0x36A684": "SUPERSEDED - that address is raval slot 18, i.e. the upgrade level of Riveted Leather (0x12), Toal's STARTING armor. It is not a fixed 'armor blessing' cell: the slot follows whichever piece is equipped.",
  "known_bits": [
   0,
   1,
@@ -10,6 +10,7 @@
   4,
   5,
   6,
+  7,
   8,
   9,
   10,
@@ -50,6 +51,23 @@
   "23": "Extend drop item effects LV2",
   "14": "Hasten Skill recovery LV3",
   "16": "Increase Boost recovery LV3",
-  "19": "Reduce MP usage LV3"
- }
+  "19": "Reduce MP usage LV3",
+  "7": "Increase stun effect"
+ },
+ "_labels_are_per_character": "The menu STRING differs by character for the same slot: bit 13 (GROW15, 500000 SP) reads 'Increase attack range' for Toal and 'Increase movement speed' in the original (Hugo) capture. verified_bit below is the Hugo-era naming except bit 7, captured on Toal.",
+ "_per_character_names": {
+  "_note": "Same bit, same price, same effect — only the menu STRING differs. verified_bit / the AP location names use the majority wording.",
+  "7": {
+   "yunica": "Increase stun effect",
+   "toal": "Increase stun effect",
+   "hugo": "Strengthen Eyes of Fact",
+   "_confirmed": "maintainer: Hugo's 'Strengthen Eyes of Fact' REPLACES the 'Increase stun effect' row — same slot, different string."
+  },
+  "13": {
+   "yunica": "Increase movement speed",
+   "hugo": "Increase movement speed",
+   "toal": "Increase attack range"
+  }
+ },
+ "_bit21_uncertain": "bit 21's label 'Strengthen Eyes of Fact' is almost certainly WRONG. That is Hugo's name for bit 7 (confirmed: it replaces 'Increase stun effect' on the same row), and the original sweep was a Hugo run — so it looks recorded against the wrong bit. GROW09 (bit 7) and GROW23 (bit 21) both cost 8000, which is how they got conflated. bit 21's REAL name is unknown; the AP location keeps the old string for now because renaming shifts every location id after it. Resolve by buying both 8000 SP blessings in one run."
 }

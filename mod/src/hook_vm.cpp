@@ -27,11 +27,33 @@ void bridge_emit(const char* line);
 void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
+extern bool g_supp_give[0x200];  // ITEM ids the give-item op must swallow
 extern bool g_statue_lock[0x200];// locked statue activation flags (suppress purify)
 
-static const uintptr_t kGrantStore = 0x00567D17;  // mov [eax], ecx
+// The two VM instructions that can write a g_flags item cell.
+//
+//   0x64 Flag_SetInt  handler @0x567CDC:  ... call FUN_005659e0 (&g_flags[idx])
+//                                          mov  [eax], ecx        <- kGrantStore
+//   0x67 Flag_AddInt  handler @0x567D78:  ... call FUN_005659e0 (&g_flags[idx])
+//                                          add  [esi], ecx        <- kGrantAdd
+//
+// (Both verified by raw disassembly of yso_win.exe; CleriaCore
+// EVENTVM_HANDLERS_2 §1 documents the shared slot accessor FUN_005659e0.)
+//
+// Only the 0x64 store used to be hooked, which left `+=` grants completely
+// invisible: the player got the AP item AND the vanilla one. That is not
+// hypothetical — disassembling all 2225 scripts of the XSO corpus finds 14
+// chests that grant with 0x67, and one of them is progression:
+//   S_COMMON\BOXCRERIA.XSO         -> 0x58 Cleria Ore     (weapon-upgrade tier!)
+//   6x S_*/S_BOX*.XSO              -> 0x57 Roda Fruit
+//   7x S_*/S_BOX*.XSO              -> 0x59 Celcetan Panacea
+// Their box/location flags are set with 0x64, so DETECTION always worked and
+// only the grant leaked — which is exactly how the bug presented in the wild.
+static const uintptr_t kGrantStore = 0x00567D17;  // mov [eax], ecx  (0x64)
+static const uintptr_t kGrantAdd   = 0x00567DB3;  // add [esi], ecx  (0x67)
 static const uintptr_t kGFlagsBase = 0x0076B91C;
 static void* g_orig = nullptr;
+static void* g_orig_add = nullptr;
 
 // Scratch sink for "suppress" (a grant redirected here never touches g_flags).
 static int g_sink = 0;
@@ -69,6 +91,7 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         // (no warp/heal/save) until its unlock item arrives. The statue CHECK is
         // detected by scene-method when locks are on, so nothing is lost here.
         mod_log("statue: suppressed purification of g_flags[0x%X] (locked)", idx);
+        g_sink = 0;    // the 0x67 add-form redirects here too; don't accumulate
         return &g_sink;
     }
     if (g_supp_item[idx] && val >= 1) {    // vanilla content of a randomized loc
@@ -79,6 +102,7 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         // the menu later (g_flags=1, consistent), outside this window.
         if (idx == 0x74 || idx == 0x75 || idx == 0x76)
             g_skill_suppress_until = GetTickCount() + 600;
+        g_sink = 0;    // the 0x67 add-form redirects here too; don't accumulate
         return &g_sink;                    // suppress (player gets the AP item)
     }
 
@@ -105,6 +129,249 @@ __declspec(naked) static void Hook_Grant() {
     }
 }
 
+// Same decision as DecideStore, for the `add [esi], ecx` form of the grant.
+// Returns 1 when the increment must not happen. Delegating keeps ONE copy of the
+// suppress/location/statue policy — DecideStore already reports a check, emits
+// the bridge line, and returns the sink for anything it wants stopped, so "did
+// it redirect?" is exactly "should this add be dropped?".
+extern "C" int __cdecl DecideAdd(int* addr, int val) {
+    return DecideStore(addr, val) != addr ? 1 : 0;
+}
+
+// Set by the stub below on the game's main thread (the only thread that runs the
+// event VM), consumed two instructions later — same single-threaded pattern as
+// the g_apply_art box hook.
+static int g_add_suppress = 0;
+
+// Naked splice at 0x567DB3 (pre-store). esi = &g_flags[idx], ecx = addend.
+//
+// A suppressed add zeroes ECX rather than redirecting ESI to the sink: ESI is
+// the handler's live slot pointer and the dispatch tail is reached by a JMP
+// straight after this instruction, so leaving ESI exactly as the game set it is
+// the change with no reachable side effects. `add [esi], 0` writes the cell's
+// own value back — a true no-op. Flags are clobbered by the cmp/xor, which is
+// safe because the very next instruction (the relocated ADD) redefines them.
+__declspec(naked) static void Hook_GrantAdd() {
+    __asm {
+        pushfd
+        pushad
+        push ecx                     // arg2: val (the addend)
+        push esi                     // arg1: addr
+        call DecideAdd
+        add  esp, 8
+        mov  g_add_suppress, eax
+        popad
+        popfd
+        cmp  dword ptr [g_add_suppress], 0
+        je   pass
+        xor  ecx, ecx                // suppressed -> add [esi], 0
+    pass:
+        jmp  dword ptr [g_orig_add]  // trampoline: add [esi],ecx ; jmp 0x5664c9
+    }
+}
+
+// --- vanilla statue blessing shop: charge the SEED's price ------------------ #
+//
+// Each blessing is one S_COMMON/GROWnn.XSO, and its price is a baked immediate
+// used at THREE places (CleriaCore build/menu_re/BLESSING_SHOP.md):
+//
+//   0x0056A184  push [eax]        the 0xdd Menu_AddSpShop entry -> what you SEE
+//   0x00567C43  call FUN_005659e0 the 0x61 affordability compare -> MAY you buy
+//   0x00567E45  sub [esi],ecx     the 0x69 deduction             -> what you PAY
+//
+// Only the F5 overlay shop used the seed's prices, so the goddess statue kept
+// selling at vanilla ones: "SP cost reduction in shop doesn't seem to work" and
+// "progression balancing does not seem to affect Vanilla SP". All three sites
+// have to move together — re-pricing the display alone makes the menu lie, and
+// re-pricing the deduction alone still forces you to AFFORD the vanilla price
+// (fatal for the 500,000 SP entry).
+//
+// The lookup is keyed on the VANILLA price because that is the only thing these
+// sites know: the blessing's 0xAF index does not appear in the script until
+// after the money has moved. The world pins the three colliding vanilla prices
+// (30000, 8000, 20000, each shared by two blessings) to a single randomized
+// price so the key stays unambiguous.
+//
+// The armor/leggings upgrades are deliberately NOT caught by any of this, and
+// not by accident: GROWAR/GROWLE compare with `0x62` (flag vs flag, SP against
+// the scaling cost cell g_flags[0xDA] that `0xb0 SetRavalCostToFlag` fills) and
+// never use `0x61`/`0x69` at all. So their ladder — 100/300/1000/3000/6000/12000
+// — keeps running vanilla even though two of those rungs collide with real
+// blessing prices, which a price-keyed hook would otherwise have re-priced.
+extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
+extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
+extern "C" int  ap_on_blessing_purchase(int index);        // hook_ap.cpp
+extern "C" int  ap_bless_compare_price(int vanilla);       // hook_ap.cpp
+extern "C" int  ap_bless_hide_price(int vanilla);          // hook_ap.cpp
+extern "C" void ap_gear_relabel(char* buf, int item_operand, int price);
+
+static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
+static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
+static const uintptr_t kBlessMenu = 0x0056A184;  // push [eax]        (0xdd)
+// The 0xAF grant dispatch. EAX already holds the blessing INDEX here, and every
+// case jumps to the shared tail 0x5664C9, so this one splice both detects the
+// purchase and can skip the grant for all 26 blessings.
+//   00568D5B  mov  eax,[eax]        ; EAX = blessing index
+//   00568D5D  cmp  eax,0x21         <- spliced (3 bytes) + ja rel32 (6) = 9
+//   00568D66  jmp  [eax*4+0x56E6F0]
+// Right after the price sprintf, before it is concatenated onto the label:
+//   0056A192  call FUN_0040a460        ; sprintf(priceBuf, "%d", price)
+//   0056A197  lea  edx,[ebp-0x2CC]     <- spliced (6 bytes)
+// Blanking priceBuf here makes the concat append nothing, which is what lets a
+// bought row read "- [Done]" with no number after it.
+// The 0xdd ITEM operand (1 = armor, 4 = leggings) is fetched LAST, at 0x56A1E2,
+// by which point the row text is fully assembled in [ebp-0x3F8] with the price
+// already appended. So gear rows are rewritten wholesale here instead of being
+// guessed at from prices or from 0xb0 ordering.
+//   0056A1E2  call FUN_00566100     ; EAX -> operand 1
+//   0056A1E7  mov  ecx,[ebp-0x14]   <- spliced
+static const uintptr_t kBlessItemOp = 0x0056A1E7;
+static void* g_orig_blessitemop = nullptr;
+
+static const uintptr_t kBlessPriceStr = 0x0056A197;
+static void* g_orig_blesspricestr = nullptr;
+
+static const uintptr_t kBlessGrant = 0x00568D5D;
+static const uintptr_t kVmTail     = 0x005664C9;  // where every 0xAF case lands
+static void* g_orig_blessgrant = nullptr;
+static int g_bless_skip = 0;
+static const uintptr_t kSpShadow  = kGFlagsBase + 0xD8 * 4;  // 0x76BC7C
+static void* g_orig_blesscmp  = nullptr;
+static void* g_orig_blesssub  = nullptr;
+static void* g_orig_blessmenu = nullptr;
+
+// Scratch the menu hook points the push at. Main-thread only (the event VM), so
+// a single slot is enough — same assumption as the box-relabel hook above.
+static int g_bless_menu_price = 0;
+static int g_bless_vanilla = 0;
+
+// 0x61 affordability. Spliced ON the operand-accessor call, where the flag index
+// and base are already pushed: [esp] = 0x76b91c, [esp+4] = index. EDI holds op2,
+// the price. Overwriting EDI is safe — this handler already clobbered it at
+// 0x567C0E and the dispatcher re-establishes it after the tail jump.
+__declspec(naked) static void Hook_BlessCmp() {
+    __asm {
+        pushfd
+        pushad                          // esp -= 32; orig [esp+4] is now [esp+40]
+        mov  eax, [esp + 40]            // the flag index being compared
+        cmp  eax, 0xD8                  // the SP (zenny shadow) cell?
+        jne  bc_done
+        push edi                        // arg: the vanilla price
+        call ap_bless_compare_price     // unaffordable if already bought
+        add  esp, 4
+        mov  [esp], eax                 // pushad slot 0 = saved EDI
+    bc_done:
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blesscmp]
+    }
+}
+
+// 0x69 deduction: esi = &g_flags[idx], ecx = amount to subtract.
+__declspec(naked) static void Hook_BlessSub() {
+    __asm {
+        pushfd
+        pushad
+        cmp  esi, kSpShadow
+        jne  bs_done
+        push ecx                        // arg: the vanilla price
+        call ap_substitute_bless_price
+        add  esp, 4
+        mov  [esp + 24], eax            // pushad slot 6 = saved ECX
+    bs_done:
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blesssub]
+    }
+}
+
+// 0xdd menu entry: the next instruction pushes [eax] into the price sprintf.
+// Point eax at our scratch instead of writing through it — [eax] is the script's
+// own operand table and a write there would persist for the rest of the run.
+// Clobbering eax is free: the very next instruction (0x56A186) reloads it.
+// Also RELABELS the row. By this instruction the script's own label has already
+// been copied into the handler's buffer at [ebp-0x3F8] (the strcpy loop at
+// 0x56A162) and the formatted price has not been appended yet, so overwriting
+// the buffer here swaps the name and still gets " - [SP:]nnn" added after it.
+// EBP is the handler's frame and untouched by pushfd/pushad, so it is valid.
+__declspec(naked) static void Hook_BlessMenu() {
+    __asm {
+        pushfd
+        pushad
+        mov  eax, [eax]                 // the vanilla price operand
+        mov  g_bless_vanilla, eax       // keep it: it keys BOTH substitutions
+        push eax
+        call ap_substitute_bless_price
+        add  esp, 4
+        mov  g_bless_menu_price, eax
+        lea  eax, [ebp - 0x3F8]         // the label buffer the script filled
+        push g_bless_vanilla
+        push eax
+        call ap_bless_relabel           // no-op for rows we don't recognise
+        add  esp, 8
+        popad
+        popfd
+        lea  eax, g_bless_menu_price    // push [eax] now reads our price
+        jmp  dword ptr [g_orig_blessmenu]
+    }
+}
+
+__declspec(naked) static void Hook_BlessItemOp() {
+    __asm {
+        pushfd
+        pushad
+        push g_bless_vanilla            // this row's vanilla price
+        mov  eax, [eax]                 // operand 1: 1 = armor, 4 = leggings
+        push eax
+        lea  eax, [ebp - 0x3F8]         // the assembled row text
+        push eax
+        call ap_gear_relabel            // no-op for every non-gear row
+        add  esp, 12
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blessitemop]
+    }
+}
+
+__declspec(naked) static void Hook_BlessPriceStr() {
+    __asm {
+        pushfd
+        pushad
+        push g_bless_vanilla            // same row the menu hook just handled
+        call ap_bless_hide_price
+        add  esp, 4
+        test eax, eax
+        jz   bp_done
+        mov  byte ptr [ebp - 0x2CC], 0  // empty the formatted price string
+    bp_done:
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blesspricestr]
+    }
+}
+
+// 0xAF blessing grant. Reports the purchase as a check, and when the seed shuffles
+// blessing EFFECTS into the item pool, skips the vanilla grant entirely by jumping
+// to the dispatch tail instead of the jump table.
+__declspec(naked) static void Hook_BlessGrant() {
+    __asm {
+        pushfd
+        pushad
+        push eax                        // the blessing index
+        call ap_on_blessing_purchase
+        add  esp, 4
+        mov  g_bless_skip, eax
+        popad
+        popfd
+        cmp  dword ptr [g_bless_skip], 0
+        jne  bg_skip
+        jmp  dword ptr [g_orig_blessgrant]   // trampoline: cmp/ja, then the table
+    bg_skip:
+        mov  eax, kVmTail
+        jmp  eax                        // straight to the shared tail: no grant
+    }
+}
+
 // --- suppress the native "Acquired X" popup for randomized (suppressed) items #
 //
 // The chest's VM sub-op 0x116 (give-item) calls the give/popup native function
@@ -121,7 +388,10 @@ static void* g_orig_give = nullptr;
 // suppressed for randomized items so the vanilla floating effect doesn't play.
 static int __cdecl popup_decide(int arg1, int arg2, int arg3) {
     int id = arg1;  // confirmed live: a1=0x59 == Panacea
-    int supp = (id >= 0 && id < 0x200 && g_supp_item[id]) ? 1 : 0;
+    // g_supp_give covers ids that are NOT g_flags cells (the elemental gems);
+    // g_supp_item covers the ordinary items, whose id and cell coincide.
+    int supp = (id >= 0 && id < 0x200 &&
+                (g_supp_item[id] || g_supp_give[id])) ? 1 : 0;
     return supp;
 }
 
@@ -412,13 +682,26 @@ __declspec(naked) static void Hook_WaitTail() {
 // cutscene. The load-guard above keeps even an always-armed window crash-safe.
 extern "C" void request_force_spawn();           // hook_ap.cpp (test hotkey)
 static const uintptr_t kCurScene = 0x0076C100;   // g_flags[0x1F9]
+
+// Player-facing cutscene-skip mode, set from the F8 Archipelago menu and
+// persisted in yso_ap.cfg. Three players asked for a skip in the release thread
+// and the one constraint everyone agreed on was "as long as it's optional", so
+// it is a mode rather than an always-on:
+//   0 = off      — never fast-forward (the New-Game intro still does, see below)
+//   1 = hold     — fast-forward while Right Ctrl is held (the old behaviour)
+//   2 = auto     — fast-forward every cutscene wait, no key needed
+// The New-Game intro window is NOT part of this: it is load-bearing for the
+// random-start force-spawn warp, so it fast-forwards in every mode.
+extern "C" int g_cutscene_skip_mode = 1;
+
 extern "C" void cutscene_ff_poll() {
     static bool intro = false;
     int scene = *(volatile int*)kCurScene;
     if (scene == 2) intro = true;          // New-Game intro cutscene seen
     else if (scene >= 1000) intro = false; // reached a real room -> stop
-    bool key = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
-    g_cutscene_ff = intro || key;
+    bool key = g_cutscene_skip_mode == 1 &&
+               (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    g_cutscene_ff = intro || key || g_cutscene_skip_mode == 2;
 
     // F9 (edge-triggered) = manually force-spawn, for testing the warp without
     // replaying the intro.
@@ -441,9 +724,28 @@ typedef HANDLE (WINAPI* CreateFileA_t)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUT
 static CreateFileW_t g_orig_cfw = nullptr;
 static CreateFileA_t g_orig_cfa = nullptr;
 
+// The exact set the game can open, read out of the movie path tables at
+// 0x6a05b0..0x6a0650 (one table per language, 8 entries each, indexed by the
+// media object's +0x294):
+//
+//   0  release\<lang>_pro.avi   prologue — en_/fr_/de_/sp_/it_ prefixed!
+//   1  release\yso_op.avi       opening
+//   2  release\yso_ins01.dat    insert movies
+//   3  release\yso_ins02.dat
+//   4  release\yso_ins03.dat
+//   5  release\yso_logo.avi     Falcom logo
+//   6  release\yso_ed01.dat     ENDING — never block (goal detection)
+//   7  release\yso_ed02.dat     ENDING — never block
+//
+// The prologue was missed: the filter looked for "yso_pro", but the game asks
+// for "en_pro.avi" (or the local-language equivalent), which never matches.
+// yso_ins04 is deliberately absent — it is font data, not a movie (8 MB, with a
+// .fot sibling), and blocking it would break text.
 static bool is_intro_movie(const char* low) {
-    return strstr(low, "yso_logo") || strstr(low, "yso_op") || strstr(low, "yso_pro")
-        || strstr(low, "yso_ins01") || strstr(low, "yso_ins02") || strstr(low, "yso_ins03");
+    return strstr(low, "yso_logo") || strstr(low, "yso_op")
+        || strstr(low, "yso_ins01") || strstr(low, "yso_ins02")
+        || strstr(low, "yso_ins03")
+        || strstr(low, "_pro.avi");     // en_/fr_/de_/sp_/it_/yso_ prologue
 }
 static bool blocked_a(const char* p) {
     if (!p) return false;
@@ -461,12 +763,30 @@ static bool blocked_w(const wchar_t* p) {
 }
 static HANDLE WINAPI Hook_CreateFileW(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
                                       DWORD c, DWORD f, HANDLE t) {
-    if (blocked_w(n)) { SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE; }
+    if (blocked_w(n)) {
+        mod_log("movie: blocked (W) — reported not-found");
+        SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE;
+    }
     return g_orig_cfw(n, a, s, sa, c, f, t);
 }
+// KERNELBASE's CreateFileW needs its own trampoline: it is a DIFFERENT function
+// from kernel32's forwarder, so it cannot share g_orig_cfw.
+static CreateFileW_t g_orig_cfw_kb = nullptr;
+static HANDLE WINAPI Hook_CreateFileW_KB(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
+                                         DWORD c, DWORD f, HANDLE t) {
+    if (blocked_w(n)) {
+        mod_log("movie: blocked (KERNELBASE W) — reported not-found");
+        SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE;
+    }
+    return g_orig_cfw_kb(n, a, s, sa, c, f, t);
+}
+
 static HANDLE WINAPI Hook_CreateFileA(LPCSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa,
                                       DWORD c, DWORD f, HANDLE t) {
-    if (blocked_a(n)) { SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE; }
+    if (blocked_a(n)) {
+        mod_log("movie: blocked (A) '%s' — reported not-found", n);
+        SetLastError(ERROR_FILE_NOT_FOUND); return INVALID_HANDLE_VALUE;
+    }
     return g_orig_cfa(n, a, s, sa, c, f, t);
 }
 
@@ -475,6 +795,30 @@ void hook_vm_install() {
     MH_Initialize();  // may already be initialized by the D3D9 hook (returns 9)
     MH_STATUS c = MH_CreateHook((void*)kGrantStore, (void*)&Hook_Grant, &g_orig);
     MH_STATUS e = MH_EnableHook((void*)kGrantStore);
+    // The `+=` form of the same grant (0x67 Flag_AddInt) — see kGrantAdd.
+    MH_STATUS ca = MH_CreateHook((void*)kGrantAdd, (void*)&Hook_GrantAdd, &g_orig_add);
+    MH_STATUS ea = MH_EnableHook((void*)kGrantAdd);
+    mod_log("hook_vm_install: 0x67 add-store @0x%X create=%d enable=%d",
+            (unsigned)kGrantAdd, (int)ca, (int)ea);
+    // Vanilla statue blessing shop: display / affordability / deduction.
+    MH_STATUS cbc = MH_CreateHook((void*)kBlessCmp,  (void*)&Hook_BlessCmp,  &g_orig_blesscmp);
+    MH_STATUS ebc = MH_EnableHook((void*)kBlessCmp);
+    MH_STATUS cbs = MH_CreateHook((void*)kBlessSub,  (void*)&Hook_BlessSub,  &g_orig_blesssub);
+    MH_STATUS ebs = MH_EnableHook((void*)kBlessSub);
+    MH_STATUS cbm = MH_CreateHook((void*)kBlessMenu, (void*)&Hook_BlessMenu, &g_orig_blessmenu);
+    MH_STATUS ebm = MH_EnableHook((void*)kBlessMenu);
+    mod_log("hook_vm_install: statue shop cmp=%d/%d sub=%d/%d menu=%d/%d",
+            (int)cbc, (int)ebc, (int)cbs, (int)ebs, (int)cbm, (int)ebm);
+    MH_CreateHook((void*)kBlessItemOp, (void*)&Hook_BlessItemOp, &g_orig_blessitemop);
+    MH_EnableHook((void*)kBlessItemOp);
+    MH_CreateHook((void*)kBlessPriceStr, (void*)&Hook_BlessPriceStr,
+                  &g_orig_blesspricestr);
+    MH_EnableHook((void*)kBlessPriceStr);
+    MH_STATUS cbg = MH_CreateHook((void*)kBlessGrant, (void*)&Hook_BlessGrant,
+                                  &g_orig_blessgrant);
+    MH_STATUS ebg = MH_EnableHook((void*)kBlessGrant);
+    mod_log("hook_vm_install: 0xAF blessing grant @0x%X create=%d enable=%d",
+            (unsigned)kBlessGrant, (int)cbg, (int)ebg);
     MH_STATUS cg = MH_CreateHook((void*)kGiveItemFn, (void*)&Hook_GiveItemFn,
                                  &g_orig_give);
     MH_STATUS eg = MH_EnableHook((void*)kGiveItemFn);
@@ -493,12 +837,43 @@ void hook_vm_install() {
     MH_STATUS ct = MH_CreateHook((void*)kWaitTail, (void*)&Hook_WaitTail, &g_orig_waittail);
     MH_STATUS et = MH_EnableHook((void*)kWaitTail);
     // Intro-movie skip: report the opening AVIs as not-found.
-    if (HMODULE k = GetModuleHandleA("kernel32.dll")) {
-        void* cfw = (void*)GetProcAddress(k, "CreateFileW");
-        void* cfa = (void*)GetProcAddress(k, "CreateFileA");
-        if (cfw) { MH_CreateHook(cfw, (void*)&Hook_CreateFileW, (void**)&g_orig_cfw); MH_EnableHook(cfw); }
-        if (cfa) { MH_CreateHook(cfa, (void*)&Hook_CreateFileA, (void**)&g_orig_cfa); MH_EnableHook(cfa); }
-        mod_log("hook_movies: CreateFileW/A hooked (intro movies -> not found)");
+    //
+    // Hook BOTH kernel32 and KERNELBASE. The movie is not opened by the game's
+    // own code path: FUN_005773e0 can read the file itself, but for the intro it
+    // takes the DirectShow branch, and the filter graph (quartz / xvid.ax) opens
+    // the file from ITS module — which imports CreateFileW from KERNELBASE, not
+    // from the kernel32 export. Hooking only kernel32 therefore installs fine and
+    // is simply never called, which is exactly what the log showed: the resolved
+    // address was recorded at install and no "movie: blocked" line ever appeared
+    // while the intro played.
+    //
+    // On modern Windows kernel32's CreateFileW is a thin forwarder to
+    // KERNELBASE's, so hooking both can double-invoke the detour for callers that
+    // go through kernel32. That is harmless here: the detour is a pure filename
+    // test with no state, and the inner call simply sees a name it already
+    // rejected (or passes it through twice).
+    {
+        void* cfw32 = nullptr; void* cfa32 = nullptr;
+        if (HMODULE k = GetModuleHandleA("kernel32.dll")) {
+            cfw32 = (void*)GetProcAddress(k, "CreateFileW");
+            cfa32 = (void*)GetProcAddress(k, "CreateFileA");
+            if (cfw32) { MH_CreateHook(cfw32, (void*)&Hook_CreateFileW, (void**)&g_orig_cfw); MH_EnableHook(cfw32); }
+            if (cfa32) { MH_CreateHook(cfa32, (void*)&Hook_CreateFileA, (void**)&g_orig_cfa); MH_EnableHook(cfa32); }
+        }
+        // KERNELBASE — the one the DirectShow filter actually calls.
+        void* cfwB = nullptr;
+        if (HMODULE kb = GetModuleHandleA("kernelbase.dll")) {
+            cfwB = (void*)GetProcAddress(kb, "CreateFileW");
+            if (cfwB && cfwB != cfw32) {
+                MH_STATUS c = MH_CreateHook(cfwB, (void*)&Hook_CreateFileW_KB,
+                                            (void**)&g_orig_cfw_kb);
+                MH_STATUS e = MH_EnableHook(cfwB);
+                mod_log("hook_movies: KERNELBASE CreateFileW=%p create=%d enable=%d",
+                        cfwB, (int)c, (int)e);
+            }
+        }
+        mod_log("hook_movies: kernel32 CFW=%p CFA=%p, kernelbase CFW=%p",
+                cfw32, cfa32, cfwB);
     }
     mod_log("hook_vm_install: grant=%d/%d popup=%d/%d skill-abort=%d/%d exp=%d/%d wait-ff=%d/%d tail-ff=%d/%d (+box)",
             (int)c, (int)e, (int)cg, (int)eg, (int)cs, (int)es, (int)cx, (int)ex, (int)cw, (int)ew, (int)ct, (int)et);

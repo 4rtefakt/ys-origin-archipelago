@@ -26,11 +26,15 @@ Ys Origin:
                          #   gives (scouted) while you're at a goddess statue;
                          #   false = blind buys
 
-  # --- blessing shop economy (the mod's own F5 shop overlay) ---
+  # --- blessing shop economy ---
   blessing_costs: vanilla # vanilla | shuffled
-                          #   vanilla  = buy from the game's statue menu as usual
-                          #   shuffled = the mod's F5 shop sells blessings at
-                          #              seed-randomized SP prices (min/max below)
+                          #   vanilla  = blessings cost what the game charges
+                          #   shuffled = seed-randomized SP prices (min/max below),
+                          #              applied at BOTH the goddess statue's own
+                          #              menu and the mod's F5 overlay — the statue
+                          #              shows and charges the seed's price
+                          #   (the armor/leggings upgrades are not affected: they
+                          #    run on the game's own scaling ladder, 100 -> 12000)
   blessing_cost_min: 100  # cheapest possible randomized price (SP)
   blessing_cost_max: 800  # priciest possible randomized price (SP)
   blessing_shop_unlock: all # all | one_per_floor
@@ -112,6 +116,54 @@ Ys Origin:
                          #   Blinding Fog (screen hazes over for 30s). 0 = no traps.
   death_link: false      # when on, you die when any other DeathLink player dies
 
+  # --- item classification overrides (ADVANCED, optional) ------------------- #
+  # Retune how individual items are classified for YOUR seed. Map an item name to
+  # a tier: progression | useful | filler | trap. It's applied LAST, so it wins
+  # over the built-in defaults (including the automatic Cleria-Ore / statue-warp
+  # promotions). Unknown names / bad tiers are ignored with a log warning.
+  #
+  # Why: stop MINOR progression items from eating your priority locations, or —
+  # if you know a skip makes an item non-essential — DOWNGRADE it to filler.
+  # Caveat: only progression items are guaranteed reachable by the fill. If you
+  # demote something the logic actually requires, generation fails loudly (you
+  # never get a broken seed), so only downgrade items you're sure are skippable.
+  #
+  # Leave empty ({}) to use the defaults below. To use, uncomment and edit:
+  # item_classification_overrides:
+  #   Mask of Eyes: useful       # minor key item -> stop it hogging a good spot
+  #   Silver Bracelet: filler    # only if you KNOW its gate is skippable
+  #
+  # ---- DEFAULT TIERS (anything not listed here is `filler`) ----
+  # progression (27): Amber Key, Arthropod Medallion, Beast Medallion, Black Pearl,
+  #   Blue Moon Crest, Blue Necklace, Bronze Key, Cerulean Flabellum, Cleria Ring,
+  #   Construct Medallion, Creeper Medallion, Crimson Key, Crimson Lotusblade,
+  #   Devil Medallion, Dragonbone Key, Dreaming Idol, Earth Dragon's Claws,
+  #   Evil Ring, Gold Bracelet, Levinstrike Warhammer, Mantid Medallion,
+  #   Marble Key, Mask of Eyes, Obsidian Key, Red Moon Crest, Silver Bracelet,
+  #   Water Dragon's Scales
+  # useful (59): all NF Warp items, all armor/boots/shield/leggings pieces,
+  #   Progressive Armor, Progressive Boots, Rado Tower Warp, Spirit Cape, Reflex
+  # trap (4): Blinding Fog, Butterfingers, Chaos Warp, EXP Leech
+  # filler: Celcetan Panacea, Roda Fruit, Cleria Ore, SP: 50/150/500
+  # conditional promotions (auto, override still wins): Cleria Ore -> progression
+  #   when weapon_requirements is on; each NF Warp -> progression under random_start.
+
   # --- standard Archipelago knobs (leave as-is if unsure) ---
   progression_balancing: 0
-  accessibility: items
+  accessibility: items   # full | minimal — AP has only these two; `items` and
+                         #   `locations` are ALIASES of `full`, so this line IS
+                         #   `full`. Set `minimal` to loosen it.
+                         #     full:    every location must be reachable.
+                         #     minimal: only what you need to WIN must be reachable.
+                         #
+                         #   In WARP mode (random_start), `minimal` additionally
+                         #   LEANS the item tiers: the warp network + scaling makes
+                         #   the climb/room gates non-essential to win, so the
+                         #   medallions, keys, crests, gear & bracelets are demoted
+                         #   from progression to useful (only warps + Cleria Ore +
+                         #   Devil Medallion stay progression) — they stop hogging
+                         #   priority spots but remain real, findable items. The
+                         #   trade-off: some side chests may end up unreachable,
+                         #   which is exactly what `minimal` allows. Under
+                         #   full/items the gates stay progression, and forward
+                         #   (non-warp) seeds keep them progression regardless.

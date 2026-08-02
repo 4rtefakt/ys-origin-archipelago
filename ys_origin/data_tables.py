@@ -303,29 +303,37 @@ def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
 # per character (chests in tower order). With the option on, every gear chest
 # seeds a "Progressive Armor" / "Progressive Boots" instead of the raw piece;
 # receiving one grants your character's NEXT unowned tier, so pickups can't skip
-# ahead (finding the 22F armor first still gives you tier 1). The 4th variant in
-# each gear chest (Chain Mail / Wooden Shield / ...) belongs to the unlockable EX
-# character and is never seeded for Yunica/Hugo/Toal.
+# ahead (finding the 22F armor first still gives you tier 1).
+#
+# The ladders span the character's WHOLE 6-slot band. An earlier version skipped
+# one entry per band as "the EX character's variant"; that was wrong — those are
+# the Roo rewards (Battle Armor / Crimson Coat / Phantom Mail from S_5100,
+# Sylphen Boots / Elder Shoes / Demon Greaves from S_4004), confirmed by the
+# guide's three parallel walkthroughs naming a different one per character at the
+# same point. Leaving them out meant a Roo handed over a RAW piece while every
+# chest seeded a Progressive item.
 PROGRESSIVE_ARMOR = "Progressive Armor"
 PROGRESSIVE_BOOTS = "Progressive Boots"
 
 GEAR_LADDERS: Dict[str, Dict[str, List[str]]] = {
     "yunica": {
-        PROGRESSIVE_ARMOR: ["Ring Mail", "Half Plate", "Reflex", "Silver Dress"],
+        PROGRESSIVE_ARMOR: ["Ring Mail", "Half Plate", "Reflex", "Battle Armor", "Silver Dress"],
         PROGRESSIVE_BOOTS: ["Leather Boots", "Hard Leggings", "Leg Guards",
-                            "Battle Guards", "Silver Leggings"],
+                            "Sylphen Boots", "Battle Guards",
+                            "Silver Leggings"],
     },
     "hugo": {
         PROGRESSIVE_ARMOR: ["Ebony Robe", "Chain Cloak", "Elder Robe",
-                            "Cleria Garb"],
+                            "Crimson Coat", "Cleria Garb"],
         PROGRESSIVE_BOOTS: ["Leather Greaves", "Ebony Shoes", "Shell Greaves",
-                            "Moon Greaves", "Dark Falcon"],
+                            "Elder Shoes", "Moon Greaves", "Dark Falcon"],
     },
     "toal": {
         PROGRESSIVE_ARMOR: ["Black Chain", "Banded Mail", "Gothic Suit",
-                            "Brave Armor"],
+                            "Phantom Mail", "Brave Armor"],
         PROGRESSIVE_BOOTS: ["Riveted Boots", "Black Leggings", "Banded Boots",
-                            "Phantom Boots", "Brave Guards"],
+                            "Demon Greaves", "Phantom Boots",
+                            "Brave Guards"],
     },
 }
 
@@ -413,9 +421,54 @@ for _l in _LOCS:
         "location": _l["name"],
     }
 
+# -- progressive blessing tiers ---------------------------------------------- #
+# Seven blessings come in LV1/LV2(/LV3) steps. Shuffled independently you can be
+# handed LV3 first, which is both nonsense and a balance jump, so each family
+# becomes one chain granted in order. Derived from the location names rather than
+# hardcoded, so it cannot drift from the data.
+#
+# Only meaningful together with blessing_items — without it the effects are not
+# pool items at all and there is nothing to make progressive.
+def _blessing_tier_groups() -> Dict[str, List[int]]:
+    groups: Dict[str, Dict[int, int]] = defaultdict(dict)
+    for l in _LOCS:
+        det = l.get("detect", {})
+        if l.get("type") != "blessing" or det.get("method") != "bit":
+            continue
+        short = l["name"].split("Divine Blessing: ", 1)[-1]
+        m = re.match(r"(.*?) LV(\d)$", short)
+        if m:
+            groups[m.group(1)][int(m.group(2))] = det["bit"]
+    return {f"Progressive {base}": [bits[lv] for lv in sorted(bits)]
+            for base, bits in groups.items() if len(bits) > 1}
+
+
+PROGRESSIVE_BLESSINGS: Dict[str, List[int]] = _blessing_tier_groups()
+
+# blessing effect item name -> the chain it belongs to.
+_BLESS_TIER_ITEM_TO_CHAIN: Dict[str, str] = {}
+for _chain, _bits in PROGRESSIVE_BLESSINGS.items():
+    _base = _chain.split("Progressive ", 1)[1]
+    for _lv in range(1, len(_bits) + 1):
+        _BLESS_TIER_ITEM_TO_CHAIN[f"Blessing: {_base} LV{_lv}"] = _chain
+
+
+def progressive_blessing_for(item_name: str) -> Optional[str]:
+    return _BLESS_TIER_ITEM_TO_CHAIN.get(item_name)
+
+
+PROGRESSIVE_SKILLS: Dict[str, Dict[str, object]] = {
+    "Progressive Wind Skill": {
+        "artifact": "Cerulean Flabellum", "gem": "Emerald", "level_cell": 0xB6},
+    "Progressive Lightning Skill": {
+        "artifact": "Levinstrike Warhammer", "gem": "Ruby", "level_cell": 0xB7},
+    "Progressive Fire Skill": {
+        "artifact": "Crimson Lotusblade", "gem": "Topaz", "level_cell": 0xB8},
+}
+
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
     | set(FILLER_POOL) | set(TRAP_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
-    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS}
+    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS} | set(PROGRESSIVE_SKILLS)     | set(PROGRESSIVE_BLESSINGS)
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
@@ -516,7 +569,102 @@ def weapon_value_for_level(level: int) -> int:
     return _WEAPON_LEVEL_VALUE[lvl]
 
 
+# Blessing EFFECT items. A blessing is one bit in g_flags[0xD9], not an item
+# cell, so the pool item gets a synthetic id above the g_flags range and the mod
+# recognises it by that range: index - BLESS_ITEM_BASE == the bit to set.
+BLESS_ITEM_BASE = 0x200
+
+# The elemental gems' real ids (0x80/0x81/0x82) are ITEM ids for the give-item op
+# 0x116 — they are NOT g_flags cells. Writing g_flags[0x82] sets flag 130, which
+# every BATTLE*.XSO uses as the boss-battle state, and a granted Topaz put the
+# game into a boss fight on 1F. Worse, having 0x82 in the g_flags suppress set
+# would have stopped real boss battles from setting it at all.
+#
+# So the pool items carry a synthetic id (the mod then grants only the companion
+# skill-level cell via ABILITY_GRANTS), and the real ids are published separately
+# for the give-item hook, which is keyed on the item id and does need them.
+GEM_GIVE_IDS: Dict[str, int] = {"Emerald": 0x80, "Ruby": 0x81, "Topaz": 0x82}
+
+# -- progressive elemental skills -------------------------------------------- #
+# Each element is an artifact plus three gems, and the vanilla order is the only
+# one that makes sense: the artifact UNLOCKS the skill (its altar script sets the
+# level cell to 0) and each gem raises the level. Shuffled independently you can
+# collect three Emeralds and still not have the Wind skill.
+#
+# So they become one progressive chain of four. Pairing confirmed from the altar
+# scripts, each of which zeroes its own level cell:
+#   S_1004 TALKITEM  -> 0xB6   Cerulean Flabellum  + Emerald
+#   S_2009 TALKC940  -> 0xB7   Levinstrike Warhammer + Ruby
+#   S_3007 TALKSAUL  -> 0xB8   Crimson Lotusblade  + Topaz
+
+
+def progressive_skill_for(item_name: str) -> Optional[str]:
+    """The progressive chain an artifact or gem belongs to, if any."""
+    for prog, d in PROGRESSIVE_SKILLS.items():
+        if item_name in (d["artifact"], d["gem"]):
+            return prog
+    return None
+
+
+def progressive_skill_slot_data() -> Dict[str, dict]:
+    """chain name -> what the mod must do per receipt: the artifact + power cells
+    for the FIRST one, then the level cell for each subsequent one."""
+    out: Dict[str, dict] = {}
+    for prog, d in PROGRESSIVE_SKILLS.items():
+        art = str(d["artifact"])
+        power = SKILL_GRANTS.get(art)
+        if art not in item_index or power not in item_index:
+            continue
+        out[prog] = {
+            "artifact": item_index[art],
+            "power": item_index[power],
+            "level_cell": int(d["level_cell"]),
+        }
+    return out
+
+
+def suppress_give_ids(active, char: str = "hugo") -> List[int]:
+    """Item ids the 0x116 give-item hook must suppress but that must NOT enter
+    the g_flags suppress set (see GEM_GIVE_IDS)."""
+    out: Set[int] = set()
+    for name in active:
+        v = location_vanilla_item(name, char)
+        if v in GEM_GIVE_IDS:
+            out.add(GEM_GIVE_IDS[v])
+    return sorted(out)
+
+
 CLERIA_ORE = "Cleria Ore"
+
+# -- Roo trades -------------------------------------------------------------- #
+# The sacred animals: each takes ONE Roda Fruit and gives something back. Six of
+# them, and vanilla has exactly six Roda Fruit chests — so the fruits are a
+# consumable KEY, not filler, and the pool must never be short.
+#
+# Found by disassembling the XSO corpus: the trade scripts are `AGERU.XSO`
+# ("あげる", to give) and the `TALKRUU_*` per-character variants — NOT the `TALK*`
+# pattern the chest catalog keys on, which is why they were missing from
+# locations.json entirely and the trades still ran vanilla with no check firing.
+# Each sets its own flag when fed, which is the location's detect offset.
+#
+# What they give in vanilla is mostly NOT an item: five hand out a conversation
+# Topic (`0x93 SetTopicKnownIndex`), and S_3104 varies by character (Hammer 0x60
+# on the generic/Hugo path, a Topic for Toal, a BGM unlock for Yunica). Only the
+# Hammer is poolable, so it is the only one carrying a vanilla item; the other
+# five contribute a filler slot instead, which create_items already pads.
+RODA_FRUIT = "Roda Fruit"
+
+# In feed order. The Nth Roo the player trades at needs N fruits banked, whatever
+# order they visit them in — the fruits are interchangeable and consumed one per
+# trade, so "the k-th of these locations requires k fruits" is the exact rule.
+ROO_LOCATIONS: List[str] = [
+    "Wailing Blue: 4F Forward Room — Roo Trade",
+    "Flooded Prison: 8F Path 2 — Roo Trade",
+    "Flames of Guilt: Roo Start — Roo Trade",
+    "Silent Sands: Roo End — Roo Trade",
+    "Corrupted Blood: Outer Corridor 1 — Roo Trade",
+    "Demonic Core: 22F Mirror Path — Roo Trade",
+]
 
 # Cleria Ore (= weapon-upgrade) count required to ENTER each zone, per the
 # weapon_requirements option: (casual, strict). 5 ore exist (one per zone in
@@ -607,6 +755,44 @@ def item_classification(name: str) -> str:
     return _item_class.get(name, "filler")
 
 
+# The four AP classifications a player may assign via
+# ``item_classification_overrides`` (see options.py / __init__.create_item).
+VALID_TIERS: Tuple[str, ...] = ("filler", "useful", "progression", "trap")
+
+
+def parse_class_overrides(raw, warn=None) -> Dict[str, str]:
+    """Validate a raw ``{item name: tier}`` override map from a player's yaml.
+
+    Returns ``{name: canonical_tier}`` keeping only entries that name a real item
+    and a valid tier (``filler``/``useful``/``progression``/``trap``, case- and
+    whitespace-insensitive). Bad entries are dropped — never fatal — and reported
+    through ``warn(msg)`` if given, so a typo degrades gracefully instead of
+    aborting generation (matches how ``starting_items`` ignores unknown names).
+
+    This is intentionally permissive about *downgrading*: a player may mark a
+    default-progression item as ``filler``/``useful`` when they know a skip makes
+    it non-essential. That is their call; if the item is in fact required by the
+    logic, fill fails loudly (a broken seed is never produced). The caller applies
+    the result as the LAST word over the built-in defaults."""
+    out: Dict[str, str] = {}
+    if not raw:
+        return out
+    items = raw.items() if isinstance(raw, dict) else raw
+    for name, tier in items:
+        if name not in item_name_to_id:
+            if warn:
+                warn(f"unknown item {name!r} ignored")
+            continue
+        t = str(tier).strip().lower()
+        if t not in VALID_TIERS:
+            if warn:
+                warn(f"invalid tier {tier!r} for {name!r} "
+                     f"(use one of {', '.join(VALID_TIERS)})")
+            continue
+        out[name] = t
+    return out
+
+
 # item name -> AP classification int (1 prog, 2 useful, 4 trap, 0 filler), for
 # the overlay toast color when a received item carries no flags (e.g. cheat
 # /send, or any server that omits them). Published in slot_data.
@@ -658,13 +844,118 @@ def _region_of_location(l: dict) -> str:
     return zone if zone in _present else MENU
 
 
-def locations_by_region(enabled: Set[str]) -> Dict[str, List[str]]:
+def locations_by_region(enabled: Set[str], char: str = "") -> Dict[str, List[str]]:
+    """Active locations grouped by region.
+
+    A location may declare ``char``: it then exists ONLY for that character. The
+    gear-upgrade blessings need this — "Strengthen <piece>" is detected in the
+    raval level array at the EQUIPPED PIECE's own item index, and the armor/boots
+    pieces are disjoint per character (Yunica 0x06-0x0B, Hugo 0x0C-0x11, Toal
+    0x12-0x17), so Toal can never fire Hugo's slots. Passing no char keeps every
+    variant, which is what the offline audits want.
+    """
     out: Dict[str, List[str]] = defaultdict(list)
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
+        if char and l.get("char") and l["char"] != char:
+            continue
         out[_region_of_location(l)].append(l["name"])
     return dict(out)
+
+
+# -- vanilla blessing prices ------------------------------------------------- #
+# Each blessing is one S_COMMON/GROWnn.XSO, nn = its 0xAF index, and the price is
+# a baked immediate that appears TWICE in the script (the 0x61 affordability
+# compare and the 0x69 deduction) plus a third time in the 0xdd menu entry. Read
+# straight out of the extracted corpus.
+#
+# index <-> bit: identity up to 6, +2 from 7 up, because indices 7/8 are the
+# armor/leggings raval escapes and set no bit (CleriaCore BLESSING_SHOP.md,
+# decoded from the 0xAF jump table at 0x56E6F0 and live-confirmed).
+VANILLA_BLESSING_PRICE_BY_INDEX: Dict[int, int] = {
+    0: 1000, 1: 4000, 2: 1500, 3: 24000, 4: 3000, 5: 10000, 6: 30000,
+    9: 8000, 10: 16000, 11: 2500, 12: 20000, 13: 80000, 14: 2000,
+    15: 500000, 16: 160000, 17: 60000, 18: 120000, 19: 20000, 20: 100000,
+    21: 200000, 22: 15000, 23: 8000, 24: 25000, 25: 30000,
+}
+
+
+def blessing_index_for_bit(bit: int) -> int:
+    return bit if bit <= 6 else bit + 2
+
+
+def vanilla_price_for_bit(bit: int) -> int:
+    return VANILLA_BLESSING_PRICE_BY_INDEX[blessing_index_for_bit(bit)]
+
+
+def blessing_bit_of(loc_name: str) -> Optional[int]:
+    """The bitfield bit a bit-method blessing location watches, else None."""
+    meta = LOC_META.get(loc_name, {})
+    det = meta.get("detect", {})
+    return det.get("bit") if det.get("method") == "bit" else None
+
+
+def vanilla_price_map(randomized: Dict[str, int]) -> Dict[int, int]:
+    """vanilla SP price -> the price the mod should charge instead.
+
+    The mod substitutes at three sites inside GROWnn (menu entry, affordability
+    compare, deduction) and at NONE of them does it know which blessing is being
+    bought — the 0xAF index only appears after the money has already moved. The
+    vanilla price is therefore the only key available.
+
+    Three vanilla prices are shared by two blessings each (30000, 8000, 20000).
+    `_roll_blessing_prices` forces those pairs onto the SAME randomized price so
+    this map stays a function; assert it here rather than trust that.
+    """
+    out: Dict[int, int] = {}
+    for loc_name, new_price in randomized.items():
+        bit = blessing_bit_of(loc_name)
+        if bit is None:
+            continue                       # gear upgrades: cost ladder, not GROWnn
+        vanilla = vanilla_price_for_bit(bit)
+        if vanilla in out and out[vanilla] != new_price:
+            raise ValueError(
+                f"two blessings share vanilla price {vanilla} but were given "
+                f"different randomized prices ({out[vanilla]} vs {new_price}); "
+                "the in-game price hook keys on the vanilla price and cannot "
+                "tell them apart")
+        out[vanilla] = new_price
+    return out
+
+
+# -- gear-upgrade blessings -------------------------------------------------- #
+# "Strengthen current armor / leggings" is not a one-shot bit like every other
+# blessing: it writes a LEVEL into the raval array at +0x36A654, indexed by the
+# equipped piece's own g_flags item index (live-confirmed: Riveted Leather 0x12
+# -> slot 18, Riveted Boots 0x2A -> slot 42). So every piece can be upgraded
+# once, and each one is its own check.
+#
+# The gate is simply owning that piece. The starting armor needs no gate; every
+# other piece is a pool item, or - with progressive_armor on - the Nth step of
+# the corresponding progressive ladder.
+def gear_upgrade_gates(char: str, progressive: bool) -> Dict[str, tuple]:
+    """location name -> (item_name, count) required to reach that upgrade.
+
+    count > 1 only for the progressive ladders. An empty dict entry value of
+    ``("", 0)`` means no gate (the character starts wearing it).
+    """
+    out: Dict[str, tuple] = {}
+    for l in _LOCS:
+        if l.get("char") != char or not l["id"].startswith("blessing/gear/"):
+            continue
+        piece = l["name"].split("Strengthen ", 1)[1]
+        kind = (PROGRESSIVE_BOOTS if piece in
+                GEAR_LADDERS.get(char, {}).get(PROGRESSIVE_BOOTS, [])
+                else PROGRESSIVE_ARMOR)
+        ladder = GEAR_LADDERS.get(char, {}).get(kind, [])
+        if piece not in ladder:
+            out[l["name"]] = ("", 0)          # starting gear: worn from turn one
+        elif progressive:
+            out[l["name"]] = (kind, ladder.index(piece) + 1)
+        else:
+            out[l["name"]] = (piece, 1)
+    return out
 
 
 # -- overlay tracker maps (published in slot_data) --------------------------- #
@@ -889,11 +1180,47 @@ SKILL_GRANTS: Dict[str, str] = {
 }
 
 
+# The mobility bracelets pair the same way, but their companion cell is a bare
+# g_flags index with no item name of its own, so it can't live in SKILL_GRANTS.
+#
+# Found by disassembling the vanilla chests: S_40/S_4002/S_BOX01 (Gold Bracelet)
+# sets 0x5B *and* 0xA3; S_20/S_2002/S_BOX01 (Silver Bracelet) sets 0x5A *and*
+# 0xB5. The item cell alone is only the inventory record — 0xA3 is what actually
+# turns double-jump on, confirmed live: the bracelet sat in Toal's inventory with
+# its "allows its wearer to double-jump" description and did nothing until 0xA3
+# was set, whereupon double-jump worked immediately.
+#
+# This also puts the companion cell in the suppress set, so a randomized bracelet
+# chest can no longer hand out the real mobility for free.
+ABILITY_GRANTS: Dict[str, int] = {
+    "Gold Bracelet": 0xA3,      # double-jump
+    "Silver Bracelet": 0xB5,    # high-speed run
+    # The elemental upgrade gems. Same shape, except their companion cell is a
+    # LEVEL (1..3), bumped with `0x67 +=` rather than set — see COUNTED_ABILITY
+    # cells below. INVINFO has no name for 0x80/0x81/0x82, which is why the
+    # catalog dropped them as junk "hex placeholder" items and their eight chests
+    # were left with an empty vanilla-item list; the chest then handed out the
+    # real skill upgrade on top of the AP item (seen live on the 4F Emerald).
+    # Names from the guide: Emerald powers Wind, Ruby Fire, Topaz Thunder.
+    "Emerald": 0xB6,            # wind skill level
+    "Ruby": 0xB7,               # fire skill level
+    "Topaz": 0xB8,              # thunder skill level
+}
+
+# Ability cells that are COUNTED, not boolean: the three elemental skill levels
+# cap at 3 and the chests bump them with `0x67 +=`. Everything else in
+# ABILITY_GRANTS / SKILL_GRANTS is a one-shot unlock.
+COUNTED_ABILITY_CELLS: Set[int] = {0xB6, 0xB7, 0xB8}
+
+
 def skill_grants() -> Dict[str, int]:
-    """artifact item name -> g_flags index of the power it unlocks. Published in
-    slot_data so receiving the artifact also lights up its skill."""
-    return {art: item_index[skill] for art, skill in SKILL_GRANTS.items()
-            if art in item_index and skill in item_index}
+    """item name -> g_flags index of the ability it unlocks. Published in
+    slot_data so receiving the item also lights up what it is FOR: the elemental
+    artifacts' castable power, and the bracelets' mobility."""
+    out = {art: item_index[skill] for art, skill in SKILL_GRANTS.items()
+           if art in item_index and skill in item_index}
+    out.update({nm: idx for nm, idx in ABILITY_GRANTS.items() if nm in item_index})
+    return out
 
 
 def suppress_item_indices(active, char: str = "hugo") -> List[int]:
@@ -921,7 +1248,12 @@ def suppress_item_indices(active, char: str = "hugo") -> List[int]:
         power = skill_grants().get(vanilla)
         if power is not None:
             out.add(power)
-    return sorted(out)
+    # Blessing EFFECT items carry a synthetic id (BLESS_ITEM_BASE + bit) because
+    # a blessing is a bit in g_flags[0xD9], not a cell of its own. They are not
+    # g_flags indices, and the mod's suppress array is only 0x200 wide, so they
+    # must never reach it — the blessing purchase is suppressed at the 0xAF
+    # grant instead, which is also where its check is detected.
+    return sorted(i for i in out if 0 <= i < 0x200)
 
 
 def start_item_indices(names) -> List[int]:
@@ -939,8 +1271,15 @@ def start_item_indices(names) -> List[int]:
     return out
 
 
+def is_blessing_effect_item(name: str) -> bool:
+    return name.startswith("Blessing: ")
+
+
 def vanilla_items(enabled: Set[str], char: str = "hugo",
-                  progressive_gear: bool = False) -> List[str]:
+                  progressive_gear: bool = False,
+                  blessing_items: bool = False,
+                  progressive_skills: bool = False,
+                  progressive_blessings: bool = False) -> List[str]:
     """The real items to seed the pool (one per enabled chest/event location),
     using the selected character's variant at each location. With
     ``progressive_gear`` on, armor/boots pieces seed Progressive Armor/Boots
@@ -952,6 +1291,20 @@ def vanilla_items(enabled: Set[str], char: str = "hugo",
         it = location_vanilla_item(l["name"], char)
         if not it:
             continue
+        # Blessing EFFECT items only exist when the seed shuffles them. With the
+        # option off the purchase grants the blessing exactly as vanilla does, so
+        # the slot carries no item and create_items pads it with filler — same as
+        # before the effects were poolable.
+        if is_blessing_effect_item(it) and not blessing_items:
+            continue
+        if progressive_skills:
+            chain = progressive_skill_for(it)
+            if chain:
+                it = chain
+        if progressive_blessings:
+            chain = progressive_blessing_for(it)
+            if chain:
+                it = chain
         if progressive_gear:
             prog = _progressive_name_for(it, char)
             if prog:

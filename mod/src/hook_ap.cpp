@@ -52,9 +52,13 @@ void set_visible(bool v);
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
+extern bool g_supp_give[0x200];   // ITEM ids the give-item op must swallow
 extern bool g_loc_flag[0x200];    // location flags that are checks
 // Seed-scoped save redirection (hook_saveredir.cpp).
 extern "C" void saveredir_set_seed(const char* seed);
+extern "C" const char* saveredir_seed_cstr();
+// Cutscene fast-forward mode (hook_vm.cpp): 0 off, 1 hold Right-Ctrl, 2 always.
+extern "C" int g_cutscene_skip_mode;
 extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
@@ -113,6 +117,8 @@ static void load_config() {
                   "# save_pattern=sav  # filename substring that marks a save file\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
+                  "# cutscene_skip=1   # 0 off, 1 hold Right-Ctrl to fast-forward,\n"
+                  "#                   # 2 always. Also settable in the F8 menu.\n"
                   "# goal_scene=7002   # ending-scene number(s), comma-separated;\n"
                   "#                   # entering one reports your goal to the server.\n"
                   "#                   # 7002 (verified on a Toal clear) is the default.\n"
@@ -155,6 +161,10 @@ static void load_config() {
             }
         }
         else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
+        else if (!strcmp(key, "cutscene_skip")) {
+            int m = atoi(val);
+            g_cutscene_skip_mode = (m < 0 || m > 2) ? 1 : m;
+        }
         else if (!strncmp(key, "bless_idx_", 10)) {
             int bit = atoi(key + 10);
             if (bit >= 0 && bit < 32) g_bless_arr_idx[bit] = atoi(val);
@@ -206,7 +216,6 @@ static int  g_req_port = 0;
 static char g_req_slot[128] = "";
 static char g_req_pass[128] = "";
 static void create_client();  // defined below; builds g_ap on the poll thread
-static void reset_floor_prev();  // clears the Reach-NF crossing baseline (poll section)
 
 // flag index -> AP location ids (set in slot_connected, read in ap_on_check).
 // A VECTOR per flag: one event flag can be several AP locations (the elemental
@@ -250,6 +259,142 @@ static std::map<int64_t, int> g_loc_flags;
 // mapped, its purchase still registers (bit + check + SP) and the effect
 // applies after the next save+reload (g_flags persists the bit).
 struct BlessShopItem { int64_t loc; std::string name; int bit; int cost; };
+
+// -- VANILLA statue-menu re-pricing ------------------------------------------ #
+// vanilla SP price -> the price to charge instead, from slot_data. Read by the
+// three hooks in hook_vm.cpp that sit on the places a GROWnn.XSO script uses its
+// baked price: the 0xdd menu entry (what you SEE), the 0x61 affordability
+// compare (whether you may buy), and the 0x69 deduction (what you PAY).
+//
+// The vanilla price is the only key those sites have: the blessing's 0xAF index
+// does not appear in the script until after the money has already moved. The
+// world guarantees the map is a function — three vanilla prices are shared by
+// two blessings each, and _roll_blessing_prices pins those pairs to one
+// randomized price precisely so this lookup can't be ambiguous.
+//
+// Guarded because the poll thread rebuilds it on connect while the game's main
+// thread reads it from the VM hooks.
+static std::mutex g_bless_price_mtx;
+static std::map<int, int> g_bless_price_map;
+
+// vanilla SP price -> the AP location that slot really is, so the menu row can
+// be RELABELLED with what the seed actually placed there instead of the vanilla
+// blessing's own name. Same key and same guarantee as g_bless_price_map.
+static std::map<int, int64_t> g_bless_price_to_loc;
+// raval cell address -> AP location, for the two gear-upgrade rows.
+static std::map<uintptr_t, int64_t> g_gear_cell_to_loc;
+
+// The raval slot IS the equipped piece's own item index, and the selector
+// globals hold that index (0x76BB7C armor / 0x76BB80 leggings).
+static const uintptr_t kRavalBase   = 0x0076A654;
+static const uintptr_t kArmorSelAbs = 0x0076BB7C;
+static const uintptr_t kBootsSelAbs = 0x0076BB80;
+
+// GROWMENU emits the gear rows FIRST (armor rungs, then leggings rungs), before
+// any blessing row, and exactly one rung of each passes its guard — so at most
+// two gear rows appear and they are the first two of the menu.
+//
+// The 0xdd operands cannot identify them: operand 1 turned out to be another
+// STRING, not the item index (it read back as ASCII). What IS reliable is the
+// pair of selector globals plus the cost ladder, both of which the menu has
+// already resolved by this point.
+static const int kGearLadder[] = {100, 300, 1000, 3000, 6000, 12000};
+static bool is_gear_price(int p) {
+    for (int v : kGearLadder) if (v == p) return true;
+    return false;
+}
+
+// Row counter for the current menu build. A menu is emitted in one burst, so a
+// gap since the last row means a new menu — simpler and more robust than trying
+// to hook the menu open, which shares its opcode with everything else.
+static int g_menu_row = 0;
+static unsigned long g_menu_last_tick = 0;
+
+static int64_t gear_cell_loc(int sel) {
+    if (sel < 0 || sel > 0x200) return -1;
+    std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+    auto it = g_gear_cell_to_loc.find(kRavalBase + (uintptr_t)sel * 4);
+    return it == g_gear_cell_to_loc.end() ? -1 : it->second;
+}
+
+static bool loc_checked(int64_t loc) {
+    if (loc < 0) return false;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return g_checked.count(loc) != 0;
+}
+
+// Which gear location a priced row belongs to.
+//
+// Row ORDER alone does not work: once a gear upgrade is bought the script emits
+// that row through 0xD8 Menu_Add (the "[Done]" form) instead of 0xDD, so this
+// hook never sees it and the counter slid, labelling the leggings row as armor.
+//
+// Instead, a row is matched against the gear slots that are still BUYABLE, in
+// script order (armor then leggings). A bought slot drops out of the running
+// exactly as it drops out of the priced rows, so the two stay in step without
+// counting anything.
+static int64_t gear_row_location(int price) {
+    unsigned long now = GetTickCount();
+    if (now - g_menu_last_tick > 250) g_menu_row = 0;   // menus arrive in one burst
+    g_menu_last_tick = now;
+    if (!is_gear_price(price)) return -1;
+    int64_t armor = gear_cell_loc(*(volatile int*)kArmorSelAbs);
+    int64_t boots = gear_cell_loc(*(volatile int*)kBootsSelAbs);
+    // "Still buyable" must be judged from the GAME's state, not the server's.
+    // A slot is priced exactly while its raval level is 0 — that is the same
+    // thing the menu script tests. Using g_checked instead desynced after a New
+    // Game: the level resets locally but the check stays sent, so the armor slot
+    // was wrongly dropped from the candidates and its row lost its label.
+    int armor_sel = *(volatile int*)kArmorSelAbs;
+    int boots_sel = *(volatile int*)kBootsSelAbs;
+    int64_t cand[2]; int n = 0;
+    if (armor >= 0 && *(volatile int*)(kRavalBase + (uintptr_t)armor_sel * 4) < 1)
+        cand[n++] = armor;
+    if (boots >= 0 && *(volatile int*)(kRavalBase + (uintptr_t)boots_sel * 4) < 1)
+        cand[n++] = boots;
+    int slot = g_menu_row++;
+    return (slot < n) ? cand[slot] : -1;
+}
+
+
+
+extern "C" int ap_substitute_bless_price(int vanilla) {
+    std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+    auto it = g_bless_price_map.find(vanilla);
+    return it == g_bless_price_map.end() ? vanilla : it->second;
+}
+
+// Has this row's location already been checked?
+static bool bless_row_bought(int vanilla) {
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        auto it = g_bless_price_to_loc.find(vanilla);
+        if (it != g_bless_price_to_loc.end()) loc = it->second;
+    }
+    if (loc < 0) return false;
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return g_checked.count(loc) != 0;
+}
+
+// Price for the AFFORDABILITY compare only — never for the deduction.
+//
+// With blessing effects shuffled, the purchase no longer sets the effect bit,
+// and that bit is what the game uses to grey a row out as already bought. So a
+// bought row stays selectable and would happily take the player's SP again for a
+// check the server has already recorded. Returning an unaffordable price is the
+// least invasive way to close that: the script's own "not enough SP" branch
+// handles it, and the deduction is never reached.
+// Should the formatted price be suppressed for this row? (bought rows render
+// "- [Done]" instead, so the number must not be appended after it.)
+extern "C" int ap_bless_hide_price(int vanilla) {
+    return bless_row_bought(vanilla) ? 1 : 0;
+}
+
+extern "C" int ap_bless_compare_price(int vanilla) {
+    if (bless_row_bought(vanilla)) return 999999999;
+    return ap_substitute_bless_price(vanilla);
+}
 static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap first
 static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
 static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
@@ -267,6 +412,52 @@ static std::mutex g_sp_mtx;
 static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
 static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
 static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
+
+static void ap_fire_location(int64_t loc);   // defined with ap_on_check below
+
+// -- blessings as pool items ------------------------------------------------- #
+// A blessing is one bit in g_flags[0xD9], which is BOTH its effect and the
+// menu's "already bought" marker. To make the effect a shuffled item we have to
+// stop the purchase setting it — and that means the bit can no longer be what
+// detects the check either. Detection moves to the 0xAF grant op (choke point
+// 0x568D5D, blessing index live in EAX), which is upstream of the bit.
+//
+// blessing bit -> the AP location that purchase corresponds to.
+static std::mutex g_bless_mtx;
+static std::map<int, int64_t> g_bless_bit_to_loc;
+static bool g_bless_as_items = false;   // slot_data: are effects in the pool?
+
+// Grant a blessing EFFECT (received as an item): set its bit + recompute.
+static void grant_blessing_bit(int bit) {
+    if (bit < 0 || bit > 31) return;
+    volatile int* cell = (volatile int*)kBlessBitsAbs;
+    if (*cell & (1 << bit)) return;
+    *cell |= (1 << bit);
+    *(volatile int*)kBlessDirtyAbs |= 0x10;
+    mod_log("ap: blessing effect granted — bit %d set", bit);
+}
+
+// Called from the 0xAF hook on the game thread. Returns true when the vanilla
+// grant must be SKIPPED (the effect belongs to whoever the seed gave it to).
+extern "C" int ap_on_blessing_purchase(int index) {
+    // index -> bit: identity up to 6, +2 from 7 up (7/8 are the armor/leggings
+    // raval escapes and set no bit at all).
+    if (index == 7 || index == 8) return 0;      // gear upgrades: never ours
+    int bit = (index <= 6) ? index : index - 2;
+    if (bit < 0 || bit > 31) return 0;
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_bless_mtx);
+        auto it = g_bless_bit_to_loc.find(bit);
+        if (it == g_bless_bit_to_loc.end()) return 0;
+        loc = it->second;
+    }
+    ap_fire_location(loc);                        // the purchase IS the check
+    mod_log("ap: blessing purchase — index %d (bit %d) -> location %lld%s",
+            index, bit, (long long)loc,
+            g_bless_as_items ? " (effect suppressed)" : "");
+    return g_bless_as_items ? 1 : 0;
+}
 // Goal reporting: entering a known ending scene (g_goal_scenes) sends
 // StatusUpdate(GOAL) once. The ending shares the 7xxx range with the New-Game
 // intro cutscenes (Toal's especially), so the scene alone can't tell "the game
@@ -411,6 +602,13 @@ static std::atomic<unsigned long> g_fog_until{0};    // Blinding Fog: overlay ha
 static std::atomic<unsigned long> g_butter_until{0}; // Butterfingers: weapon-Lv1 window end
 static const uintptr_t kExpAbs = 0x0076A748;         // current EXP (float)
 
+// Is `name` one of our traps? Used to skip re-arming a trap whose effect already
+// fired in an earlier session (see the replay watermark in on_items_received).
+static bool is_trap_item(const std::string& name) {
+    return name == "EXP Leech" || name == "Chaos Warp"
+        || name == "Butterfingers" || name == "Blinding Fog";
+}
+
 // Set the effect for a received trap. Returns true if `name` was a trap.
 static bool apply_trap(const std::string& name) {
     unsigned long now = GetTickCount();
@@ -518,6 +716,61 @@ static std::mutex g_check_mtx;
 static std::vector<int64_t> g_checks;
 // highest received-item index already granted (dedupe replays this session).
 static int g_applied_through = -1;
+// Highest received-item index granted in ANY session of this seed+slot —
+// PERSISTED to disk, unlike g_applied_through.
+//
+// On every (re)connect the server replays the whole ReceivedItems list from
+// index 0, and we deliberately walk all of it so the idempotent state (g_flags
+// ownership, the gear-reconcile watermark, statue unlocks, weapon tier) is
+// rebuilt after a restart. But some effects are NOT idempotent, and replaying
+// those was destructive: SP fillers added their amount again (reconnecting was
+// free SP) and traps re-fired. Items at or below this watermark are replayed in
+// "quiet" mode — state yes, side effects no. Keyed by seed+slot so a different
+// seed or slot starts clean.
+static int g_replay_through = -1;
+
+// Where the watermark lives. The seed comes from the save-redirect module; the
+// slot is player-chosen free text, so both go through a WHITELIST — a blacklist
+// of the four obvious separators would let a slot called e.g. `Adol?` through,
+// fopen would fail on the illegal name, the watermark would silently never
+// persist, and the SP faucet / re-firing traps this file exists to stop would be
+// back with no diagnostic. Anything not [A-Za-z0-9._-] becomes '_'.
+static void applied_path(char* out, size_t n) {
+    const char* seed = saveredir_seed_cstr();
+    snprintf(out, n, "yso_ap_applied_%s_%s.cfg",
+             (seed && seed[0]) ? seed : "noseed", g_slot);
+    // Keep the "yso_ap_applied_" prefix and the ".cfg" suffix intact; scrub the
+    // seed/slot middle, which is the only attacker-ish/user-chosen part.
+    for (char* p = out; *p; ++p) {
+        char c = *p;
+        bool ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                  (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+        if (!ok) *p = '_';
+    }
+}
+
+static void load_replay_through() {
+    char path[320];
+    applied_path(path, sizeof(path));
+    g_replay_through = -1;
+    if (FILE* f = fopen(path, "r")) {
+        int v = -1;
+        if (fscanf(f, "%d", &v) == 1 && v >= -1) g_replay_through = v;
+        fclose(f);
+    }
+    mod_log("ap: replay watermark = %d (%s)", g_replay_through, path);
+}
+
+static void save_replay_through(int through) {
+    if (through <= g_replay_through) return;
+    g_replay_through = through;
+    char path[320];
+    applied_path(path, sizeof(path));
+    if (FILE* f = fopen(path, "w")) {
+        fprintf(f, "%d\n", through);
+        fclose(f);
+    }
+}
 // AP location id -> "what's here" display string (from LocationScouts), so when
 // a chest is opened we can show the real item + owning world (incl. other games).
 static std::mutex g_scout_mtx;
@@ -566,14 +819,238 @@ static void toast_loc(int64_t loc) {
 // icon until per-game icons exist). Roda Fruit (0x57) reads as a neutral pickup.
 static const int kForeignArtId = 0x57;
 
-// Grant an item in g_flags (give semantics: -1 -> 1, else +count). Atomic int32.
-static void ap_give(int idx, int count) {
+// -- derived-state recompute after a grant ----------------------------------- #
+//
+// Writing g_flags[id] puts the item in the inventory, but that is only the
+// RECORD. Anything derived from owning it — the equipment ability-flag word
+// DAT_0076a624, the stat block, the mobility unlocks — is rebuilt by
+// FUN_004208f0/FUN_00420C40, and only when the dirty bitfield DAT_0076b914 says
+// it is stale (CleriaCore EQUIP_EFFECTS.md §0: "the recompute runs only when the
+// dirty bit DAT_0076b914 & 0x10 is set ... so the flags persist between
+// recomputes"). The vanilla pickup tick FUN_00585ff0 ORs 0x75 into that field
+// right after it increments the item cell (ITEM_PICKUP.md §3.6) — we never did,
+// so an AP-granted item sat in the inventory with none of its effect applied.
+//
+// That is Shiro's report: "getting the ring that allows double-jump does
+// nothing, but opening the chest where that ring usually is in vanilla gives the
+// effect". The Gold Bracelet (0x5B, double-jump) and Silver Bracelet (0x5A,
+// high-speed run) are the visible cases; every derived-effect item was affected.
+//
+// The OR itself is deferred to the game's main thread: the grant runs on the AP
+// poll thread, and DAT_0076b914 is a read-modify-write the main thread also
+// touches. exp_scaling_on_frame drains this, the same way pending weapon/level
+// changes are applied.
+static const uintptr_t kRecalcFlagsAbs = 0x0076B914;
+static const int kRecalcBits = 0x75;         // exactly what FUN_00585ff0 sets
+static std::atomic<bool> g_pending_recalc{false};
+
+// Ask for a derived-state rebuild on the next frame. Safe to call repeatedly.
+static void request_recalc() { g_pending_recalc.store(true); }
+
+// Main thread only (exp_scaling_on_frame).
+static void apply_pending_recalc() {
+    if (!g_pending_recalc.exchange(false)) return;
+    *(volatile int*)kRecalcFlagsAbs |= kRecalcBits;
+    mod_log("ap: requested derived-state recompute (0x76b914 |= 0x%X)", kRecalcBits);
+}
+
+// -- which item cells are COUNTED, and which are boolean --------------------- #
+//
+// Decided by the GAME's own data, not by the seed's item classification. The
+// classification is now player-overridable per item (options: item_classification
+// overrides), and getting this wrong in either direction is severe: stacking a
+// key item re-creates the run-ending altar bug below, and clamping a counted one
+// would cap Cleria Ore at a single weapon upgrade.
+//
+// Verified by disassembling all 2225 scripts of the extracted XSO corpus:
+// inventory cells 0x40..0x76 are written by `0x64 Flag_SetInt` with an immediate
+// of 0 or 1 everywhere, with EXACTLY ONE exception — 0x57 in the S_0100
+// SARA_ROO_* debug flag-dumps. The only cells ever incremented with
+// `0x67 Flag_AddInt` are 0x57/0x58/0x59, and the only ones decremented with
+// `0x69 Flag_SubInt` are 0x57/0x58 (plus the two Moon Crests, consumed at their
+// altars). So exactly three item cells are counters; the rest are booleans.
+static const int kItemCellLo = 0x40, kItemCellHi = 0x76;
+// The three elemental skill-level cells (wind/fire/thunder). Counted 1..3, not
+// boolean — the gem chests bump them with `0x67 +=`. Outside the inventory band,
+// so enforce_item_cell_invariant never touches them.
+static bool is_counted_ability_cell(int idx) {
+    return idx == 0xB6 || idx == 0xB7 || idx == 0xB8;
+}
+
+static bool is_counted_item_cell(int idx) {
+    return idx == 0x57      // Roda Fruit
+        || idx == 0x58      // Cleria Ore (weapon-upgrade tiers)
+        || idx == 0x59;     // Celcetan Panacea
+}
+
+// Grant an item in g_flags. Atomic int32.
+//
+// `stack` = may this cell legitimately hold more than one (a consumable)? For
+// everything else the grant is a SET to 1, never an add, because the scripts
+// gate on EXACT EQUALITY: the event VM's test op 0x5F is
+// `acc = (g_flags[o0] == o1)` (docs/formats/XSO.md; CleriaCore EVENTVM_HANDLERS_2
+// lists no >= variant for it). A key item sitting at 2 therefore fails its own
+// door/altar check and the gate is dead FOREVER — the Red Moon Crest altar
+// bug report (Yunica, v1.6.x): "he equipped it and tried to use it on the altar
+// but it wasn't activating at all". The crests are genuinely consumed there
+// (`0x69 Flag_SubInt` on 0x5C/0x6F in the altar scripts), so an off-by-one is
+// not cosmetic. Vanilla can never produce a 2 here, so clamping is also the
+// faithful behaviour. Consumables are unaffected — they are counted, not tested.
+static void ap_give(int idx, int count, bool stack) {
     if (idx < 0 || idx >= 0x200) return;
     volatile int* cell = (volatile int*)(kGFlagsAbs + idx * 4);
     int cur = *cell;
     int base = (cur >= 1) ? cur : 0;
-    *cell = base + (count > 0 ? count : 1);
-    mod_log("ap: granted g_flags[0x%X] %d -> %d", idx, cur, *cell);
+    int next = stack ? base + (count > 0 ? count : 1) : 1;
+    if (!stack && cur == 1) return;               // already owned: no-op, no log spam
+    *cell = next;
+    request_recalc();   // the record is set; now make the game derive its effect
+    mod_log("ap: granted g_flags[0x%X] %d -> %d%s", idx, cur, *cell,
+            stack ? "" : " (key item, clamped to 1)");
+}
+
+// Overload used by the receive path. Stackability comes from the cell (above),
+// falling back to the AP classification for anything outside the inventory band
+// — those are event/story cells the corpus survey doesn't cover.
+static void ap_give_tier(int idx, int count, int tier) {
+    bool stack = (idx >= kItemCellLo && idx <= kItemCellHi)
+                     ? is_counted_item_cell(idx)
+                     : !(tier & 3);
+    ap_give(idx, count, stack);
+}
+
+// Enforce the boolean invariant on every inventory cell that is not one of the
+// three counters. This is what REPAIRS a save already carrying an inflated count
+// — the clamp in ap_give only prevents new inflation, and the prog_gear receive
+// path skips a cell it already considers owned, so an inflated one would never
+// be rewritten and its gate would stay dead for the rest of the run.
+//
+// Safe to run every tick rather than once at connect: vanilla never puts >1 in
+// these cells, so with no bug present this never writes anything. Running it
+// continuously (instead of once) also catches a save LOADED after connect, which
+// a connect-time-only migration would miss entirely.
+static void enforce_item_cell_invariant() {
+    for (int idx = kItemCellLo; idx <= kItemCellHi; idx++) {
+        if (is_counted_item_cell(idx)) continue;
+        volatile int* cell = (volatile int*)(kGFlagsAbs + idx * 4);
+        int v = *cell;
+        if (v > 1) {
+            *cell = 1;
+            request_recalc();
+            mod_log("repair: g_flags[0x%X] was %d -> clamped to 1 (key item; "
+                    "an inflated count fails its own 0x5F == test)", idx, v);
+        }
+    }
+}
+
+
+// Rewrite a GEAR row (armor / leggings) wholesale.
+//
+// Unlike a blessing row this one is handled after the handler has already
+// appended the formatted price, because the 0xdd ITEM operand that identifies it
+// is not fetched until then. So we rebuild the entire line, price suffix and all.
+extern "C" void ap_gear_relabel(char* buf, int item_operand, int price) {
+    if (!buf) return;
+    (void)item_operand;                 // unreliable: it is a string, not an id
+    int64_t loc = gear_row_location(price);
+    if (loc < 0) return;
+    std::string found;
+    int flags = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f == g_loc_found.end()) return;      // not scouted: keep vanilla
+        found = f->second;
+        auto fl = g_loc_flags.find(loc);
+        if (fl != g_loc_flags.end()) flags = fl->second;
+    }
+    std::string item = found, who;
+    size_t arrow = found.find("  -> ");
+    if (arrow != std::string::npos) {
+        item = found.substr(0, arrow);
+        who = found.substr(arrow + 5);
+    }
+    std::string out = (!who.empty() && who != g_slot) ? (who + "'s " + item) : item;
+    if (flags & 1) out = "* " + out;
+    bool bought;
+    {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        bought = g_checked.count(loc) != 0;
+    }
+    char tail[32];
+    if (bought) snprintf(tail, sizeof(tail), " - [Done]");
+    else        snprintf(tail, sizeof(tail), " - [SP:]%d", price);
+    out += tail;
+    if (out.size() > 180) out.resize(180);
+    memcpy(buf, out.c_str(), out.size() + 1);
+}
+
+// Rewrite a vanilla statue-menu row to show what the seed placed there.
+//
+// Called from the 0xdd menu hook at the moment the price is fetched: the label
+// the script supplied has already been copied into the handler's buffer, and the
+// formatted price has not been appended yet, so overwriting the buffer here
+// replaces the name and still gets " - [SP:]nnn" tacked on after it.
+//
+// Falls back to the vanilla label (writes nothing) for any row we don't
+// recognise — including the armor/leggings upgrades, whose price is not in the
+// map because they run on the game's own cost ladder.
+//
+// `buf` is the handler's on-stack label buffer; the price string lands 0x12C
+// bytes further up, so the cap is what keeps the two from colliding.
+extern "C" void ap_bless_relabel(char* buf, int vanilla) {
+    if (!buf) return;
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        auto it = g_bless_price_to_loc.find(vanilla);
+        if (it != g_bless_price_to_loc.end()) loc = it->second;
+    }
+    // Not a priced blessing -> it is one of the two gear-upgrade rows, whose
+    // cost comes from the game's 0xDA ladder and so is not in the price map.
+    if (loc < 0) return;
+    std::string found;
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_found.find(loc);
+        if (f == g_loc_found.end()) return;      // not scouted (yet) — keep vanilla
+        found = f->second;
+    }
+    if (found.empty()) return;
+    // g_loc_found is "Item  -> Owner". Render someone else's as "Owner's Item".
+    std::string item = found, who;
+    size_t arrow = found.find("  -> ");
+    if (arrow != std::string::npos) {
+        item = found.substr(0, arrow);
+        who = found.substr(arrow + 5);
+    }
+    std::string out;
+    if (!who.empty() && who != g_slot) out = who + "'s " + item;
+    else                               out = item;
+    // Mark progression so it stands out in a wall of filler. The menu draws
+    // plain text with no markup, so a leading glyph is the only styling
+    // available — the same trick the F5 shop uses.
+    {
+        std::lock_guard<std::mutex> lk(g_scout_mtx);
+        auto f = g_loc_flags.find(loc);
+        if (f != g_loc_flags.end() && (f->second & 1)) out = "* " + out;
+    }
+    if (bless_row_bought(vanilla)) {
+        // Render exactly like the game's own already-bought rows:
+        // "* Devil Medallion - [Done]", with no price after it. The handler
+        // appends the formatted price to this same buffer, so the companion
+        // hook below blanks that string for these rows.
+        out += " - [Done]";
+        if (out.size() > 180) out.resize(180);
+        memcpy(buf, out.c_str(), out.size() + 1);
+        return;
+    }
+    // The vanilla label ENDS with the " - [SP:]" separator — the handler appends
+    // the formatted price straight onto this buffer — so replacing the whole
+    // string swallowed it and rows rendered as "Celcetan Panacea670".
+    out += " - [SP:]";
+    if (out.size() > 180) out.resize(180);
+    memcpy(buf, out.c_str(), out.size() + 1);
 }
 
 // -- owned-gear reconcile ---------------------------------------------------- #
@@ -612,21 +1089,83 @@ static void reconcile_gear() {
             mod_log("gear: restored g_flags[0x%X] %d -> %d (save/load wipe)",
                     kv.first, *cell, kv.second);
             *cell = kv.second;
+            request_recalc();   // restoring the record must re-derive its effect
         }
     }
+}
+
+// -- progressive elemental skills -------------------------------------------- #
+// One chain per element: the FIRST receipt unlocks the skill (artifact cell +
+// power cell, exactly what the altar does), each later one raises the level cell.
+// Without this the three gems and the artifact shuffle independently and you can
+// hold three Emeralds with no Wind skill to use them on.
+struct ProgSkill { int artifact, power, level_cell; };
+static std::map<std::string, ProgSkill> g_prog_skills;
+static std::map<std::string, int> g_prog_skill_count;   // receipts so far
+
+// Tiered blessings (LV1 -> LV2 -> LV3) as one chain: each receipt sets the next
+// bit in order, so a family can never arrive out of sequence.
+static std::map<std::string, std::vector<int>> g_prog_bless;
+
+static void grant_progressive_blessing(const std::string& name) {
+    auto it = g_prog_bless.find(name);
+    if (it == g_prog_bless.end()) return;
+    volatile int* cell = (volatile int*)kBlessBitsAbs;
+    for (int bit : it->second) {
+        if (bit < 0 || bit > 31) continue;
+        if (*cell & (1 << bit)) continue;          // that tier is already in
+        *cell |= (1 << bit);
+        *(volatile int*)kBlessDirtyAbs |= 0x10;
+        mod_log("ap: %s -> bit %d set (next tier)", name.c_str(), bit);
+        return;
+    }
+    mod_log("ap: %s -> all tiers already granted", name.c_str());
+}
+
+static void grant_progressive_skill(const std::string& name) {
+    auto it = g_prog_skills.find(name);
+    if (it == g_prog_skills.end()) return;
+    const ProgSkill& ps = it->second;
+    int n = ++g_prog_skill_count[name];
+    if (n == 1) {
+        ap_give(ps.artifact, 1, /*stack=*/false);
+        ap_give(ps.power,    1, /*stack=*/false);
+        remember_gear(ps.artifact, 1);
+        remember_gear(ps.power, 1);
+        mod_log("ap: %s #1 -> skill unlocked (0x%X + power 0x%X)",
+                name.c_str(), ps.artifact, ps.power);
+    } else {
+        volatile int* cell = (volatile int*)(kGFlagsAbs + ps.level_cell * 4);
+        int cur = *cell < 0 ? 0 : *cell;
+        if (cur < 3) *cell = cur + 1;           // the game caps these at 3
+        request_recalc();
+        mod_log("ap: %s #%d -> level cell 0x%X now %d",
+                name.c_str(), n, ps.level_cell, *cell);
+    }
+}
+
+// Flag-method locations already fired, shared by the two paths that can fire
+// them: the VM store hook (instant, on the game main thread) and the poll-thread
+// sweep below (the safety net). Guarded because those are different threads.
+static std::mutex g_fired_mtx;
+static std::set<int64_t> g_flag_fired;
+
+// Claim `loc` for firing. Returns false if the other path already sent it.
+static bool claim_flag_loc(int64_t loc) {
+    std::lock_guard<std::mutex> lk(g_fired_mtx);
+    return g_flag_fired.insert(loc).second;
 }
 
 // Called by the VM grant hook (game main thread) when a watched location flag
 // fires. Queue its AP location id; the poll loop sends the LocationCheck. Also
 // show what was here (item + owning world), from the scout map.
-void ap_on_check(int flag_idx) {
-    if (flag_idx < 0 || flag_idx >= 0x200) return;
-    std::vector<int64_t> locs;
+// Fire ONE location id: queue the LocationCheck and toast what was there. Split
+// out of ap_on_check so the blessing-purchase hook (which knows a location, not
+// a g_flags index) reports through exactly the same path — same dedupe, same
+// toast, same scout lookup.
+static void ap_fire_location(int64_t loc) {
     {
-        std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
-        locs = g_flag_to_loc[flag_idx];
-    }
-    for (int64_t loc : locs) {
+        if (!claim_flag_loc(loc)) return;            // already reported
         {
             std::lock_guard<std::mutex> lk(g_check_mtx);
             g_checks.push_back(loc);
@@ -667,6 +1206,20 @@ void ap_on_check(int flag_idx) {
     }
 }
 
+// Called by the VM grant hook (game main thread) when a watched location flag
+// fires: one flag can map to several AP locations (the elemental altars grant
+// two things in one script).
+void ap_on_check(int flag_idx) {
+    if (flag_idx < 0 || flag_idx >= 0x200) return;
+    std::vector<int64_t> locs;
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
+        locs = g_flag_to_loc[flag_idx];
+    }
+    for (int64_t loc : locs)
+        ap_fire_location(loc);
+}
+
 // Reply to LocationScouts: learn the item + recipient at each of our locations.
 static void on_location_info(const std::list<APClient::NetworkItem>& items) {
     std::lock_guard<std::mutex> lk(g_scout_mtx);
@@ -692,6 +1245,34 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
 
 static void on_slot_connected(const nlohmann::json& sd) {
     int supp = 0, locs = 0, names = 0;
+    // Are blessing EFFECTS shuffled into the item pool? Read FIRST: the detect
+    // registration below branches on it.
+    g_bless_as_items = sd.value("blessing_items", false);
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        g_gear_cell_to_loc.clear();     // filled by the detect registration below
+    }
+    g_prog_skills.clear();
+    g_prog_skill_count.clear();
+    g_prog_bless.clear();
+    if (sd.contains("progressive_blessings")) {
+        for (auto& kv : sd["progressive_blessings"].items())
+            g_prog_bless[kv.key()] = kv.value().get<std::vector<int>>();
+        mod_log("ap: %d progressive blessing chains", (int)g_prog_bless.size());
+    }
+    if (sd.contains("progressive_skills")) {
+        for (auto& kv : sd["progressive_skills"].items()) {
+            const auto& d = kv.value();
+            g_prog_skills[kv.key()] = ProgSkill{
+                d.value("artifact", -1), d.value("power", -1),
+                d.value("level_cell", -1)};
+        }
+        mod_log("ap: %d progressive skill chains", (int)g_prog_skills.size());
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_bless_mtx);
+        g_bless_bit_to_loc.clear();
+    }
     if (sd.contains("item_index")) {
         for (auto& kv : sd["item_index"].items()) {
             g_name_to_idx[kv.key()] = kv.value().get<int>();
@@ -708,14 +1289,29 @@ static void on_slot_connected(const nlohmann::json& sd) {
             if (i >= 0 && i < 0x200) { g_supp_item[i] = true; supp++; }
         }
     }
+    for (int i = 0; i < 0x200; i++) g_supp_give[i] = false;
+    if (sd.contains("suppress_give_ids")) {
+        for (auto& v : sd["suppress_give_ids"]) {
+            int i = v.get<int>();
+            if (i >= 0 && i < 0x200) g_supp_give[i] = true;
+        }
+    }
     std::list<int64_t> scout;
     int scenes = 0;
     // Reset detect registrations (a reconnect re-registers everything; without
     // this a flag would accumulate duplicate location entries). g_reg_mtx: the
     // VM hook reads g_flag_to_loc from the game's main thread.
+    //
+    // g_loc_flag must be cleared too, not just g_flag_to_loc: DecideStore tests
+    // it BEFORE the suppress set and returns early on a hit, so an index left
+    // marked by a previous connection would pass a vanilla grant straight
+    // through unsuppressed on the next seed.
     {
         std::lock_guard<std::mutex> lk(g_reg_mtx);
-        for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();
+        for (int i = 0; i < 0x200; i++) {
+            g_flag_to_loc[i].clear();
+            g_loc_flag[i] = false;
+        }
     }
     g_poll_bits.clear();
     g_poll_vals.clear();
@@ -725,10 +1321,14 @@ static void on_slot_connected(const nlohmann::json& sd) {
     // second connection in the same process (the F8 menu allows switching rooms
     // without restarting) inherits the previous room's fired/checked/floor state.
     // Location ids are identical across seeds, so stale entries would silently
-    // swallow this room's checks and mislabel the shop. g_floor_prev is defined
-    // below (poll section) — reset via the extern helper declared there.
+    // swallow this room's checks and mislabel the shop. The visited-floor set is
+    // reset via the extern helper declared in the poll section below.
     g_poll_fired.clear();
     g_scene_fired.clear();
+    {
+        std::lock_guard<std::mutex> lk(g_fired_mtx);
+        g_flag_fired.clear();
+    }
     g_goal_sent = false;
     g_saw_gameplay = false;
     g_applied_through = -1;
@@ -736,7 +1336,6 @@ static void on_slot_connected(const nlohmann::json& sd) {
         std::lock_guard<std::mutex> lk(g_gear_mtx);
         g_owned_gear.clear();
     }
-    reset_floor_prev();
     // Re-arm force-spawn from the connect point: discard any intro scene the
     // title/attract screen showed BEFORE the player connected, so a fresh F8
     // connect at the title can't burn the one-shot warp on nothing (which left
@@ -776,6 +1375,14 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     // Outside g_flags (e.g. the armor blessing cell): the VM
                     // store hook can't see it — poll for value >= 1 instead.
                     g_poll_vals.push_back({kImageBase + (uintptr_t)off, loc});
+                    // The gear-upgrade blessings live in the raval array, so
+                    // remember cell -> location: the statue menu needs it to
+                    // relabel those rows (they carry no vanilla price, so the
+                    // price-keyed map cannot reach them).
+                    {
+                        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+                        g_gear_cell_to_loc[kImageBase + (uintptr_t)off] = loc;
+                    }
                 } else {
                     mod_log("ap: WARN dropped flag detect, offset 0x%X out of range", off);
                     continue;
@@ -790,8 +1397,17 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     mod_log("ap: WARN dropped bit detect, offset 0x%X out of range", off);
                     continue;
                 }
-                g_poll_bits.push_back({kImageBase + (uintptr_t)off,
-                                       d["bit"].get<int>(), loc});
+                // When blessing effects are shuffled, the bit is no longer set
+                // by a purchase, so polling it would never fire — and WOULD
+                // false-fire when the player later receives the effect item.
+                // Detection comes from the 0xAF grant hook instead.
+                if (!g_bless_as_items)
+                    g_poll_bits.push_back({kImageBase + (uintptr_t)off,
+                                           d["bit"].get<int>(), loc});
+                {
+                    std::lock_guard<std::mutex> lk(g_bless_mtx);
+                    g_bless_bit_to_loc[d["bit"].get<int>()] = loc;
+                }
                 g_loc_bitmap[loc] = d["bit"].get<int>();
                 scout.push_back(loc);
                 locs++;
@@ -848,6 +1464,21 @@ static void on_slot_connected(const nlohmann::json& sd) {
         g_shop_items.clear();
     }
     g_shop_unlock_mode = sd.value("blessing_shop_unlock", 0);
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        g_bless_price_map.clear();
+        g_bless_price_to_loc.clear();
+        if (sd.contains("blessing_vanilla_price_map")) {
+            for (auto& kv : sd["blessing_vanilla_price_map"].items()) {
+                int vanilla = atoi(kv.key().c_str());
+                int repriced = kv.value().get<int>();
+                if (vanilla > 0 && repriced >= 0)
+                    g_bless_price_map[vanilla] = repriced;
+            }
+        }
+        mod_log("ap: vanilla statue menu re-pricing: %d prices mapped",
+                (int)g_bless_price_map.size());
+    }
     if (sd.contains("blessing_costs")) {
         std::vector<BlessShopItem> items;
         for (auto& kv : sd["blessing_costs"].items()) {
@@ -865,12 +1496,30 @@ static void on_slot_connected(const nlohmann::json& sd) {
         {
             std::lock_guard<std::mutex> lk(g_reg_mtx);
             g_shop_items.swap(items);
+            // Which location each vanilla price belongs to, for the menu-row
+            // relabel. MUST be after the swap above: g_shop_items is what
+            // carries (loc, cost), and building this earlier silently produced
+            // an empty map, so every row kept its vanilla name.
+            {
+                std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+                g_bless_price_to_loc.clear();
+                for (const auto& si : g_shop_items)
+                    for (const auto& pm : g_bless_price_map)
+                        if (pm.second == si.cost)
+                            g_bless_price_to_loc[pm.first] = si.loc;
+                mod_log("ap: statue menu relabel: %d of %d rows mapped",
+                        (int)g_bless_price_to_loc.size(), (int)g_shop_items.size());
+            }
         }
         mod_log("ap: blessing shop — %d items, unlock mode %d",
                 (int)g_shop_items.size(), g_shop_unlock_mode);
     }
     // Seed-scoped save redirection: hand the room seed to the file hook.
     saveredir_set_seed(g_ap->get_seed().c_str());
+    // Now that the seed is known, load this seed+slot's replay watermark so the
+    // ReceivedItems replay that follows rebuilds state without re-adding SP or
+    // re-firing traps.
+    load_replay_through();
     int statues = 0;
     if (sd.value("statue_warp_locks", false) && sd.contains("statue_unlocks")) {
         g_statue_locks_on = true;
@@ -991,6 +1640,11 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
     bool batch = fresh > 6;
     for (const auto& it : items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
+        // A replay is an item we granted in an EARLIER session (the server
+        // re-sends the whole list on connect). Walk it so the idempotent state
+        // rebuilds — g_flags ownership, the gear watermark, statue unlocks, the
+        // weapon tier — but skip the effects that would stack a second time.
+        const bool replay = (it.index <= g_replay_through);
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
         std::string from = g_ap->get_player_alias(it.player);
         int tier = tier_or(name, it.flags);   // classification: 1 prog, 2 useful, 4 trap
@@ -998,7 +1652,12 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         auto f = g_name_to_idx.find(name);
         auto sp = g_sp_items.find(name);
         auto pg = g_prog_gear.find(name);
-        if (sp != g_sp_items.end()) {
+        if (sp != g_sp_items.end() && replay) {
+            // SP was already added in the session that first received this item,
+            // and it is spendable currency — re-adding it on every reconnect was
+            // an unlimited SP faucet.
+            mod_log("ap: replay '%s' — SP already granted, skipped", name.c_str());
+        } else if (sp != g_sp_items.end()) {
             // SP filler: add to the REAL SP currency cell (kSpAbs = 0x76A75C, the
             // HUD value), not g_flags[0xD8] which the game never spends.
             std::lock_guard<std::mutex> lk(g_sp_mtx);   // vs main-thread shop buy
@@ -1011,7 +1670,7 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             for (int idx : pg->second)
                 if (idx >= 0 && idx < 0x200 &&
                     *(volatile int*)(kGFlagsAbs + idx * 4) < 1) {
-                    ap_give(idx, 1);
+                    ap_give_tier(idx, 1, tier);
                     remember_gear(idx, tier);   // survive save/load wipes
                     granted = true;
                     break;
@@ -1035,17 +1694,34 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             int wtier = kWeaponTier[(n < 5 ? n : 5) - 1];
             g_pending_weapon.store(wtier);
             mod_log("ap: Cleria Ore #%d -> weapon tier value %d (pending)", n, wtier);
+        } else if (replay && is_trap_item(name)) {
+            // A trap is a one-shot effect that already happened. Re-arming it on
+            // every reconnect meant restarting the client punished the player.
+            mod_log("ap: replay '%s' — trap already fired, skipped", name.c_str());
         } else if (apply_trap(name)) {
             // Trap effect armed above; the red trap toast fires below like any item.
+        } else if (g_prog_skills.count(name)) {
+            grant_progressive_skill(name);
+        } else if (g_prog_bless.count(name)) {
+            grant_progressive_blessing(name);
+        } else if (f != g_name_to_idx.end() && f->second >= 0x200) {
+            // Blessing EFFECT item: the id is BLESS_ITEM_BASE + bit, not a
+            // g_flags cell, so it is granted by setting the bit rather than by
+            // ap_give (which is bounded to the 0x200-wide flag array).
+            grant_blessing_bit(f->second - 0x200);
         } else if (f != g_name_to_idx.end()) {
-            ap_give(f->second, 1);
+            ap_give_tier(f->second, 1, tier);
             remember_gear(f->second, tier);   // survive save/load wipes
             // A sacred artifact also unlocks its power (the bracelet cell) —
             // that's what the game checks to let you cast. Granting the artifact
             // alone leaves a dead skill slot.
             auto sk = g_skill_grants.find(name);
             if (sk != g_skill_grants.end()) {
-                ap_give(sk->second, 1);
+                // Most companion cells are a one-shot unlock (the elemental
+                // bracelets, the mobility bracelets). The three elemental SKILL
+                // LEVELS are not: they run 1..3 and the vanilla gem chests bump
+                // them with `0x67 +=`, so an Emerald/Ruby/Topaz has to add.
+                ap_give(sk->second, 1, /*stack=*/is_counted_ability_cell(sk->second));
                 remember_gear(sk->second, tier);
                 mod_log("ap: '%s' -> also unlocked skill g_flags[0x%X]",
                         name.c_str(), sk->second);
@@ -1056,10 +1732,13 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         // Your own items already print as "Found: X (yours)" when their location
         // fires (ap_on_check), so only surface items coming FROM another player
         // (or the server) here — avoids showing every self-item twice.
-        if (!batch && from != g_slot)
+        // A replay is silent: the player already saw it in the session that
+        // granted it.
+        if (!batch && !replay && from != g_slot)
             overlay::push_toast(name, from, tier, /*sent=*/false);
         g_applied_through = it.index;
     }
+    save_replay_through(g_applied_through);   // one write per batch, not per item
     if (batch) {
         char buf[64];
         snprintf(buf, sizeof(buf), "Received %d items", fresh);
@@ -1208,21 +1887,98 @@ static void fire_poll_locs(const std::vector<int64_t>& fire) {
     for (int64_t loc : fire) toast_loc(loc);
 }
 
+// SAFETY NET for flag-method locations: every tick, sweep the registered
+// location flags and fire any whose cell is already set but which the VM store
+// hook never reported.
+//
+// The hook is spliced on ONE instruction — the `mov [eax], ecx` inside the
+// 0x64 Flag_SetInt handler (hook_vm.cpp). That is the common case but not the
+// only way a flag reaches g_flags. CleriaCore's EVENTVM_HANDLERS_2 §2 lists the
+// arithmetic flag ops as separate inline stubs with their OWN stores —
+// 0x67 Flag_AddInt is `ADD [ESI],ECX` @0x567d78, 0x69 Flag_SubInt is
+// `SUB [ESI],ECX` @0x567e0a — and the native item-pickup tick FUN_00585ff0
+// increments `(&DAT_0076b91c)[itemId]` directly, with no VM involved at all
+// (ITEM_PICKUP.md §3.6). A location whose script uses `+=` instead of `=`, or
+// whose pickup is a field object rather than a chest, was therefore invisible.
+// That is the "a few checks did not send even though I collected them" class of
+// report (v1.6.x), and it also covers checks collected while the client was
+// disconnected, mid-reconnect, or before the mod attached.
+//
+// Firing on cell >= 1 is safe on a fresh game: New Game memsets flags 128..511
+// to 0 (CleriaCore NEWGAME_FLAGS.md §0), and location flags all live in that
+// band. On a loaded save an already-set flag SHOULD fire — the server dedupes
+// re-sends, so it is exactly the catch-up the g_poll_vals path already does.
+static void sweep_flag_locations(std::vector<int64_t>& fire) {
+    // 1. Collect every satisfied registered flag's locations. g_reg_mtx only —
+    //    the two locks are never nested (see count_done).
+    std::vector<std::pair<int, int64_t>> found;   // (flag idx, location)
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);
+        for (int idx = 0; idx < 0x200; idx++) {
+            if (!g_loc_flag[idx]) continue;
+            if (*(volatile int*)(kGFlagsAbs + idx * 4) < 1) continue;
+            for (int64_t loc : g_flag_to_loc[idx])
+                found.emplace_back(idx, loc);
+        }
+    }
+    if (found.empty()) return;
+    // 2. Drop anything the server already counts as checked. On a reconnect the
+    //    whole save's worth of flags is satisfied, and without this every one of
+    //    them would re-toast — the sweep is a repair path, it should be silent
+    //    when there is nothing to repair.
+    {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        for (auto it = found.begin(); it != found.end(); ) {
+            if (g_checked.count(it->second)) {
+                claim_flag_loc(it->second);       // mark seen, never fire
+                it = found.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    // 3. Whatever is left is a genuine miss.
+    for (const auto& fl : found)
+        if (claim_flag_loc(fl.second)) {
+            mod_log("ap: sweep caught g_flags[0x%X] set without a VM store "
+                    "-> location %lld", fl.first, (long long)fl.second);
+            fire.push_back(fl.second);
+        }
+}
+
 // Poll-method checks (each client tick): blessing bits, out-of-g_flags value
 // cells (armor blessing), and "Reach NF" floors. These are all written natively
 // (shop menu / floor transition), so the VM store hook never sees them. Each
 // location fires once per session. Blessings/values are CUMULATIVE state, so
 // anything already satisfied fires on the first poll after connect (the server
 // dedupes re-sends — clean catch-up for purchases made while disconnected).
-// The floor cell is WHERE YOU ARE, not progress: it uses crossing semantics
-// (prev primed on the first read, mirroring the Python client), so a random-
-// start warp or a mid-run reconnect can't spray Reach-NF checks never earned.
+// The floor cell is WHERE YOU ARE, not progress, so "Reach NF" fires off the set
+// of floors actually OBSERVED under the player this session (g_floors_seen) —
+// membership, not a crossing.
+//
+// The old rule was `cur == floor_n && floor_n > prev`: fire only when a poll
+// catches the cell exactly equal to N, having last seen something lower. That
+// silently dropped checks in three common cases, which is what the "Reach 18F /
+// 19F / 20F / 22F / 23F never sent" reports were (v1.6.x):
+//   * arriving at a floor from ABOVE (`floor_n > prev` false) — Darm Tower is
+//     full of drop-downs, and the 4F altar drop to the 3F midboss is authored
+//     logic, not an edge case;
+//   * the floor you were standing on when the client attached or reconnected
+//     (first sighting only primes, never fires);
+//   * any floor whose arrival tick coincided with a warp reprime.
+// Membership has none of those holes and still cannot back-fill a floor the
+// player never stood on, which is the property the crossing rule existed for.
 // Only polled once a scene is loaded, so New-Game/menu garbage can't misfire.
-static std::map<uintptr_t, int> g_floor_prev;   // floor cell -> last seen value
-static std::atomic<bool> g_reprime_floor{false};  // set after a warp: rebaseline, don't fire
-static void reset_floor_prev() { g_reprime_floor.store(true); }
+//
+// The floor is resolved from the CURRENT SCENE (g_scene_floors), not from the
+// raw floor cell: poll_scene already feeds the shop pacing that way precisely
+// because "the floor cell is wrong for warp destinations", and Reach-NF has the
+// same requirement — a warp/force-spawn arrival must count the floor you land
+// on. The raw cell stays as the fallback for a scene the table doesn't map.
 static void poll_value_checks() {
-    if (read_current_scene() <= 0) return;
+    int scene = read_current_scene();
+    if (scene <= 0) return;
+    enforce_item_cell_invariant();   // repair inflated key-item counts (run-ending)
     std::vector<int64_t> fire;
     for (const auto& pb : g_poll_bits)
         if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&
@@ -1231,31 +1987,26 @@ static void poll_value_checks() {
     for (const auto& pv : g_poll_vals)
         if (*(volatile int*)pv.abs >= 1 && g_poll_fired.insert(pv.loc).second)
             fire.push_back(pv.loc);
-    // A pending reprime (New Game / force-spawn / any warp) means the floor cell
-    // just jumped for a reason that is NOT the player climbing — swallow this
-    // tick's crossings so a spawn at 10F can't spray Reach-2F..10F.
-    bool reprime = g_reprime_floor.exchange(false);
-    std::map<uintptr_t, int> cur_floor;
-    for (const auto& pf : g_poll_floors)
-        cur_floor[pf.abs] = *(volatile int*)pf.abs;
-    for (const auto& pf : g_poll_floors) {
-        int cur = cur_floor[pf.abs];
-        if (cur >= 1 && cur <= 26) {
-            std::lock_guard<std::mutex> lk(g_checked_mtx);
-            g_floors_seen.insert(cur);    // shop unlock pacing (one-per-floor)
-        }
-        if (reprime) continue;            // baseline this tick, fire nothing
-        auto pit = g_floor_prev.find(pf.abs);
-        if (pit == g_floor_prev.end()) continue;  // first sighting: prime only, below
-        int prev = pit->second;
-        // Fire only on ARRIVING at exactly floor_n from below (cur == floor_n),
-        // not on any cur >= floor_n span — so a multi-floor warp doesn't back-fill
-        // every intermediate Reach-NF the player never actually walked into.
-        if (cur == pf.floor_n && pf.floor_n > prev &&
-            g_poll_fired.insert(pf.loc).second)
-            fire.push_back(pf.loc);
+    int scene_floor = 0;
+    {
+        auto it = g_scene_floors.find(scene);
+        if (it != g_scene_floors.end()) scene_floor = it->second;
     }
-    for (const auto& kv : cur_floor) g_floor_prev[kv.first] = kv.second;
+    {
+        std::lock_guard<std::mutex> lk(g_checked_mtx);
+        for (const auto& pf : g_poll_floors) {
+            int cur = scene_floor > 0 ? scene_floor : *(volatile int*)pf.abs;
+            if (cur >= 1 && cur <= 26)
+                g_floors_seen.insert(cur);   // also drives shop one-per-floor pacing
+        }
+        // Fire on MEMBERSHIP of the visited set, which poll_scene also feeds on
+        // every room change — so a floor entered between two polls still counts.
+        for (const auto& pf : g_poll_floors)
+            if (g_floors_seen.count(pf.floor_n) &&
+                g_poll_fired.insert(pf.loc).second)
+                fire.push_back(pf.loc);
+    }
+    sweep_flag_locations(fire);
     fire_poll_locs(fire);
 }
 
@@ -1610,9 +2361,9 @@ static void force_spawn() {
     g_warp_idx = g_spawn_reg_idx;
     do_warp_native();
     if (g_start_weapon > 0) g_pending_weapon.store(g_start_weapon);
-    // The warp jumps the floor cell for a non-climb reason — rebaseline the
-    // Reach-NF crossing detector so it doesn't spray floor checks on arrival.
-    reset_floor_prev();
+    // Reach-NF is presence-based off the scene's floor (poll section), so a warp
+    // needs no rebaselining: the spawn floor's own check legitimately fires (the
+    // spawn region is sphere-0 reachable) and intermediates never can.
     mod_log("force-spawn: warped to spawn S_%d (reg idx %d), weapon=%d, crystal idx 0x%X",
             g_start_statue_scene, g_spawn_reg_idx, g_start_weapon, crystal_idx);
 }
@@ -1699,11 +2450,15 @@ extern "C" void exp_scaling_on_frame() {
             if (nc > 0) {
                 g_warp_idx = cand[GetTickCount() % (unsigned)nc];
                 do_warp_native();
-                reset_floor_prev();
                 mod_log("trap: Chaos Warp -> reg idx %d", g_warp_idx);
             }
         }
     }
+
+    // Rebuild anything derived from the inventory (ability flags, stats) after a
+    // grant — writing g_flags alone leaves the effect unapplied. Main thread, so
+    // the read-modify-write of the dirty bitfield is safe.
+    apply_pending_recalc();
 
     // Weapon upgrade (Cleria Ore) + the Butterfingers trap. Re-enforce if a save
     // load reset g_flags[0x94] below what we applied.
@@ -1724,6 +2479,27 @@ extern "C" void exp_scaling_on_frame() {
         // a fresh entity whose combat weapon defaults to Lv1 -> deals 1 dmg).
         apply_weapon_level(g_weapon_applied);
         g_weapon_entity = *kPlayerEntPtr;
+    } else if (*(volatile int*)kWeaponLevelAbs > g_weapon_applied) {
+        // Clamp DOWN to what AP has actually granted.
+        //
+        // Some vanilla scripts raise the weapon without going through an item
+        // cell at all: the 4F Roo's reward child script calls 0x7F
+        // SetWeaponLevel (-> FUN_004201d0, writing 0x76A634+ch*8) instead of
+        // handing over a Cleria Ore, so suppressing the ore item does nothing
+        // and the player got a free upgrade on top of the AP item (seen live).
+        // There is no item store to intercept, so the only place to catch it is
+        // here, against the tier AP has granted.
+        //
+        // Safe to treat any excess as illegitimate: chest and event are
+        // always-on categories, so every Cleria Ore source in the game is a
+        // randomized location and all real weapon progress arrives as an AP
+        // item. Skipped entirely during a Butterfingers window (handled above),
+        // which is the one time the record is deliberately below the real tier.
+        int had = *(volatile int*)kWeaponLevelAbs;
+        set_weapon_game(g_weapon_applied);
+        g_weapon_entity = *kPlayerEntPtr;
+        mod_log("weapon: clamped vanilla upgrade %d -> %d (not granted by AP)",
+                had, g_weapon_applied);
     }
     // Level floor.
     int t = g_pending_level.exchange(0);
@@ -1878,6 +2654,37 @@ const char* ap_cfg_host() { return g_host; }
 int         ap_cfg_port() { return g_port; }
 const char* ap_cfg_slot() { return g_slot; }
 const char* ap_cfg_pass() { return g_pass; }
+
+// -- cutscene-skip mode, driven by the F8 menu ------------------------------- #
+int ap_cutscene_skip() { return g_cutscene_skip_mode; }
+
+// Set the mode and persist it, so the choice survives a restart. yso_ap.cfg is a
+// flat key=value file; rewrite it with the key replaced (or appended).
+void ap_set_cutscene_skip(int mode) {
+    if (mode < 0 || mode > 2) mode = 0;
+    g_cutscene_skip_mode = mode;
+    std::vector<std::string> lines;
+    bool replaced = false;
+    if (FILE* f = fopen("yso_ap.cfg", "r")) {
+        char line[512];
+        while (fgets(line, sizeof(line), f)) {
+            std::string s(line);
+            while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+            if (s.rfind("cutscene_skip=", 0) == 0) {
+                s = "cutscene_skip=" + std::to_string(mode);
+                replaced = true;
+            }
+            lines.push_back(s);
+        }
+        fclose(f);
+    }
+    if (!replaced) lines.push_back("cutscene_skip=" + std::to_string(mode));
+    if (FILE* w = fopen("yso_ap.cfg", "w")) {
+        for (const auto& s : lines) fprintf(w, "%s\n", s.c_str());
+        fclose(w);
+    }
+    mod_log("ap: cutscene skip mode -> %d", mode);
+}
 
 void ap_install() {
     for (int i = 0; i < 0x200; i++) g_flag_to_loc[i].clear();

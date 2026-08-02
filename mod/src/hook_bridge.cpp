@@ -34,6 +34,9 @@ static const uintptr_t kGFlagsBase = 0x0076B91C;
 // randomized location's content — the player gets the AP item via 'V' instead).
 bool g_loc_flag[0x200] = {false};
 bool g_supp_item[0x200] = {false};
+// ITEM ids (give-item op 0x116) to swallow, kept SEPARATE from g_supp_item: the
+// elemental gems' ids are not g_flags cells, and 0x82 is the boss-battle flag.
+bool g_supp_give[0x200] = {false};
 // Statue warp locks: g_flags index of a statue's activation flag -> currently
 // LOCKED? The VM hook suppresses a locked statue's purification write so it
 // stays dark/inactive (no warp/heal/save) until its unlock item is received

@@ -91,7 +91,13 @@
    "method": "flag",
    "offset": "0x36C038"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x300",
+    "name": "Emerald",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_1010/S_BOX01",
@@ -291,7 +297,13 @@
    "method": "flag",
    "offset": "0x36BE3C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x300",
+    "name": "Emerald",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_2008/S_BOX01",
@@ -480,7 +492,13 @@
    "method": "flag",
    "offset": "0x36BEAC"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x301",
+    "name": "Ruby",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_3008/S_BOX01",
@@ -493,7 +511,13 @@
    "method": "flag",
    "offset": "0x36BEB4"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x302",
+    "name": "Topaz",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_3010/S_BOX01",
@@ -654,7 +678,13 @@
    "method": "flag",
    "offset": "0x36BF24"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x302",
+    "name": "Topaz",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_4003/S_BOX01",
@@ -771,7 +801,13 @@
    "method": "flag",
    "offset": "0x36BF5C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x300",
+    "name": "Emerald",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_4006/S_BOX03",
@@ -924,7 +960,13 @@
    "method": "flag",
    "offset": "0x36BFA0"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x301",
+    "name": "Ruby",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_5007/S_BOX01",
@@ -1009,7 +1051,13 @@
    "method": "flag",
    "offset": "0x36C03C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x302",
+    "name": "Topaz",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_5080/S_BOX01",
@@ -1645,19 +1693,6 @@
   "items": []
  },
  {
-  "id": "blessing/armor",
-  "type": "blessing",
-  "zone": "Blessings",
-  "floor": "",
-  "room": "Goddess Statue",
-  "name": "Divine Blessing: Strengthen current armor",
-  "detect": {
-   "method": "flag",
-   "offset": "0x36A684"
-  },
-  "items": []
- },
- {
   "id": "blessing/bit0",
   "type": "blessing",
   "zone": "Blessings",
@@ -1669,7 +1704,13 @@
    "offset": "0x36BC80",
    "bit": 0
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x200",
+    "name": "Blessing: Increase stationary heal rate",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit1",
@@ -1683,7 +1724,13 @@
    "offset": "0x36BC80",
    "bit": 1
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x201",
+    "name": "Blessing: Reduce damage from terrain",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit2",
@@ -1697,7 +1744,13 @@
    "offset": "0x36BC80",
    "bit": 2
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x202",
+    "name": "Blessing: Reduce bad status duration LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit3",
@@ -1711,7 +1764,13 @@
    "offset": "0x36BC80",
    "bit": 3
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x203",
+    "name": "Blessing: Increase item drop rate",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit4",
@@ -1725,7 +1784,13 @@
    "offset": "0x36BC80",
    "bit": 4
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x204",
+    "name": "Blessing: Extend drop item effects LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit5",
@@ -1739,7 +1804,13 @@
    "offset": "0x36BC80",
    "bit": 5
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x205",
+    "name": "Blessing: Increase Boost recovery LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit6",
@@ -1753,7 +1824,13 @@
    "offset": "0x36BC80",
    "bit": 6
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x206",
+    "name": "Blessing: Reduce MP usage LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit8",
@@ -1767,7 +1844,13 @@
    "offset": "0x36BC80",
    "bit": 8
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x208",
+    "name": "Blessing: Increase SP gain",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit9",
@@ -1781,7 +1864,13 @@
    "offset": "0x36BC80",
    "bit": 9
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x209",
+    "name": "Blessing: Bolster bad status resists LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit10",
@@ -1795,7 +1884,13 @@
    "offset": "0x36BC80",
    "bit": 10
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20A",
+    "name": "Blessing: Hasten Skill recovery LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit11",
@@ -1809,7 +1904,13 @@
    "offset": "0x36BC80",
    "bit": 11
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20B",
+    "name": "Blessing: Hasten Skill recovery LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit12",
@@ -1823,7 +1924,13 @@
    "offset": "0x36BC80",
    "bit": 12
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20C",
+    "name": "Blessing: Increase effect of herbs LV1",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit13",
@@ -1837,7 +1944,13 @@
    "offset": "0x36BC80",
    "bit": 13
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20D",
+    "name": "Blessing: Increase movement speed",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit14",
@@ -1851,7 +1964,13 @@
    "offset": "0x36BC80",
    "bit": 14
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20E",
+    "name": "Blessing: Hasten Skill recovery LV3",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit15",
@@ -1865,7 +1984,13 @@
    "offset": "0x36BC80",
    "bit": 15
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x20F",
+    "name": "Blessing: Increase Boost recovery LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit16",
@@ -1879,7 +2004,13 @@
    "offset": "0x36BC80",
    "bit": 16
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x210",
+    "name": "Blessing: Increase Boost recovery LV3",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit17",
@@ -1893,7 +2024,13 @@
    "offset": "0x36BC80",
    "bit": 17
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x211",
+    "name": "Blessing: Increase effect of herbs LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit18",
@@ -1907,7 +2044,13 @@
    "offset": "0x36BC80",
    "bit": 18
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x212",
+    "name": "Blessing: Reduce MP usage LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit19",
@@ -1921,7 +2064,13 @@
    "offset": "0x36BC80",
    "bit": 19
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x213",
+    "name": "Blessing: Reduce MP usage LV3",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit20",
@@ -1935,7 +2084,13 @@
    "offset": "0x36BC80",
    "bit": 20
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x214",
+    "name": "Blessing: Reduce bad status duration LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit21",
@@ -1949,7 +2104,13 @@
    "offset": "0x36BC80",
    "bit": 21
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x215",
+    "name": "Blessing: Strengthen Eyes of Fact",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit22",
@@ -1963,7 +2124,13 @@
    "offset": "0x36BC80",
    "bit": 22
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x216",
+    "name": "Blessing: Bolster bad status resists LV2",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "blessing/bit23",
@@ -1977,7 +2144,33 @@
    "offset": "0x36BC80",
    "bit": 23
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x217",
+    "name": "Blessing: Extend drop item effects LV2",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "blessing/bit7",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "name": "Divine Blessing: Increase stun effect",
+  "detect": {
+   "method": "bit",
+   "offset": "0x36BC80",
+   "bit": 7
+  },
+  "items": [
+   {
+    "id": "0x207",
+    "name": "Blessing: Increase stun effect",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_1000/room",
@@ -4332,5 +4525,756 @@
     "class": "progression"
    }
   ]
+ },
+ {
+  "id": "S_1014/AGERU/0x138",
+  "type": "event",
+  "zone": "Wailing Blue",
+  "floor": "",
+  "room": "4F Forward Room",
+  "name": "Wailing Blue: 4F Forward Room — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BDFC"
+  },
+  "items": [
+   {
+    "id": "0x58",
+    "name": "Cleria Ore",
+    "class": "filler"
+   }
+  ]
+ },
+ {
+  "id": "S_2011/AGERU/0x153",
+  "type": "event",
+  "zone": "Flooded Prison",
+  "floor": "",
+  "room": "8F Path 2",
+  "name": "Flooded Prison: 8F Path 2 — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BE68"
+  },
+  "items": [
+   {
+    "id": "0x301",
+    "name": "Ruby",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_3104/AGERU/0x16A",
+  "type": "event",
+  "zone": "Flames of Guilt",
+  "floor": "",
+  "room": "Roo Start",
+  "name": "Flames of Guilt: Roo Start — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BEC4"
+  },
+  "items": [
+   {
+    "id": "0x60",
+    "name": "Hammer",
+    "class": "useful"
+   },
+   {
+    "id": "0x3D",
+    "name": "Ring of Ease",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_4004/AGERU/0x184",
+  "type": "event",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Roo End",
+  "name": "Silent Sands: Roo End — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BF2C"
+  },
+  "items": [
+   {
+    "id": "0x21",
+    "name": "Sylphen Boots",
+    "class": "useful"
+   },
+   {
+    "id": "0x27",
+    "name": "Elder Shoes",
+    "class": "useful"
+   },
+   {
+    "id": "0x2D",
+    "name": "Demon Greaves",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_5100/AGERU/0x19E",
+  "type": "event",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Outer Corridor 1",
+  "name": "Corrupted Blood: Outer Corridor 1 — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36BF94"
+  },
+  "items": [
+   {
+    "id": "0x0A",
+    "name": "Battle Armor",
+    "class": "useful"
+   },
+   {
+    "id": "0x10",
+    "name": "Crimson Coat",
+    "class": "useful"
+   },
+   {
+    "id": "0x16",
+    "name": "Phantom Mail",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6009/AGERU/0x1CA",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "",
+  "room": "22F Mirror Path",
+  "name": "Demonic Core: 22F Mirror Path — Roo Trade",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36C044"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x06",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Leather Armor",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A66C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x07",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Ring Mail",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A670"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x08",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Half Plate",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A674"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x09",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Reflex",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A678"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x0B",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Silver Dress",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A680"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x1E",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Leather Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6CC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x1F",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Hard Leggings",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6D0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x20",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Leg Guards",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6D4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x22",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Battle Guards",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6DC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x23",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Silver Leggings",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6E0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0C",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Leather Tunic",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A684"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0D",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Ebony Robe",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A688"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0E",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Chain Cloak",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A68C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x0F",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Elder Robe",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A690"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x11",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Cleria Garb",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A698"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x24",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Leather Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6E4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x25",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Ebony Shoes",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6E8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x26",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Shell Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6EC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x28",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Moon Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6F4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x29",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Dark Falcon",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6F8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x12",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Riveted Leather",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A69C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x13",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Black Chain",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6A0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x14",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Banded Mail",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6A4"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x15",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Gothic Suit",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6A8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x17",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Brave Armor",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6B0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2A",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Riveted Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6FC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2B",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Black Leggings",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A700"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2C",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Banded Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A704"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2E",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Phantom Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A70C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2F",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Brave Guards",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A710"
+  },
+  "items": []
+ },
+ {
+  "id": "S_4005/EV_4005/0x38",
+  "type": "event",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Rear Bend Room",
+  "name": "Silent Sands: Rear Bend Room — Silver Chimes",
+  "detect": {
+   "method": "scene",
+   "scene": "S_4005"
+  },
+  "items": [
+   {
+    "id": "0x38",
+    "name": "Silver Chimes",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_5097/EV5097/0x55",
+  "type": "event",
+  "zone": "Corrupted Blood",
+  "floor": "",
+  "room": "Staircase",
+  "name": "Corrupted Blood: Staircase — Lila Shell",
+  "detect": {
+   "method": "scene",
+   "scene": "S_5097"
+  },
+  "items": [
+   {
+    "id": "0x55",
+    "name": "Lila Shell",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6080/EV_6080/0x62",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "23F",
+  "room": "23F Midboss 1",
+  "name": "Demonic Core: 23F Midboss 1 — Rod",
+  "detect": {
+   "method": "scene",
+   "scene": "S_6080"
+  },
+  "items": [
+   {
+    "id": "0x62",
+    "name": "Rod",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6082/EV_6082/0x3E",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "24F",
+  "room": "24F Yog & Om",
+  "name": "Demonic Core: 24F Yog & Om — Spirit Necklace",
+  "detect": {
+   "method": "scene",
+   "scene": "S_6082"
+  },
+  "items": [
+   {
+    "id": "0x3E",
+    "name": "Spirit Necklace",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_6099/EV_6099/0x3B",
+  "type": "event",
+  "zone": "Demonic Core",
+  "floor": "25F",
+  "room": "25F Midboss 2",
+  "name": "Demonic Core: 25F Midboss 2 — Goddess Ring",
+  "detect": {
+   "method": "scene",
+   "scene": "S_6099"
+  },
+  "items": [
+   {
+    "id": "0x3B",
+    "name": "Goddess Ring",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "S_4017/EV_4017_HARMONICA/0x5F",
+  "type": "event",
+  "zone": "Silent Sands",
+  "floor": "",
+  "room": "Rado Inside 4 (Feena)",
+  "name": "Silent Sands: Rado Inside 4 (Feena) — Silver Harmonica",
+  "detect": {
+   "method": "scene",
+   "scene": "S_4017"
+  },
+  "items": [
+   {
+    "id": "0x5F",
+    "name": "Silver Harmonica",
+    "class": "useful"
+   }
+  ]
+ },
+ {
+  "id": "blessing/gear/yunica/0x0A",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Battle Armor",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A67C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x21",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Sylphen Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6D8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x10",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Crimson Coat",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A694"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x27",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Elder Shoes",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6F0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x16",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Phantom Mail",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6AC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2D",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Demon Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A708"
+  },
+  "items": []
  }
 ]

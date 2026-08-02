@@ -20,6 +20,8 @@ void mod_log(const char* fmt, ...);
 void ap_request_connect(const char* host, int port, const char* slot, const char* pass);
 const char* ap_cfg_host(); int ap_cfg_port();
 const char* ap_cfg_slot(); const char* ap_cfg_pass();
+int  ap_cutscene_skip();
+void ap_set_cutscene_skip(int mode);
 namespace overlay { std::string get_status(); }
 
 namespace apmenu {
@@ -49,8 +51,15 @@ static void load_cfg() {
 }
 
 // ---- state ------------------------------------------------------------------
-enum Field { F_HOST, F_PORT, F_SLOT, F_PASS, F_COUNT };
-static const char* kLabels[F_COUNT] = {"Server", "Port", "Slot / Name", "Password"};
+// F_SKIP is a 3-way toggle rather than a text field (Left/Right/Space cycle it),
+// so the cutscene skip several players asked for is discoverable here instead of
+// being an undocumented held key. It applies immediately and persists to
+// yso_ap.cfg — no reconnect needed, and it is independent of the AP connection.
+enum Field { F_HOST, F_PORT, F_SLOT, F_PASS, F_SKIP, F_COUNT };
+static const char* kLabels[F_COUNT] = {"Server", "Port", "Slot / Name", "Password",
+                                       "Cutscene skip"};
+static const char* kSkipNames[3] = {"Off", "Hold Right-Ctrl", "Always"};
+static bool is_toggle(int field) { return field == F_SKIP; }
 static bool        g_open = false;
 static bool        g_prefilled = false;
 static int         g_focus = F_HOST;
@@ -91,6 +100,13 @@ static void do_connect() {
                        g_fields[F_SLOT].c_str(), g_fields[F_PASS].c_str());
 }
 
+// Cycle a toggle row by `dir` and apply it immediately.
+static void cycle_toggle(int field, int dir) {
+    if (field != F_SKIP) return;
+    int m = (ap_cutscene_skip() + dir + 3) % 3;
+    ap_set_cutscene_skip(m);
+}
+
 // ---- input (called from the WndProc subclass in hook_d3d9.cpp) --------------
 bool is_capturing() { return g_open; }
 
@@ -104,12 +120,25 @@ bool on_wm_key(UINT msg, WPARAM wp) {
     }
     switch (wp) {
         case VK_F8: case VK_ESCAPE:  g_open = false; return true;
-        case VK_F5: case VK_RETURN:  do_connect(); return true;
+        case VK_F5:
+            // F5 is the global connect accelerator — it means "connect" on every
+            // row, including the toggle. Only Enter is row-sensitive.
+            do_connect();
+            return true;
+        case VK_RETURN:
+            // Enter activates the FOCUSED row, so on the toggle it cycles rather
+            // than firing a connect the player did not ask for.
+            if (is_toggle(g_focus)) cycle_toggle(g_focus, +1);
+            else do_connect();
+            return true;
         case VK_TAB:
         case VK_DOWN: g_focus = (g_focus + 1) % F_COUNT; return true;
         case VK_UP:   g_focus = (g_focus - 1 + F_COUNT) % F_COUNT; return true;
+        case VK_LEFT:  if (is_toggle(g_focus)) cycle_toggle(g_focus, -1); return true;
+        case VK_RIGHT: if (is_toggle(g_focus)) cycle_toggle(g_focus, +1); return true;
         case VK_BACK:
-            if (!g_fields[g_focus].empty()) g_fields[g_focus].pop_back();
+            if (!is_toggle(g_focus) && !g_fields[g_focus].empty())
+                g_fields[g_focus].pop_back();
             return true;
     }
     return true;  // swallow everything else while open (text arrives via WM_CHAR)
@@ -117,6 +146,10 @@ bool on_wm_key(UINT msg, WPARAM wp) {
 
 bool on_wm_char(WPARAM ch) {
     if (!g_open || !at_title()) return false;
+    if (is_toggle(g_focus)) {
+        if (ch == ' ') cycle_toggle(g_focus, +1);   // space also cycles
+        return true;
+    }
     if (ch < 0x20 || ch > 0x7e) return true;   // printable ASCII only
     if (g_focus == F_PORT && (ch < '0' || ch > '9')) return true;  // port = digits
     if (g_fields[g_focus].size() < 120) g_fields[g_focus].push_back((char)ch);
@@ -168,17 +201,25 @@ void draw() {
     y += lh * 1.4f;
     for (int i = 0; i < F_COUNT; i++) {
         char row[256];
-        std::string shown = g_fields[i];
-        if (i == F_PASS) shown = std::string(g_fields[i].size(), '*');
-        const char* cursor = (i == g_focus) ? "_" : "";
-        snprintf(row, sizeof(row), "%s%s:  %s%s", (i == g_focus ? "> " : "  "),
-                 kLabels[i], shown.c_str(), cursor);
+        if (is_toggle(i)) {
+            int m = ap_cutscene_skip();
+            snprintf(row, sizeof(row), "%s%s:  < %s >", (i == g_focus ? "> " : "  "),
+                     kLabels[i], kSkipNames[(m < 0 || m > 2) ? 0 : m]);
+        } else {
+            std::string shown = g_fields[i];
+            if (i == F_PASS) shown = std::string(g_fields[i].size(), '*');
+            const char* cursor = (i == g_focus) ? "_" : "";
+            snprintf(row, sizeof(row), "%s%s:  %s%s", (i == g_focus ? "> " : "  "),
+                     kLabels[i], shown.c_str(), cursor);
+        }
         text_centered(dl, f, fs, cx, y, (i == g_focus) ? gold : gray, row);
         y += lh;
     }
     y += lh * 0.5f;
     text_centered(dl, f, fs * 0.85f, cx, y, gold,
-                  "[Enter/F5] Connect     [Tab/Up/Down] Field     [Esc] Close");
+                  is_toggle(g_focus)
+                      ? "[Left/Right] Change   [F5] Connect   [Tab] Field   [Esc] Close"
+                      : "[Enter/F5] Connect     [Tab/Up/Down] Field     [Esc] Close");
     y += lh;
     std::string st = "Status: " + overlay::get_status();
     text_centered(dl, f, fs * 0.7f, cx, y, dim, st.c_str());

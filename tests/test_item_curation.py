@@ -46,8 +46,15 @@ def test_artifacts_grant_their_skill():
     for art, skill in dt.SKILL_GRANTS.items():
         assert art in grants, f"{art} grants no skill"
         assert grants[art] == dt.item_index[skill], f"{art} -> wrong cell"
-    # the three powers are the known bracelet cells, and are distinct
-    assert sorted(grants.values()) == [0x74, 0x75, 0x76], sorted(grants.values())
+    # the three elemental powers are the known bracelet cells, plus the two
+    # MOBILITY pairings (Gold -> 0xA3 double-jump, Silver -> 0xB5 dash), whose
+    # companion cell is a bare g_flags index rather than an item of its own.
+    assert sorted(grants.values()) == [0x74, 0x75, 0x76, 0xA3, 0xB5,
+                                       0xB6, 0xB7, 0xB8], sorted(grants.values())
+    assert grants["Gold Bracelet"] == 0xA3
+    assert grants["Silver Bracelet"] == 0xB5
+    # all distinct: a shared cell would make one item silently light up another
+    assert len(set(grants.values())) == len(grants)
     # the artifacts themselves stay real items; the bracelets stay out of the pool
     for art, skill in dt.SKILL_GRANTS.items():
         assert art in dt.item_name_to_id, f"{art} must remain a real item"
@@ -92,12 +99,14 @@ def test_gear_ladders_resolve_for_all_characters():
         sd = dt.progressive_gear_slot_data(char)
         armor = sd[dt.PROGRESSIVE_ARMOR]
         boots = sd[dt.PROGRESSIVE_BOOTS]
-        assert len(armor) == 4, (char, armor)
-        assert len(boots) == 5, (char, boots)
+        # each character's ladders span their whole 6-slot gear band minus the
+        # piece they start wearing: 5 armor tiers, 6 boots tiers.
+        assert len(armor) == 5, (char, armor)
+        assert len(boots) == 6, (char, boots)
         for idx in armor + boots:
             assert isinstance(idx, int) and 0 <= idx < 0x200, (char, idx)
         # tiers must be distinct cells
-        assert len(set(armor)) == 4 and len(set(boots)) == 5
+        assert len(set(armor)) == 5 and len(set(boots)) == 6
 
 
 def test_vanilla_items_progressive_substitution():
@@ -114,22 +123,64 @@ def test_vanilla_items_progressive_substitution():
                      if n in (dt.PROGRESSIVE_ARMOR, dt.PROGRESSIVE_BOOTS))
         assert n_gear == n_prog > 0, (char, n_gear, n_prog)
         assert not any(n in ladder for n in prog), char
-        # armor chests -> 4 armor + 5 boots (each character has one per tier)
-        assert prog.count(dt.PROGRESSIVE_ARMOR) == 4, char
-        assert prog.count(dt.PROGRESSIVE_BOOTS) == 5, char
+        # 4 armor + 5 boots come from chests, and one of each from a Roo trade
+        # (S_5100 armor, S_4004 boots) — those pieces are real ladder tiers, so
+        # they substitute like any other rather than being handed over raw.
+        assert prog.count(dt.PROGRESSIVE_ARMOR) == 5, char
+        assert prog.count(dt.PROGRESSIVE_BOOTS) == 6, char
         # non-gear items untouched
         assert [n for n in raw if n not in ladder] == \
                [n for n in prog
                 if n not in (dt.PROGRESSIVE_ARMOR, dt.PROGRESSIVE_BOOTS)]
 
 
+def test_class_overrides_valid_entries_kept():
+    real = next(iter(dt.item_name_to_id))
+    out = dt.parse_class_overrides({real: "useful", dt.GOAL_ITEM: "filler"})
+    # a real item -> valid tier is kept, canonicalised to lowercase
+    assert out[real] == "useful"
+    # DOWNGRADING the goal item is allowed on purpose (player's call / skips)
+    assert out[dt.GOAL_ITEM] == "filler"
+
+
+def test_class_overrides_case_and_whitespace_insensitive():
+    real = next(iter(dt.item_name_to_id))
+    out = dt.parse_class_overrides({real: "  PROGRESSION  "})
+    assert out[real] == "progression"
+
+
+def test_class_overrides_drop_unknown_and_invalid():
+    warnings = []
+    raw = {
+        "Definitely Not An Item": "useful",   # unknown name -> dropped
+        dt.GOAL_ITEM: "legendary",            # invalid tier -> dropped
+    }
+    out = dt.parse_class_overrides(raw, warn=warnings.append)
+    assert out == {}, out
+    assert len(warnings) == 2, warnings  # both reported, neither fatal
+
+
+def test_class_overrides_empty_and_none():
+    assert dt.parse_class_overrides(None) == {}
+    assert dt.parse_class_overrides({}) == {}
+    # every accepted tier is one AP knows how to map
+    assert set(dt.VALID_TIERS) == {"filler", "useful", "progression", "trap"}
+
+
 def test_cleaned_chests_seed_filler():
-    # the chests whose only content was a hex placeholder / gold now have no
-    # vanilla item -> the pool pads them with filler instead.
-    for loc in ("Wailing Blue: 4F Forward Passage 3",
-                "Flames of Guilt: Lava Rods",
-                "Corrupted Blood: Toal's Room"):
+    # the chests whose only content was dead gold now have no vanilla item ->
+    # the pool pads them with filler instead.
+    #
+    # NOTE: two chests were removed from this list. 0x80/0x81/0x82 looked like
+    # hex placeholders because INVINFO has no name for them, but they are the
+    # real elemental upgrade gems (Emerald/Ruby/Topaz) and cleaning them left
+    # eight chests with no vanilla item to suppress — so the chest handed out
+    # the skill upgrade on top of the AP item. Seen live on the 4F Emerald.
+    for loc in ("Corrupted Blood: Toal's Room",):
         assert dt.location_vanilla_item(loc) == "", loc
+    for loc, gem in (("Wailing Blue: 4F Forward Passage 3", "Emerald"),
+                     ("Flames of Guilt: Lava Rods", "Topaz")):
+        assert dt.location_vanilla_item(loc) == gem, loc
 
 
 def test_suppressed_items_include_the_skill_power_cells():
@@ -150,9 +201,21 @@ def test_suppressed_items_include_the_skill_power_cells():
         assert not missing, (
             f"{char}: power cells not suppressed: "
             f"{sorted(hex(m) for m in missing)}")
-        # and the artifacts themselves are still there
+        # and the artifacts themselves are still there — except the gems, whose
+        # pool id is SYNTHETIC on purpose: their real ids (0x80-0x82) are
+        # give-item ids, not g_flags cells, and 0x82 is the boss-battle flag 130.
+        # Putting that in the g_flags suppress set would have blocked every real
+        # boss battle from setting it.
         for art in dt.skill_grants():
-            assert dt.item_index[art] in supp, (char, art)
+            idx = dt.item_index[art]
+            if idx >= 0x200:
+                assert art in dt.GEM_GIVE_IDS, art
+                assert idx not in supp, (char, art, "synthetic id must not be suppressed")
+                continue
+            assert idx in supp, (char, art)
+        # the gems are suppressed through the give-item path instead
+        gives = set(dt.suppress_give_ids(all_locs, char))
+        assert gives == set(dt.GEM_GIVE_IDS.values()), (char, gives)
 
 
 def test_suppressed_items_track_active_locations():
@@ -179,3 +242,24 @@ def _run_all() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_run_all())
+
+
+def test_suppress_set_never_contains_a_story_flag():
+    """g_flags suppression must stay inside cells that are actually items.
+
+    A gem's real id 0x82 is flag 130 — the boss-battle state every BATTLE*.XSO
+    sets on entry. It reached the suppress set once, which both put the game into
+    a boss fight when the item was granted and would have stopped real bosses
+    from setting the flag at all. Anything outside the inventory band plus the
+    known companion ability cells is a story flag and must never be suppressed.
+    """
+    # The inventory band runs 0x00..0x76 (gear from 0x06, consumables/keys from
+    # 0x40). Everything above that is story/progress state — 0x82 is flag 130,
+    # the boss-battle marker — except the companion ability cells we grant
+    # deliberately.
+    ALLOWED_EXTRA = {0xA3, 0xB5, 0xB6, 0xB7, 0xB8}   # bracelet + skill-level cells
+    all_locs = [l["name"] for l in dt._LOCS]
+    for char in ALL_CHARS:
+        for idx in dt.suppress_item_indices(all_locs, char):
+            ok = (0x00 <= idx <= 0x76) or idx in ALLOWED_EXTRA
+            assert ok, (char, hex(idx), "not an item cell — would suppress a story flag")

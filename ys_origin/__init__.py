@@ -11,6 +11,7 @@ grantable-item names are kept identical to the client's ``LOCATION_FLAG_OFFSETS`
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from BaseClasses import (
@@ -35,6 +36,14 @@ _KIND_TO_AP = {
     ItemKind.PROGRESSION: ItemClassification.progression,
     ItemKind.USEFUL: ItemClassification.useful,
     ItemKind.TRAP: ItemClassification.trap,
+}
+
+# player-supplied classification tier (str) -> AP enum, for the yaml override.
+_STR_TO_AP = {
+    "filler": ItemClassification.filler,
+    "useful": ItemClassification.useful,
+    "progression": ItemClassification.progression,
+    "trap": ItemClassification.trap,
 }
 
 
@@ -103,6 +112,53 @@ class YsOriginWorld(World):
         if o.blessing_costs.value:
             self._roll_blessing_prices()
 
+        # Lean progression (open / warp mode only). The warp network + level
+        # scaling makes the climb-gating and room-gating items non-essential to
+        # WIN: the kept set (warps + Cleria Ore + goal) reaches the goal even with
+        # every gate item removed jointly (see tests/test_logic_criticality.py +
+        # ROADMAP_2.0 §14). So under `minimal` — where only what's needed to win
+        # must be reachable — those gates need not be progression; fill routes
+        # advancement through the warps instead and they stop hogging priority
+        # spots.
+        #
+        # `minimal` is the ONLY key that leans, and `full` is the only other key
+        # that can appear here: AP defines just two options (full=0, minimal=2),
+        # and the `items` / `locations` / `none` aliases never reach `current_key`
+        # (it reads `name_lookup`, built from `option_*` only). Do NOT extend this
+        # to `items` — it is an alias of `full`, i.e. EVERY location must be
+        # reachable, and the room-gate items provably strand side locations there
+        # (test_room_gate_core_strands_side_locations_under_full_access), so
+        # leaning would fail generation. An unknown / `full` key never demotes ->
+        # never risks stranding a location.
+        acc_key = getattr(getattr(o, "accessibility", None), "current_key", None)
+        self.lean_open_progression = self.open_mode and acc_key == "minimal"
+
+        # Items that GATE a gear-upgrade blessing ("Strengthen <piece>"): you
+        # cannot buy the upgrade until you own the piece. AP's Has() reads the
+        # progression counter, so anything naming a gate must be progression or
+        # the location is unreachable and generation fails under full
+        # accessibility. Same rule as Roda Fruit: the tier follows what the item
+        # unlocks. Empty when the blessing category is off.
+        self.gear_gate_items: set[str] = set()
+        if "blessing" in dt.enabled_categories(o):
+            self.gear_gate_items = {
+                item for item, _ in dt.gear_upgrade_gates(
+                    dt.char_name(o), bool(o.progressive_armor.value)).values()
+                if item
+            }
+
+        # Player-supplied per-item classification overrides (advanced). Parsed
+        # once here (invalid entries dropped + logged) and applied LAST in
+        # create_item so they win over every built-in default.
+        self.class_overrides = {
+            nm: _STR_TO_AP[t] for nm, t in dt.parse_class_overrides(
+                o.item_classification_overrides.value,
+                warn=lambda m: logging.warning(
+                    "Ys Origin (%s): item_classification_overrides: %s",
+                    self.multiworld.get_player_name(self.player), m),
+            ).items()
+        }
+
     # -- items --------------------------------------------------------------- #
 
     def create_item(self, name: str) -> YsOriginItem:
@@ -116,13 +172,56 @@ class YsOriginWorld(World):
         # (it's merely "useful" convenience in normal, on-foot seeds).
         elif getattr(self, "open_mode", False) and name in dt.STATUE_UNLOCKS:
             cls = ItemClassification.progression
+        # Roda Fruit takes the tier of what it unlocks. It is flavour filler on
+        # its own, but each fruit BUYS a Roo trade (one consumed per trade, six
+        # fruits for six Roos — see _set_roo_rules), so when the Roo checks are
+        # active it gates real locations and has to be progression or fill may
+        # strand advancement behind fruits it thinks are worthless. With the
+        # event category off there are no Roo locations, nothing is gated, and it
+        # stays filler. The lean-progression demotion below then applies to it
+        # like any other gate item, so it drops back to useful exactly when the
+        # warp network makes those locations non-critical.
+        elif name == dt.RODA_FRUIT and "event" in dt.enabled_categories(self.options):
+            cls = ItemClassification.progression
+        # Gear that gates a "Strengthen <piece>" blessing — see gear_gate_items.
+        elif name in getattr(self, "gear_gate_items", ()):
+            cls = ItemClassification.progression
+        # A progressive elemental skill REPLACES the artifact in the pool, and the
+        # room logic gates on it (rules._SKILL_SUBST). AP's Has() reads the
+        # progression counter, so leaving it filler made every artifact gate
+        # unsatisfiable and most of the tower unreachable.
+        elif name in dt.PROGRESSIVE_SKILLS:
+            cls = ItemClassification.progression
+        # A blessing tier chain replaces its LV items; keep the useful tier they
+        # had (nothing gates on a blessing, so this is not a progression case).
+        elif name in dt.PROGRESSIVE_BLESSINGS:
+            cls = ItemClassification.useful
+        # Lean-progression demotion (open mode, `minimal` accessibility): keep
+        # only the genuinely win-critical progression — the goal medallion, the
+        # warp unlocks (the reachability spine, promoted just above) and Cleria Ore
+        # (weapon gating). Every other item that was progression ONLY because it
+        # gates a climb or a side-room is demoted to useful: it stays a real,
+        # collectable item and its access rule is untouched (find it and the gate
+        # still opens), it just no longer forces advancement placement.
+        if (getattr(self, "lean_open_progression", False)
+                and cls == ItemClassification.progression
+                and name != dt.GOAL_ITEM
+                and name != dt.CLERIA_ORE
+                and name not in dt.STATUE_UNLOCKS):
+            cls = ItemClassification.useful
+        # Player override wins over every default above (incl. the promotions):
+        # they may retune minor progression down or bump filler up for their seed.
+        override = getattr(self, "class_overrides", {}).get(name)
+        if override is not None:
+            cls = override
         return YsOriginItem(name, cls, self.item_name_to_id[name], self.player)
 
     def get_filler_item_name(self) -> str:
         return self.random.choice(dt.FILLER_POOL)
 
     def _active_locations(self) -> dict[str, list[str]]:
-        return dt.locations_by_region(dt.enabled_categories(self.options))
+        return dt.locations_by_region(dt.enabled_categories(self.options),
+                                      dt.char_name(self.options))
 
     def _region_names(self) -> list[str]:
         """Regions this world will create (mode-dependent) — used to check that a
@@ -133,13 +232,19 @@ class YsOriginWorld(World):
 
     def create_items(self) -> None:
         enabled = dt.enabled_categories(self.options)
-        n_locations = sum(len(v) for v in dt.locations_by_region(enabled).values())
+        # MUST be the character-filtered set (same call create_regions makes):
+        # the gear-upgrade blessings exist per character, so counting all of
+        # them would seed 20 more items than there are locations to hold them.
+        n_locations = sum(len(v) for v in self._active_locations().values())
 
         # One real (vanilla) item per enabled chest/event location; pad the rest
         # (boss/floor/room sanity checks) with varied filler.
         char = dt.char_name(self.options)
         pool = [self.create_item(n) for n in dt.vanilla_items(
-            enabled, char, bool(self.options.progressive_armor.value))]
+            enabled, char, bool(self.options.progressive_armor.value),
+            bool(self.options.blessing_items.value),
+            bool(self.options.progressive_skills.value),
+            bool(self.options.progressive_blessings.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
@@ -214,7 +319,20 @@ class YsOriginWorld(World):
         # lock a player who warped to 22F out of a slot they can easily afford.
         # Only gate on a region this world actually creates.
         live = set(self._region_names())
+        # Three vanilla prices are shared by two blessings each (30000, 8000,
+        # 20000). The in-game price hook substitutes inside GROWnn, where the
+        # only thing it can key on is the VANILLA price — the 0xAF blessing index
+        # does not appear until after the money has moved. So a colliding pair
+        # must land on the SAME randomized price, or the hook would charge one of
+        # them the other's. Whichever of the pair is priced first wins; the
+        # second is pinned to it (and keeps its own gate, which is derived from
+        # its own rank).
+        by_vanilla: dict[int, int] = {}
         for i, (loc_name, price) in enumerate(zip(slots, ladder)):
+            bit = dt.blessing_bit_of(loc_name)
+            if bit is not None:
+                vanilla = dt.vanilla_price_for_bit(bit)
+                price = by_vanilla.setdefault(vanilla, price)
             self.blessing_prices[loc_name] = price
             rank = 0.0 if len(slots) == 1 else i / (len(slots) - 1)
             region = dt.price_gate_region(rank)
@@ -347,6 +465,21 @@ class YsOriginWorld(World):
                 if self.options.blessing_costs.value else {}
             ),
             "blessing_shop_unlock": int(self.options.blessing_shop_unlock.value),
+            # Blessing EFFECTS shuffled into the pool: the statue sells checks
+            # only. The mod then suppresses the grant at the 0xAF opcode and
+            # detects the purchase there instead of by watching the effect bit.
+            "blessing_items": bool(self.options.blessing_items.value),
+            # VANILLA statue menu re-pricing: vanilla SP price -> the price to
+            # charge instead. The mod substitutes this at the three places a
+            # GROWnn script uses its baked price (the 0xdd menu entry, the 0x61
+            # affordability compare and the 0x69 deduction), so the goddess
+            # statue sells at the seed's prices instead of the game's. Empty in
+            # vanilla-cost mode. See CleriaCore build/menu_re/BLESSING_SHOP.md.
+            "blessing_vanilla_price_map": (
+                {str(k): v for k, v in
+                 dt.vanilla_price_map(self.blessing_prices).items()}
+                if self.options.blessing_costs.value else {}
+            ),
             # All statue scenes (panel trigger; statue_unlocks only ships with
             # warp locks on).
             "statue_scenes": dt.statue_scenes(),
@@ -354,5 +487,18 @@ class YsOriginWorld(World):
             # each active location's vanilla content, plus the companion power
             # cells those same scripts write (see suppress_item_indices).
             "suppress_items": dt.suppress_item_indices(
+                active, dt.char_name(self.options)),
+            # ITEM ids (not g_flags cells) the give-item hook must swallow: the
+            # elemental gems. Kept out of suppress_items on purpose — 0x82 is the
+            # boss-battle flag 130, and suppressing that would break every boss.
+            # progressive elemental skills: chain -> {artifact, power, level cell}
+            # tiered blessing chains: name -> the bits to set, in LV order
+            "progressive_blessings": (dt.PROGRESSIVE_BLESSINGS
+                                      if (self.options.progressive_blessings.value
+                                          and self.options.blessing_items.value)
+                                      else {}),
+            "progressive_skills": (dt.progressive_skill_slot_data()
+                                   if self.options.progressive_skills.value else {}),
+            "suppress_give_ids": dt.suppress_give_ids(
                 active, dt.char_name(self.options)),
         }

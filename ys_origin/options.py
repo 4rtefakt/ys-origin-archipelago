@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from Options import (
-    Choice, DeathLink, DefaultOnToggle, OptionList, PerGameCommonOptions, Range,
-    Toggle, Visibility,
+    Choice, DeathLink, DefaultOnToggle, OptionDict, OptionList,
+    PerGameCommonOptions, Range, Toggle, Visibility,
 )
 
 
@@ -276,6 +276,45 @@ class ShopHints(DefaultOnToggle):
     display_name = "Blessing shop hints"
 
 
+class ProgressiveBlessings(DefaultOnToggle):
+    """Make the tiered blessings progressive (LV1 -> LV2 -> LV3).
+
+    Seven blessings come in levels. Shuffled independently you can be handed LV3
+    before LV1, which is both nonsense and a balance jump. On, each family is one
+    chain granted in order.
+
+    Only does anything together with "Blessing effects in the item pool" — the
+    effects have to BE items before they can be made progressive."""
+    display_name = "Progressive blessing tiers"
+
+
+class ProgressiveSkills(DefaultOnToggle):
+    """Make the three elemental skills progressive.
+
+    Each element is an artifact plus three gems. Shuffled independently you can
+    collect three Emeralds and still not have the Wind skill, which they only
+    upgrade. On, each element becomes one chain of four: the first grants the
+    skill, the rest raise its level."""
+    display_name = "Progressive elemental skills"
+
+
+class BlessingItems(Toggle):
+    """Shuffle the divine-blessing EFFECTS into the item pool.
+
+    Off (default): buying a blessing at a goddess statue sends the check AND
+    gives you that blessing, as it does today.
+
+    On: the statue sells checks only — the purchase reports the location and
+    the blessing itself does nothing. The 24 effects become real items that can
+    land anywhere in the multiworld, so someone else's chest might hand you
+    "Increase SP gain".
+
+    The purchase is detected at the grant opcode rather than by watching the
+    effect bit, so a bought slot still reads as bought and cannot be re-bought.
+    """
+    display_name = "Blessing effects in the item pool"
+
+
 class ProgressiveArmor(DefaultOnToggle):
     """Make defensive gear progressive. Ys Origin has two gear slots — Armor and
     Boots — each a strict tier ladder per character. When on, every gear chest
@@ -317,6 +356,32 @@ class ExpMultiplierMax(Range):
     visibility = Visibility.none
 
 
+class ItemClassificationOverrides(OptionDict):
+    """Retune how individual items are classified for THIS seed (advanced).
+
+    Map item names to a tier — ``filler``, ``useful``, ``progression`` or
+    ``trap`` — to override the apworld's built-in classification. The tier
+    controls how the fill algorithm treats the item: only ``progression`` items
+    are guaranteed to land somewhere reachable, ``useful`` are placed with mild
+    priority, ``filler`` anywhere. Empty (the default) = use the built-in tiers.
+
+    Applied LAST, so it wins over every default (including the automatic
+    Cleria-Ore / statue-warp promotions). Unknown item names and invalid tiers
+    are ignored with a log warning — a typo never aborts generation.
+
+    Use it to stop *minor* progression items from eating your priority
+    locations, e.g. ``{"Mask of Eyes": useful}``. You may also DOWNGRADE a
+    default-progression item to ``filler`` when you know a skip makes it
+    non-essential — that's allowed on purpose. Caveat: if you demote an item the
+    logic actually requires, generation fails loudly (a broken seed is never
+    produced), so only downgrade items you're sure are skippable.
+
+    The current default tiers are listed in the yaml template comment; anything
+    not listed there is ``filler``."""
+    display_name = "Item classification overrides"
+    default = {}
+
+
 class TrapCount(Range):
     """How many filler slots to replace with TRAP items, shuffled into the
     multiworld — you'll send them to other players and receive them yourself.
@@ -352,11 +417,15 @@ class YsOriginOptions(PerGameCommonOptions):
     exp_catchup_margin: ExpCatchupMargin
     exp_multiplier_max: ExpMultiplierMax  # deprecated no-op (legacy yaml compat)
     progressive_armor: ProgressiveArmor
+    blessing_items: BlessingItems
+    progressive_skills: ProgressiveSkills
+    progressive_blessings: ProgressiveBlessings
     shop_hints: ShopHints
     blessing_costs: BlessingCosts
     blessing_cost_min: BlessingCostMin
     blessing_cost_max: BlessingCostMax
     blessing_shop_unlock: BlessingShopUnlock
     weapon_requirements: WeaponRequirements
+    item_classification_overrides: ItemClassificationOverrides
     trap_count: TrapCount
     death_link: DeathLink

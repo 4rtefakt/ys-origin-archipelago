@@ -16,7 +16,7 @@ Guards the two bug classes found in playtesting:
     a flag — but are asserted here explicitly so new ones are conscious choices.
 
 Also pins the blessing detect layout (the "aren't blessings broken?" audit):
-23 bitfield entries with distinct bits + the armor cell as a value flag.
+24 bitfield entries with distinct bits + the armor cell as a value flag.
 """
 
 from __future__ import annotations
@@ -91,14 +91,35 @@ def test_blessing_detect_layout():
     bless = [l for l in LOCS if l["type"] == "blessing"]
     bits = [l for l in bless if l["detect"]["method"] == "bit"]
     flags = [l for l in bless if l["detect"]["method"] == "flag"]
-    assert len(bits) == 23 and len(flags) == 1, (len(bits), len(flags))
+    # 24 bit blessings + the 30 per-character gear upgrades (5 armor + 5 boots
+    # for each of the three characters), which are flag-method because they land
+    # in the raval LEVEL array, not the bitfield.
+    assert len(bits) == 24 and len(flags) == 36, (len(bits), len(flags))
+    # every gear upgrade watches its own raval slot = 0x36A654 + item_idx*4
+    gear_offs = {l["detect"]["offset"] for l in flags}
+    assert len(gear_offs) == 36, "gear upgrades must not share a raval slot"
     # all bit entries watch the same bitfield cell, each a distinct bit
     assert {l["detect"]["offset"] for l in bits} == {"0x36BC80"}
     bitnums = [l["detect"]["bit"] for l in bits]
-    assert len(set(bitnums)) == 23, "duplicate blessing bits"
-    # the armor blessing lives OUTSIDE g_flags (0x36A684 < base 0x36B91C): the
-    # in-game mod must poll it (the VM store hook can never see it).
-    assert flags[0]["detect"]["offset"] == "0x36A684"
+    assert len(set(bitnums)) == 24, "duplicate blessing bits"
+    assert sorted(bitnums) == list(range(24)), (
+        "blessing bits must be contiguous 0..23 — bit 7 (GROW09, 8000 SP, "
+        "'Increase stun effect') was missing from the original sweep because "
+        "it was never purchased during the capture")
+    # the gear upgrades live OUTSIDE g_flags (raval array 0x36A654 < base
+    # 0x36B91C): the in-game mod must POLL them, the VM store hook can never see
+    # them. Each slot is the piece's own item index, live-confirmed on Toal
+    # (Riveted Leather 0x12 -> 0x36A69C, Riveted Boots 0x2A -> 0x36A6FC).
+    RAVAL = 0x36A654
+    for l in flags:
+        off = int(l["detect"]["offset"], 16)
+        assert 0 < off - RAVAL < 0x200 and (off - RAVAL) % 4 == 0, l["name"] + f" {off:X}"
+        assert off < 0x36B91C, "gear upgrades are outside g_flags: must be polled"
+    hugo_tunic = [l for l in flags if l["name"].endswith("Leather Tunic")]
+    assert hugo_tunic and hugo_tunic[0]["detect"]["offset"] == "0x36A684", (
+        "Leather Tunic is item 0x0C -> raval slot 12 -> 0x36A684, which is the "
+        "address the original single 'Strengthen current armor' location used — "
+        "i.e. that location was a Hugo capture and never fired for the others")
 
 
 def test_detect_methods_are_known():

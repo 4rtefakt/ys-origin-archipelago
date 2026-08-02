@@ -229,6 +229,33 @@ SKILL_ITEMS: frozenset[str] = frozenset({"Ventus Bracelet"})
 # this is just a floor; the real freeze risk is only for SKILL_ITEMS above).
 GRANT_SAFE_MIN = 1
 
+# Entries that may legitimately hold a count > 1. EVERYTHING ELSE IS CLAMPED TO 1.
+#
+# The event VM's test op 0x5F is `acc = (g_flags[o0] == o1) ? 1 : 0` — an exact
+# equality, with no >= variant (docs/formats/XSO.md; CleriaCore
+# EVENTVM_HANDLERS_2 §2). So a key item sitting at 2 fails its own door/altar
+# check and that gate is dead for the rest of the run. Vanilla can never produce
+# a 2 (a chest grants with 0x64 Flag_SetInt, `g_flags[idx] = 1`); only an
+# additive AP grant could, e.g. by re-granting on a reconnect. This is the Red
+# Moon Crest altar report (Yunica, v1.6.x): the crest was in the inventory and
+# the altar simply would not react.
+#
+# The membership is decided by the GAME's data, not by item classification, and
+# it is exhaustive. Disassembling all 2225 scripts of the extracted XSO corpus:
+# inventory cells 0x40..0x76 only ever receive 0 or 1 from `0x64 Flag_SetInt`
+# (sole exception: 0x57 in the S_0100 SARA_ROO_* debug flag-dumps), and the only
+# cells touched by `0x67 Flag_AddInt` / `0x69 Flag_SubInt` are 0x57 Roda Fruit,
+# 0x58 Cleria Ore and 0x59 Celcetan Panacea (plus the two Moon Crests, which are
+# decremented when consumed at their altars but never counted above 1).
+#
+# Cleria Ore is the one that MUST be here: it is counted, five of them drive the
+# weapon-upgrade tiers, and clamping it to 1 would cap the player at a single
+# upgrade for the whole run.
+#
+# Extended from slot_data by apply_slot_data() when the world ships stack_items.
+STACKABLE_ITEMS: set[str] = {"Roda Fruit", "Cleria Ore", "Celcetan Panacea"}
+
+
 
 # --------------------------------------------------------------------------- #
 # Divine Blessings (SP-bought permanent upgrades) — array, mapped via Ghidra

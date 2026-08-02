@@ -20,9 +20,13 @@ from rule_builder.rules import And, CanReachRegion, Has, HasAny, True_
 
 from .data_tables import (
     CLERIA_ORE,
+    PROGRESSIVE_SKILLS,
     CONNECTIONS,
     GOAL_ITEM,
+    RODA_FRUIT,
+    ROO_LOCATIONS,
     active_gates,
+    gear_upgrade_gates,
     char_name,
     character_req,
     edge_requirements,
@@ -50,6 +54,22 @@ def _all_of(terms: list):
     return And(*terms)
 
 
+# artifact name -> the progressive chain that now carries it. When the chain is
+# in the pool the artifact itself is not, so a rule naming it would gate on an
+# item that can never be found — which made most of the tower unreachable and
+# fill error out with 15 unplaced progression items.
+_SKILL_SUBST = {str(d["artifact"]): prog for prog, d in PROGRESSIVE_SKILLS.items()}
+
+
+# Set once at the top of set_rules; empty when the option is off. Module-level so
+# the two rule builders below need no signature change.
+_ACTIVE_SUBST: dict = {}
+
+
+def _sub(name: str) -> str:
+    return _ACTIVE_SUBST.get(name, name)
+
+
 def _req_rule(req: list):
     """Room-logic requirement expr -> Rule Builder rule.
 
@@ -59,7 +79,8 @@ def _req_rule(req: list):
     counter, so a name that is not a real item is simply never satisfied.
     """
     return _all_of(
-        [HasAny(*t) if isinstance(t, (list, tuple)) else Has(t) for t in req]
+        [HasAny(*[_sub(x) for x in t]) if isinstance(t, (list, tuple))
+         else Has(_sub(t)) for t in req]
     )
 
 
@@ -67,7 +88,7 @@ def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
     """(item AND ore-count AND reach-anchor), skipping the parts that don't apply."""
     terms = []
     if item is not None:
-        terms.append(Has(item))
+        terms.append(Has(_sub(item)))
     if ore_n:
         terms.append(Has(CLERIA_ORE, ore_n))
     if anchor is not None:
@@ -81,11 +102,15 @@ def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
 def set_rules(world: "YsOriginWorld") -> None:
     """Forward (linear) rules by default; the bidirectional warp-network rules
     when random spawn is on."""
+    global _ACTIVE_SUBST
+    _ACTIVE_SUBST = dict(_SKILL_SUBST) if world.options.progressive_skills.value else {}
     if getattr(world, "open_mode", False):
         _set_rules_open(world)
     else:
         _set_rules_forward(world)
     _set_blessing_price_rules(world)
+    _set_roo_rules(world)
+    _set_gear_upgrade_rules(world)
 
 
 def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
@@ -112,6 +137,48 @@ def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
         except KeyError:
             continue        # category disabled for this world
         world.set_rule(location, CanReachRegion(anchor_region))
+
+
+def _set_roo_rules(world: "YsOriginWorld") -> None:
+    """Gate each Roo trade behind the Roda Fruits it costs.
+
+    Every Roo consumes ONE fruit (`0x69 Flag_SubInt` on 0x57 in its AGERU script)
+    and vanilla stocks exactly six fruits for six Roos, so the supply is exact.
+    The fruits are interchangeable and the player picks the order, so the correct
+    encoding is by COUNT: the k-th Roo location requires k fruits. Without this,
+    fill would treat the Roos as free sphere-1 locations and could strand
+    progression behind fruits the player has no reason to have collected.
+
+    Skipped silently when the `event` category is off for this seed.
+    """
+    for i, loc_name in enumerate(ROO_LOCATIONS, start=1):
+        try:
+            location = world.get_location(loc_name)
+        except KeyError:
+            continue
+        world.set_rule(location, Has(RODA_FRUIT, i))
+
+
+def _set_gear_upgrade_rules(world: "YsOriginWorld") -> None:
+    """Gate "Strengthen <piece>" behind owning that piece.
+
+    The upgrade writes a level into the raval array at the EQUIPPED piece's own
+    item index, so the check simply cannot fire until you have the piece — and
+    without a rule fill would treat all ten as free sphere-1 slots. The starting
+    armor is worn from turn one and takes no gate. With progressive_armor on the
+    specific piece is not in the pool at all, so the gate becomes the Nth step of
+    that ladder instead.
+    """
+    progressive = bool(world.options.progressive_armor.value)
+    for loc_name, (item, count) in gear_upgrade_gates(
+            char_name(world.options), progressive).items():
+        if not item:
+            continue                      # starting gear: reachable immediately
+        try:
+            location = world.get_location(loc_name)
+        except KeyError:
+            continue                      # blessing category off for this seed
+        world.set_rule(location, Has(item, count) if count > 1 else Has(item))
 
 
 def _set_rules_forward(world: "YsOriginWorld") -> None:
