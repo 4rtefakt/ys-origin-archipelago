@@ -62,7 +62,7 @@ def test_floor_locations_map():
 
 def test_blessing_names_map():
     m = dt.blessing_location_names(ALL_ACTIVE, IDS)
-    assert len(m) == 54          # 24 bit blessings + 30 gear upgrades
+    assert len(m) == 60          # 24 bit blessings + 36 gear upgrades
     for k, v in m.items():
         assert k.isdigit(), k
         assert not v.startswith("Divine Blessing"), v      # short shop names

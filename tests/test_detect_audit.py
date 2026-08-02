@@ -94,10 +94,10 @@ def test_blessing_detect_layout():
     # 24 bit blessings + the 30 per-character gear upgrades (5 armor + 5 boots
     # for each of the three characters), which are flag-method because they land
     # in the raval LEVEL array, not the bitfield.
-    assert len(bits) == 24 and len(flags) == 30, (len(bits), len(flags))
+    assert len(bits) == 24 and len(flags) == 36, (len(bits), len(flags))
     # every gear upgrade watches its own raval slot = 0x36A654 + item_idx*4
     gear_offs = {l["detect"]["offset"] for l in flags}
-    assert len(gear_offs) == 30, "gear upgrades must not share a raval slot"
+    assert len(gear_offs) == 36, "gear upgrades must not share a raval slot"
     # all bit entries watch the same bitfield cell, each a distinct bit
     assert {l["detect"]["offset"] for l in bits} == {"0x36BC80"}
     bitnums = [l["detect"]["bit"] for l in bits]

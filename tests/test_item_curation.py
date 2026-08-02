@@ -99,12 +99,14 @@ def test_gear_ladders_resolve_for_all_characters():
         sd = dt.progressive_gear_slot_data(char)
         armor = sd[dt.PROGRESSIVE_ARMOR]
         boots = sd[dt.PROGRESSIVE_BOOTS]
-        assert len(armor) == 4, (char, armor)
-        assert len(boots) == 5, (char, boots)
+        # each character's ladders span their whole 6-slot gear band minus the
+        # piece they start wearing: 5 armor tiers, 6 boots tiers.
+        assert len(armor) == 5, (char, armor)
+        assert len(boots) == 6, (char, boots)
         for idx in armor + boots:
             assert isinstance(idx, int) and 0 <= idx < 0x200, (char, idx)
         # tiers must be distinct cells
-        assert len(set(armor)) == 4 and len(set(boots)) == 5
+        assert len(set(armor)) == 5 and len(set(boots)) == 6
 
 
 def test_vanilla_items_progressive_substitution():
@@ -121,9 +123,11 @@ def test_vanilla_items_progressive_substitution():
                      if n in (dt.PROGRESSIVE_ARMOR, dt.PROGRESSIVE_BOOTS))
         assert n_gear == n_prog > 0, (char, n_gear, n_prog)
         assert not any(n in ladder for n in prog), char
-        # armor chests -> 4 armor + 5 boots (each character has one per tier)
-        assert prog.count(dt.PROGRESSIVE_ARMOR) == 4, char
-        assert prog.count(dt.PROGRESSIVE_BOOTS) == 5, char
+        # 4 armor + 5 boots come from chests, and one of each from a Roo trade
+        # (S_5100 armor, S_4004 boots) — those pieces are real ladder tiers, so
+        # they substitute like any other rather than being handed over raw.
+        assert prog.count(dt.PROGRESSIVE_ARMOR) == 5, char
+        assert prog.count(dt.PROGRESSIVE_BOOTS) == 6, char
         # non-gear items untouched
         assert [n for n in raw if n not in ladder] == \
                [n for n in prog

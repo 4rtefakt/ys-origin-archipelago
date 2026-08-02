@@ -303,29 +303,37 @@ def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
 # per character (chests in tower order). With the option on, every gear chest
 # seeds a "Progressive Armor" / "Progressive Boots" instead of the raw piece;
 # receiving one grants your character's NEXT unowned tier, so pickups can't skip
-# ahead (finding the 22F armor first still gives you tier 1). The 4th variant in
-# each gear chest (Chain Mail / Wooden Shield / ...) belongs to the unlockable EX
-# character and is never seeded for Yunica/Hugo/Toal.
+# ahead (finding the 22F armor first still gives you tier 1).
+#
+# The ladders span the character's WHOLE 6-slot band. An earlier version skipped
+# one entry per band as "the EX character's variant"; that was wrong — those are
+# the Roo rewards (Battle Armor / Crimson Coat / Phantom Mail from S_5100,
+# Sylphen Boots / Elder Shoes / Demon Greaves from S_4004), confirmed by the
+# guide's three parallel walkthroughs naming a different one per character at the
+# same point. Leaving them out meant a Roo handed over a RAW piece while every
+# chest seeded a Progressive item.
 PROGRESSIVE_ARMOR = "Progressive Armor"
 PROGRESSIVE_BOOTS = "Progressive Boots"
 
 GEAR_LADDERS: Dict[str, Dict[str, List[str]]] = {
     "yunica": {
-        PROGRESSIVE_ARMOR: ["Ring Mail", "Half Plate", "Reflex", "Silver Dress"],
+        PROGRESSIVE_ARMOR: ["Ring Mail", "Half Plate", "Reflex", "Battle Armor", "Silver Dress"],
         PROGRESSIVE_BOOTS: ["Leather Boots", "Hard Leggings", "Leg Guards",
-                            "Battle Guards", "Silver Leggings"],
+                            "Sylphen Boots", "Battle Guards",
+                            "Silver Leggings"],
     },
     "hugo": {
         PROGRESSIVE_ARMOR: ["Ebony Robe", "Chain Cloak", "Elder Robe",
-                            "Cleria Garb"],
+                            "Crimson Coat", "Cleria Garb"],
         PROGRESSIVE_BOOTS: ["Leather Greaves", "Ebony Shoes", "Shell Greaves",
-                            "Moon Greaves", "Dark Falcon"],
+                            "Elder Shoes", "Moon Greaves", "Dark Falcon"],
     },
     "toal": {
         PROGRESSIVE_ARMOR: ["Black Chain", "Banded Mail", "Gothic Suit",
-                            "Brave Armor"],
+                            "Phantom Mail", "Brave Armor"],
         PROGRESSIVE_BOOTS: ["Riveted Boots", "Black Leggings", "Banded Boots",
-                            "Phantom Boots", "Brave Guards"],
+                            "Demon Greaves", "Phantom Boots",
+                            "Brave Guards"],
     },
 }
 

@@ -202,7 +202,7 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
 extern "C" int  ap_on_blessing_purchase(int index);        // hook_ap.cpp
 extern "C" int  ap_bless_compare_price(int vanilla);       // hook_ap.cpp
 extern "C" int  ap_bless_hide_price(int vanilla);          // hook_ap.cpp
-extern "C" void ap_note_gear_kind(int kind);               // hook_ap.cpp
+extern "C" void ap_gear_relabel(char* buf, int item_operand, int price);
 
 static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
 static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
@@ -218,12 +218,14 @@ static const uintptr_t kBlessMenu = 0x0056A184;  // push [eax]        (0xdd)
 //   0056A197  lea  edx,[ebp-0x2CC]     <- spliced (6 bytes)
 // Blanking priceBuf here makes the concat append nothing, which is what lets a
 // bought row read "- [Done]" with no number after it.
-// 0xb0 SetRavalCostToFlag: op0 is 0 (armor) or 1 (leggings), and the script runs
-// it immediately before adding that gear row to the menu. Capturing it is what
-// lets the relabel identify a row that carries no vanilla price.
-//   0056920E  cmp dword ptr [eax],0x0   <- spliced (3 bytes) + jnz rel32 (6)
-static const uintptr_t kRavalCost = 0x0056920E;
-static void* g_orig_ravalcost = nullptr;
+// The 0xdd ITEM operand (1 = armor, 4 = leggings) is fetched LAST, at 0x56A1E2,
+// by which point the row text is fully assembled in [ebp-0x3F8] with the price
+// already appended. So gear rows are rewritten wholesale here instead of being
+// guessed at from prices or from 0xb0 ordering.
+//   0056A1E2  call FUN_00566100     ; EAX -> operand 1
+//   0056A1E7  mov  ecx,[ebp-0x14]   <- spliced
+static const uintptr_t kBlessItemOp = 0x0056A1E7;
+static void* g_orig_blessitemop = nullptr;
 
 static const uintptr_t kBlessPriceStr = 0x0056A197;
 static void* g_orig_blesspricestr = nullptr;
@@ -313,17 +315,20 @@ __declspec(naked) static void Hook_BlessMenu() {
     }
 }
 
-__declspec(naked) static void Hook_RavalCost() {
+__declspec(naked) static void Hook_BlessItemOp() {
     __asm {
         pushfd
         pushad
-        mov  eax, [eax]                 // op0: 0 = armor, 1 = leggings
+        push g_bless_vanilla            // this row's vanilla price
+        mov  eax, [eax]                 // operand 1: 1 = armor, 4 = leggings
         push eax
-        call ap_note_gear_kind
-        add  esp, 4
+        lea  eax, [ebp - 0x3F8]         // the assembled row text
+        push eax
+        call ap_gear_relabel            // no-op for every non-gear row
+        add  esp, 12
         popad
         popfd
-        jmp  dword ptr [g_orig_ravalcost]
+        jmp  dword ptr [g_orig_blessitemop]
     }
 }
 
@@ -800,8 +805,8 @@ void hook_vm_install() {
     MH_STATUS ebm = MH_EnableHook((void*)kBlessMenu);
     mod_log("hook_vm_install: statue shop cmp=%d/%d sub=%d/%d menu=%d/%d",
             (int)cbc, (int)ebc, (int)cbs, (int)ebs, (int)cbm, (int)ebm);
-    MH_CreateHook((void*)kRavalCost, (void*)&Hook_RavalCost, &g_orig_ravalcost);
-    MH_EnableHook((void*)kRavalCost);
+    MH_CreateHook((void*)kBlessItemOp, (void*)&Hook_BlessItemOp, &g_orig_blessitemop);
+    MH_EnableHook((void*)kBlessItemOp);
     MH_CreateHook((void*)kBlessPriceStr, (void*)&Hook_BlessPriceStr,
                   &g_orig_blesspricestr);
     MH_EnableHook((void*)kBlessPriceStr);

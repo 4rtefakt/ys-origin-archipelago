@@ -37,13 +37,16 @@ CHARS = ("yunica", "hugo", "toal")
 _GEAR = [l for l in _LOCS if l["id"].startswith("blessing/gear/")]
 
 
-def test_ten_upgrades_per_character():
-    """5 armor + 5 boots each; the EX-character variant in every 6-slot band is
-    excluded (it is never obtainable by the three playable characters)."""
-    assert len(_GEAR) == 30, len(_GEAR)
+def test_twelve_upgrades_per_character():
+    """The whole 6-slot band, both slots: 6 armor + 6 boots each.
+
+    An earlier version excluded one entry per band as "the EX character's
+    variant". That was wrong — those are the Roo rewards, so they are real,
+    obtainable tiers and each needs its own upgrade check."""
+    assert len(_GEAR) == 36, len(_GEAR)
     for ch in CHARS:
         mine = [l for l in _GEAR if l["char"] == ch]
-        assert len(mine) == 10, (ch, len(mine))
+        assert len(mine) == 12, (ch, len(mine))
 
 
 def test_detect_slot_is_the_pieces_own_item_index():
@@ -89,7 +92,7 @@ def test_every_gate_names_a_real_item():
     for ch in CHARS:
         for progressive in (False, True):
             gates = dt.gear_upgrade_gates(ch, progressive)
-            assert len(gates) == 10, (ch, progressive, len(gates))
+            assert len(gates) == 12, (ch, progressive, len(gates))
             ungated = [n for n, (i, _) in gates.items() if not i]
             # exactly one piece is worn from the start: the character's base armor
             assert len(ungated) == 1, (ch, progressive, ungated)

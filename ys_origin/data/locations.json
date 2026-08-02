@@ -5192,5 +5192,89 @@
     "class": "useful"
    }
   ]
+ },
+ {
+  "id": "blessing/gear/yunica/0x0A",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Battle Armor",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A67C"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/yunica/0x21",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "yunica",
+  "name": "Divine Blessing: Strengthen Sylphen Boots",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6D8"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x10",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Crimson Coat",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A694"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/hugo/0x27",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "hugo",
+  "name": "Divine Blessing: Strengthen Elder Shoes",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6F0"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x16",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Phantom Mail",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A6AC"
+  },
+  "items": []
+ },
+ {
+  "id": "blessing/gear/toal/0x2D",
+  "type": "blessing",
+  "zone": "Blessings",
+  "floor": "",
+  "room": "Goddess Statue",
+  "char": "toal",
+  "name": "Divine Blessing: Strengthen Demon Greaves",
+  "detect": {
+   "method": "flag",
+   "offset": "0x36A708"
+  },
+  "items": []
  }
 ]
