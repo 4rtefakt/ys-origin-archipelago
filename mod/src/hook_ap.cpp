@@ -1137,6 +1137,31 @@ static void grant_progressive_blessing(const std::string& name) {
     mod_log("ap: %s -> all tiers already granted", name.c_str());
 }
 
+// Claim every location whose detect flag is `idx`, WITHOUT firing it.
+//
+// The reconcile sweep exists to catch flags the game set behind the VM hook's
+// back. Cells the CLIENT writes are not that: they are our own grant, and
+// attributing them to the player sends a check they never earned. The elemental
+// skill-level cells are the case that bites — 0xB8 is both the fire level and
+// the detect flag for "Flames of Guilt: Fire Altar - Crimson Lotusblade", so
+// the second Progressive Fire Skill fired that check ("I also managed to send
+// the Crimson Lotusblade check when getting my second Prog Fire", Discord,
+// 2.0.0-beta.2 — confirmed from the log line "sweep caught g_flags[0xB8] set
+// without a VM store").
+//
+// Claiming rather than blocking is deliberate: the location can still be
+// reported by the VM store hook if the player actually visits the altar, which
+// runs before the sweep ever looks.
+static bool claim_flag_loc(int64_t loc);   // defined with the fired-set below
+static void claim_flag_locations(int idx) {
+    if (idx < 0 || idx >= 0x200) return;
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    for (int64_t loc : g_flag_to_loc[idx])
+        if (claim_flag_loc(loc))
+            mod_log("ap: claimed location %lld for our own write to "
+                    "g_flags[0x%X] — not a player check", (long long)loc, idx);
+}
+
 static void grant_progressive_skill(const std::string& name) {
     auto it = g_prog_skills.find(name);
     if (it == g_prog_skills.end()) return;
@@ -1150,6 +1175,7 @@ static void grant_progressive_skill(const std::string& name) {
         mod_log("ap: %s #1 -> skill unlocked (0x%X + power 0x%X)",
                 name.c_str(), ps.artifact, ps.power);
     } else {
+        claim_flag_locations(ps.level_cell);    // our write, not the player's
         volatile int* cell = (volatile int*)(kGFlagsAbs + ps.level_cell * 4);
         int cur = *cell < 0 ? 0 : *cell;
         if (cur < 3) *cell = cur + 1;           // the game caps these at 3
