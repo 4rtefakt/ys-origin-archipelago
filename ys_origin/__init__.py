@@ -260,6 +260,46 @@ class YsOriginWorld(World):
 
         self.multiworld.itempool += pool
 
+    def pre_fill(self) -> None:
+        """Un-exclude the surplus when there are more EXCLUDED locations than
+        there are items allowed to sit in them.
+
+        ``create_regions`` marks every provisional location EXCLUDED so it can
+        only hold filler. Archipelago enforces that by requiring at least one
+        non-progression item per excluded location, and some option sets make
+        that impossible: turning statue/blessing/floor checks OFF while leaving
+        room checks ON removes the categories that supply filler but keeps the
+        166 scene-method locations, and ``weapon_requirements`` / ``random_start``
+        promote yet more items to progression on top. Generation then died with
+        "Not enough filler items for excluded locations" (found by
+        ``tools/fuzz_seeds.py``, 16 short on a Hugo seed).
+
+        The exclusion is a PRECAUTION, not a correctness requirement -- it keeps
+        progression out of slots whose live detection we are less sure of -- so
+        when the arithmetic makes it impossible we drop the minimum number of
+        exclusions rather than refusing to generate. Scene-method locations go
+        first: they do detect live (the six late collectibles ship on scene
+        detection), they are merely the ones we confirmed last. Sorted by name so
+        a given seed always drops the same ones.
+        """
+        excluded = [l for l in self.multiworld.get_locations(self.player)
+                    if l.progress_type == LocationProgressType.EXCLUDED]
+        # Fill.py splits the pool three ways and fills excluded locations from
+        # the FILLER list alone (`remaining_fill(..., excludedlocations,
+        # filleritempool)`), so `useful` items do NOT count here even though they
+        # are allowed in an excluded slot elsewhere.
+        excludable = sum(1 for i in self.multiworld.itempool
+                         if i.player == self.player
+                         and not i.advancement and not i.useful)
+        surplus = len(excluded) - excludable
+        if surplus <= 0:
+            return
+        excluded.sort(key=lambda l: (
+            dt.LOC_META.get(l.name, {}).get("type") in dt.EXCLUDED_TYPES,
+            l.name))
+        for loc in excluded[:surplus]:
+            loc.progress_type = LocationProgressType.DEFAULT
+
     # -- regions / locations ------------------------------------------------- #
 
     def create_regions(self) -> None:
