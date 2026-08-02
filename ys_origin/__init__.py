@@ -192,6 +192,10 @@ class YsOriginWorld(World):
         # unsatisfiable and most of the tower unreachable.
         elif name in dt.PROGRESSIVE_SKILLS:
             cls = ItemClassification.progression
+        # A blessing tier chain replaces its LV items; keep the useful tier they
+        # had (nothing gates on a blessing, so this is not a progression case).
+        elif name in dt.PROGRESSIVE_BLESSINGS:
+            cls = ItemClassification.useful
         # Lean-progression demotion (open mode, `minimal` accessibility): keep
         # only the genuinely win-critical progression — the goal medallion, the
         # warp unlocks (the reachability spine, promoted just above) and Cleria Ore
@@ -239,7 +243,8 @@ class YsOriginWorld(World):
         pool = [self.create_item(n) for n in dt.vanilla_items(
             enabled, char, bool(self.options.progressive_armor.value),
             bool(self.options.blessing_items.value),
-            bool(self.options.progressive_skills.value))]
+            bool(self.options.progressive_skills.value),
+            bool(self.options.progressive_blessings.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
         if self.options.statue_warp_locks.value:
@@ -487,6 +492,11 @@ class YsOriginWorld(World):
             # elemental gems. Kept out of suppress_items on purpose — 0x82 is the
             # boss-battle flag 130, and suppressing that would break every boss.
             # progressive elemental skills: chain -> {artifact, power, level cell}
+            # tiered blessing chains: name -> the bits to set, in LV order
+            "progressive_blessings": (dt.PROGRESSIVE_BLESSINGS
+                                      if (self.options.progressive_blessings.value
+                                          and self.options.blessing_items.value)
+                                      else {}),
             "progressive_skills": (dt.progressive_skill_slot_data()
                                    if self.options.progressive_skills.value else {}),
             "suppress_give_ids": dt.suppress_give_ids(

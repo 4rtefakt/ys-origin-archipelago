@@ -276,6 +276,18 @@ class ShopHints(DefaultOnToggle):
     display_name = "Blessing shop hints"
 
 
+class ProgressiveBlessings(DefaultOnToggle):
+    """Make the tiered blessings progressive (LV1 -> LV2 -> LV3).
+
+    Seven blessings come in levels. Shuffled independently you can be handed LV3
+    before LV1, which is both nonsense and a balance jump. On, each family is one
+    chain granted in order.
+
+    Only does anything together with "Blessing effects in the item pool" — the
+    effects have to BE items before they can be made progressive."""
+    display_name = "Progressive blessing tiers"
+
+
 class ProgressiveSkills(DefaultOnToggle):
     """Make the three elemental skills progressive.
 
@@ -407,6 +419,7 @@ class YsOriginOptions(PerGameCommonOptions):
     progressive_armor: ProgressiveArmor
     blessing_items: BlessingItems
     progressive_skills: ProgressiveSkills
+    progressive_blessings: ProgressiveBlessings
     shop_hints: ShopHints
     blessing_costs: BlessingCosts
     blessing_cost_min: BlessingCostMin

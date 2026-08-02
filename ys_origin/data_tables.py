@@ -421,6 +421,42 @@ for _l in _LOCS:
         "location": _l["name"],
     }
 
+# -- progressive blessing tiers ---------------------------------------------- #
+# Seven blessings come in LV1/LV2(/LV3) steps. Shuffled independently you can be
+# handed LV3 first, which is both nonsense and a balance jump, so each family
+# becomes one chain granted in order. Derived from the location names rather than
+# hardcoded, so it cannot drift from the data.
+#
+# Only meaningful together with blessing_items — without it the effects are not
+# pool items at all and there is nothing to make progressive.
+def _blessing_tier_groups() -> Dict[str, List[int]]:
+    groups: Dict[str, Dict[int, int]] = defaultdict(dict)
+    for l in _LOCS:
+        det = l.get("detect", {})
+        if l.get("type") != "blessing" or det.get("method") != "bit":
+            continue
+        short = l["name"].split("Divine Blessing: ", 1)[-1]
+        m = re.match(r"(.*?) LV(\d)$", short)
+        if m:
+            groups[m.group(1)][int(m.group(2))] = det["bit"]
+    return {f"Progressive {base}": [bits[lv] for lv in sorted(bits)]
+            for base, bits in groups.items() if len(bits) > 1}
+
+
+PROGRESSIVE_BLESSINGS: Dict[str, List[int]] = _blessing_tier_groups()
+
+# blessing effect item name -> the chain it belongs to.
+_BLESS_TIER_ITEM_TO_CHAIN: Dict[str, str] = {}
+for _chain, _bits in PROGRESSIVE_BLESSINGS.items():
+    _base = _chain.split("Progressive ", 1)[1]
+    for _lv in range(1, len(_bits) + 1):
+        _BLESS_TIER_ITEM_TO_CHAIN[f"Blessing: {_base} LV{_lv}"] = _chain
+
+
+def progressive_blessing_for(item_name: str) -> Optional[str]:
+    return _BLESS_TIER_ITEM_TO_CHAIN.get(item_name)
+
+
 PROGRESSIVE_SKILLS: Dict[str, Dict[str, object]] = {
     "Progressive Wind Skill": {
         "artifact": "Cerulean Flabellum", "gem": "Emerald", "level_cell": 0xB6},
@@ -432,7 +468,7 @@ PROGRESSIVE_SKILLS: Dict[str, Dict[str, object]] = {
 
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
     | set(FILLER_POOL) | set(TRAP_POOL) | {GOAL_ITEM} | set(STATUE_UNLOCKS) \
-    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS} | set(PROGRESSIVE_SKILLS)
+    | {PROGRESSIVE_ARMOR, PROGRESSIVE_BOOTS} | set(PROGRESSIVE_SKILLS)     | set(PROGRESSIVE_BLESSINGS)
 item_name_to_id: Dict[str, int] = {
     nm: ITEM_BASE_ID + i for i, nm in enumerate(sorted(_universe))
 }
@@ -1242,7 +1278,8 @@ def is_blessing_effect_item(name: str) -> bool:
 def vanilla_items(enabled: Set[str], char: str = "hugo",
                   progressive_gear: bool = False,
                   blessing_items: bool = False,
-                  progressive_skills: bool = False) -> List[str]:
+                  progressive_skills: bool = False,
+                  progressive_blessings: bool = False) -> List[str]:
     """The real items to seed the pool (one per enabled chest/event location),
     using the selected character's variant at each location. With
     ``progressive_gear`` on, armor/boots pieces seed Progressive Armor/Boots
@@ -1262,6 +1299,10 @@ def vanilla_items(enabled: Set[str], char: str = "hugo",
             continue
         if progressive_skills:
             chain = progressive_skill_for(it)
+            if chain:
+                it = chain
+        if progressive_blessings:
+            chain = progressive_blessing_for(it)
             if chain:
                 it = chain
         if progressive_gear:

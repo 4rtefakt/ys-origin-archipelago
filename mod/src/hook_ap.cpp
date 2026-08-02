@@ -1103,6 +1103,25 @@ struct ProgSkill { int artifact, power, level_cell; };
 static std::map<std::string, ProgSkill> g_prog_skills;
 static std::map<std::string, int> g_prog_skill_count;   // receipts so far
 
+// Tiered blessings (LV1 -> LV2 -> LV3) as one chain: each receipt sets the next
+// bit in order, so a family can never arrive out of sequence.
+static std::map<std::string, std::vector<int>> g_prog_bless;
+
+static void grant_progressive_blessing(const std::string& name) {
+    auto it = g_prog_bless.find(name);
+    if (it == g_prog_bless.end()) return;
+    volatile int* cell = (volatile int*)kBlessBitsAbs;
+    for (int bit : it->second) {
+        if (bit < 0 || bit > 31) continue;
+        if (*cell & (1 << bit)) continue;          // that tier is already in
+        *cell |= (1 << bit);
+        *(volatile int*)kBlessDirtyAbs |= 0x10;
+        mod_log("ap: %s -> bit %d set (next tier)", name.c_str(), bit);
+        return;
+    }
+    mod_log("ap: %s -> all tiers already granted", name.c_str());
+}
+
 static void grant_progressive_skill(const std::string& name) {
     auto it = g_prog_skills.find(name);
     if (it == g_prog_skills.end()) return;
@@ -1235,6 +1254,12 @@ static void on_slot_connected(const nlohmann::json& sd) {
     }
     g_prog_skills.clear();
     g_prog_skill_count.clear();
+    g_prog_bless.clear();
+    if (sd.contains("progressive_blessings")) {
+        for (auto& kv : sd["progressive_blessings"].items())
+            g_prog_bless[kv.key()] = kv.value().get<std::vector<int>>();
+        mod_log("ap: %d progressive blessing chains", (int)g_prog_bless.size());
+    }
     if (sd.contains("progressive_skills")) {
         for (auto& kv : sd["progressive_skills"].items()) {
             const auto& d = kv.value();
@@ -1677,6 +1702,8 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             // Trap effect armed above; the red trap toast fires below like any item.
         } else if (g_prog_skills.count(name)) {
             grant_progressive_skill(name);
+        } else if (g_prog_bless.count(name)) {
+            grant_progressive_blessing(name);
         } else if (f != g_name_to_idx.end() && f->second >= 0x200) {
             // Blessing EFFECT item: the id is BLESS_ITEM_BASE + bit, not a
             // g_flags cell, so it is granted by setting the bit rather than by
