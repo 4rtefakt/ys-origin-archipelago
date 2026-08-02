@@ -585,6 +585,22 @@ BLESS_ITEM_BASE = 0x200
 # for the give-item hook, which is keyed on the item id and does need them.
 GEM_GIVE_IDS: Dict[str, int] = {"Emerald": 0x80, "Ruby": 0x81, "Topaz": 0x82}
 
+# Items the game stores under a DIFFERENT cell than the one our item table names,
+# because the vanilla pickup hands you a *degraded* variant that a later puzzle
+# upgrades in place.
+#
+# The Evil Ring is the case: INVINFO lists it twice, 0x5D "emits a power" and
+# 0x5E "its power seems to have been drained". The Mask-of-Eyes chest
+# (S_4003/S_BOX01) gives 0x5E, and killing the three Zelkarons converts it to
+# 0x5D, which is what LOOK_DOOR at S_4021 tests before opening Rado's Annex.
+#
+# Randomized, only the AP item matters: receiving "Evil Ring" grants 0x5D and the
+# door opens. But 0x5E was in neither suppress set, so the chest still handed out
+# the drained ring - a dead item that cannot be charged (the Zelkaron upgrade
+# writes 0x5D, which IS suppressed) and that reads as the real thing in the
+# inventory. Suppressing the variant too means you simply never see it.
+VARIANT_GIVE_IDS: Dict[str, int] = {"Evil Ring": 0x5E}
+
 # -- progressive elemental skills -------------------------------------------- #
 # Each element is an artifact plus three gems, and the vanilla order is the only
 # one that makes sense: the artifact UNLOCKS the skill (its altar script sets the
@@ -631,6 +647,8 @@ def suppress_give_ids(active, char: str = "hugo") -> List[int]:
         v = location_vanilla_item(name, char)
         if v in GEM_GIVE_IDS:
             out.add(GEM_GIVE_IDS[v])
+        if v in VARIANT_GIVE_IDS:
+            out.add(VARIANT_GIVE_IDS[v])   # the chest 0x116's the variant too
     return sorted(out)
 
 
@@ -1248,6 +1266,9 @@ def suppress_item_indices(active, char: str = "hugo") -> List[int]:
         power = skill_grants().get(vanilla)
         if power is not None:
             out.add(power)
+        variant = VARIANT_GIVE_IDS.get(vanilla)
+        if variant is not None:
+            out.add(variant)          # the degraded twin the pickup really writes
     # Blessing EFFECT items carry a synthetic id (BLESS_ITEM_BASE + bit) because
     # a blessing is a bit in g_flags[0xD9], not a cell of its own. They are not
     # g_flags indices, and the mod's suppress array is only 0x200 wide, so they
