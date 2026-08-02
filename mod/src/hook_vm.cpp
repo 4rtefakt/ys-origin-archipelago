@@ -201,6 +201,7 @@ extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
 extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
 extern "C" int  ap_on_blessing_purchase(int index);        // hook_ap.cpp
 extern "C" int  ap_bless_compare_price(int vanilla);       // hook_ap.cpp
+extern "C" int  ap_bless_hide_price(int vanilla);          // hook_ap.cpp
 
 static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
 static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
@@ -211,6 +212,14 @@ static const uintptr_t kBlessMenu = 0x0056A184;  // push [eax]        (0xdd)
 //   00568D5B  mov  eax,[eax]        ; EAX = blessing index
 //   00568D5D  cmp  eax,0x21         <- spliced (3 bytes) + ja rel32 (6) = 9
 //   00568D66  jmp  [eax*4+0x56E6F0]
+// Right after the price sprintf, before it is concatenated onto the label:
+//   0056A192  call FUN_0040a460        ; sprintf(priceBuf, "%d", price)
+//   0056A197  lea  edx,[ebp-0x2CC]     <- spliced (6 bytes)
+// Blanking priceBuf here makes the concat append nothing, which is what lets a
+// bought row read "- [Done]" with no number after it.
+static const uintptr_t kBlessPriceStr = 0x0056A197;
+static void* g_orig_blesspricestr = nullptr;
+
 static const uintptr_t kBlessGrant = 0x00568D5D;
 static const uintptr_t kVmTail     = 0x005664C9;  // where every 0xAF case lands
 static void* g_orig_blessgrant = nullptr;
@@ -293,6 +302,23 @@ __declspec(naked) static void Hook_BlessMenu() {
         popfd
         lea  eax, g_bless_menu_price    // push [eax] now reads our price
         jmp  dword ptr [g_orig_blessmenu]
+    }
+}
+
+__declspec(naked) static void Hook_BlessPriceStr() {
+    __asm {
+        pushfd
+        pushad
+        push g_bless_vanilla            // same row the menu hook just handled
+        call ap_bless_hide_price
+        add  esp, 4
+        test eax, eax
+        jz   bp_done
+        mov  byte ptr [ebp - 0x2CC], 0  // empty the formatted price string
+    bp_done:
+        popad
+        popfd
+        jmp  dword ptr [g_orig_blesspricestr]
     }
 }
 
@@ -752,6 +778,9 @@ void hook_vm_install() {
     MH_STATUS ebm = MH_EnableHook((void*)kBlessMenu);
     mod_log("hook_vm_install: statue shop cmp=%d/%d sub=%d/%d menu=%d/%d",
             (int)cbc, (int)ebc, (int)cbs, (int)ebs, (int)cbm, (int)ebm);
+    MH_CreateHook((void*)kBlessPriceStr, (void*)&Hook_BlessPriceStr,
+                  &g_orig_blesspricestr);
+    MH_EnableHook((void*)kBlessPriceStr);
     MH_STATUS cbg = MH_CreateHook((void*)kBlessGrant, (void*)&Hook_BlessGrant,
                                   &g_orig_blessgrant);
     MH_STATUS ebg = MH_EnableHook((void*)kBlessGrant);

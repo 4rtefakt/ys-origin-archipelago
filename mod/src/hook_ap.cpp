@@ -309,6 +309,12 @@ static bool bless_row_bought(int vanilla) {
 // check the server has already recorded. Returning an unaffordable price is the
 // least invasive way to close that: the script's own "not enough SP" branch
 // handles it, and the deduction is never reached.
+// Should the formatted price be suppressed for this row? (bought rows render
+// "- [Done]" instead, so the number must not be appended after it.)
+extern "C" int ap_bless_hide_price(int vanilla) {
+    return bless_row_bought(vanilla) ? 1 : 0;
+}
+
 extern "C" int ap_bless_compare_price(int vanilla) {
     if (bless_row_bought(vanilla)) return 999999999;
     return ap_substitute_bless_price(vanilla);
@@ -910,7 +916,16 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla) {
         auto f = g_loc_flags.find(loc);
         if (f != g_loc_flags.end() && (f->second & 1)) out = "* " + out;
     }
-    if (bless_row_bought(vanilla)) out += "  (bought)";
+    if (bless_row_bought(vanilla)) {
+        // Render exactly like the game's own already-bought rows:
+        // "* Devil Medallion - [Done]", with no price after it. The handler
+        // appends the formatted price to this same buffer, so the companion
+        // hook below blanks that string for these rows.
+        out += " - [Done]";
+        if (out.size() > 180) out.resize(180);
+        memcpy(buf, out.c_str(), out.size() + 1);
+        return;
+    }
     // The vanilla label ENDS with the " - [SP:]" separator — the handler appends
     // the formatted price straight onto this buffer — so replacing the whole
     // string swallowed it and rows rendered as "Celcetan Panacea670".
