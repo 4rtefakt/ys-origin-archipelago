@@ -213,9 +213,13 @@ def test_suppressed_items_include_the_skill_power_cells():
                 assert idx not in supp, (char, art, "synthetic id must not be suppressed")
                 continue
             assert idx in supp, (char, art)
-        # the gems are suppressed through the give-item path instead
+        # The give-item path carries the ids that must NOT reach the g_flags
+        # suppress set: the gems' real ids, plus any degraded VARIANT a pickup
+        # writes instead of the cell our item table names (the drained Evil
+        # Ring, 0x5E). Both are 0x116 operands rather than g_flags cells.
         gives = set(dt.suppress_give_ids(all_locs, char))
-        assert gives == set(dt.GEM_GIVE_IDS.values()), (char, gives)
+        expected = set(dt.GEM_GIVE_IDS.values()) | set(dt.VARIANT_GIVE_IDS.values())
+        assert gives == expected, (char, gives, expected)
 
 
 def test_suppressed_items_track_active_locations():
