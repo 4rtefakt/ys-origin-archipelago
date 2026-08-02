@@ -93,7 +93,7 @@
   },
   "items": [
    {
-    "id": "0x80",
+    "id": "0x300",
     "name": "Emerald",
     "class": "useful"
    }
@@ -299,7 +299,7 @@
   },
   "items": [
    {
-    "id": "0x80",
+    "id": "0x300",
     "name": "Emerald",
     "class": "useful"
    }
@@ -494,7 +494,7 @@
   },
   "items": [
    {
-    "id": "0x81",
+    "id": "0x301",
     "name": "Ruby",
     "class": "useful"
    }
@@ -513,7 +513,7 @@
   },
   "items": [
    {
-    "id": "0x82",
+    "id": "0x302",
     "name": "Topaz",
     "class": "useful"
    }
@@ -680,7 +680,7 @@
   },
   "items": [
    {
-    "id": "0x82",
+    "id": "0x302",
     "name": "Topaz",
     "class": "useful"
    }
@@ -803,7 +803,7 @@
   },
   "items": [
    {
-    "id": "0x80",
+    "id": "0x300",
     "name": "Emerald",
     "class": "useful"
    }
@@ -962,7 +962,7 @@
   },
   "items": [
    {
-    "id": "0x81",
+    "id": "0x301",
     "name": "Ruby",
     "class": "useful"
    }
@@ -1053,7 +1053,7 @@
   },
   "items": [
    {
-    "id": "0x82",
+    "id": "0x302",
     "name": "Topaz",
     "class": "useful"
    }
@@ -4558,7 +4558,7 @@
   },
   "items": [
    {
-    "id": "0x81",
+    "id": "0x301",
     "name": "Ruby",
     "class": "useful"
    }

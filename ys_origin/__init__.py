@@ -476,4 +476,9 @@ class YsOriginWorld(World):
             # cells those same scripts write (see suppress_item_indices).
             "suppress_items": dt.suppress_item_indices(
                 active, dt.char_name(self.options)),
+            # ITEM ids (not g_flags cells) the give-item hook must swallow: the
+            # elemental gems. Kept out of suppress_items on purpose — 0x82 is the
+            # boss-battle flag 130, and suppressing that would break every boss.
+            "suppress_give_ids": dt.suppress_give_ids(
+                active, dt.char_name(self.options)),
         }

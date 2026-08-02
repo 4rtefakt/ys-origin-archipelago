@@ -27,6 +27,7 @@ void bridge_emit(const char* line);
 void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
+extern bool g_supp_give[0x200];  // ITEM ids the give-item op must swallow
 extern bool g_statue_lock[0x200];// locked statue activation flags (suppress purify)
 
 // The two VM instructions that can write a g_flags item cell.
@@ -387,7 +388,10 @@ static void* g_orig_give = nullptr;
 // suppressed for randomized items so the vanilla floating effect doesn't play.
 static int __cdecl popup_decide(int arg1, int arg2, int arg3) {
     int id = arg1;  // confirmed live: a1=0x59 == Panacea
-    int supp = (id >= 0 && id < 0x200 && g_supp_item[id]) ? 1 : 0;
+    // g_supp_give covers ids that are NOT g_flags cells (the elemental gems);
+    // g_supp_item covers the ordinary items, whose id and cell coincide.
+    int supp = (id >= 0 && id < 0x200 &&
+                (g_supp_item[id] || g_supp_give[id])) ? 1 : 0;
     return supp;
 }
 

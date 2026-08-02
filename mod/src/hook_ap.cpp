@@ -52,6 +52,7 @@ void set_visible(bool v);
 
 // Shared with the VM grant hook (defined in hook_bridge.cpp).
 extern bool g_supp_item[0x200];   // vanilla item indices to suppress
+extern bool g_supp_give[0x200];   // ITEM ids the give-item op must swallow
 extern bool g_loc_flag[0x200];    // location flags that are checks
 // Seed-scoped save redirection (hook_saveredir.cpp).
 extern "C" void saveredir_set_seed(const char* seed);
@@ -1161,6 +1162,13 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& v : sd["suppress_items"]) {
             int i = v.get<int>();
             if (i >= 0 && i < 0x200) { g_supp_item[i] = true; supp++; }
+        }
+    }
+    for (int i = 0; i < 0x200; i++) g_supp_give[i] = false;
+    if (sd.contains("suppress_give_ids")) {
+        for (auto& v : sd["suppress_give_ids"]) {
+            int i = v.get<int>();
+            if (i >= 0 && i < 0x200) g_supp_give[i] = true;
         }
     }
     std::list<int64_t> scout;

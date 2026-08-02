@@ -529,6 +529,28 @@ def weapon_value_for_level(level: int) -> int:
 # recognises it by that range: index - BLESS_ITEM_BASE == the bit to set.
 BLESS_ITEM_BASE = 0x200
 
+# The elemental gems' real ids (0x80/0x81/0x82) are ITEM ids for the give-item op
+# 0x116 — they are NOT g_flags cells. Writing g_flags[0x82] sets flag 130, which
+# every BATTLE*.XSO uses as the boss-battle state, and a granted Topaz put the
+# game into a boss fight on 1F. Worse, having 0x82 in the g_flags suppress set
+# would have stopped real boss battles from setting it at all.
+#
+# So the pool items carry a synthetic id (the mod then grants only the companion
+# skill-level cell via ABILITY_GRANTS), and the real ids are published separately
+# for the give-item hook, which is keyed on the item id and does need them.
+GEM_GIVE_IDS: Dict[str, int] = {"Emerald": 0x80, "Ruby": 0x81, "Topaz": 0x82}
+
+
+def suppress_give_ids(active, char: str = "hugo") -> List[int]:
+    """Item ids the 0x116 give-item hook must suppress but that must NOT enter
+    the g_flags suppress set (see GEM_GIVE_IDS)."""
+    out: Set[int] = set()
+    for name in active:
+        v = location_vanilla_item(name, char)
+        if v in GEM_GIVE_IDS:
+            out.add(GEM_GIVE_IDS[v])
+    return sorted(out)
+
 
 CLERIA_ORE = "Cleria Ore"
 

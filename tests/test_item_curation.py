@@ -201,9 +201,21 @@ def test_suppressed_items_include_the_skill_power_cells():
         assert not missing, (
             f"{char}: power cells not suppressed: "
             f"{sorted(hex(m) for m in missing)}")
-        # and the artifacts themselves are still there
+        # and the artifacts themselves are still there — except the gems, whose
+        # pool id is SYNTHETIC on purpose: their real ids (0x80-0x82) are
+        # give-item ids, not g_flags cells, and 0x82 is the boss-battle flag 130.
+        # Putting that in the g_flags suppress set would have blocked every real
+        # boss battle from setting it.
         for art in dt.skill_grants():
-            assert dt.item_index[art] in supp, (char, art)
+            idx = dt.item_index[art]
+            if idx >= 0x200:
+                assert art in dt.GEM_GIVE_IDS, art
+                assert idx not in supp, (char, art, "synthetic id must not be suppressed")
+                continue
+            assert idx in supp, (char, art)
+        # the gems are suppressed through the give-item path instead
+        gives = set(dt.suppress_give_ids(all_locs, char))
+        assert gives == set(dt.GEM_GIVE_IDS.values()), (char, gives)
 
 
 def test_suppressed_items_track_active_locations():
@@ -230,3 +242,24 @@ def _run_all() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_run_all())
+
+
+def test_suppress_set_never_contains_a_story_flag():
+    """g_flags suppression must stay inside cells that are actually items.
+
+    A gem's real id 0x82 is flag 130 — the boss-battle state every BATTLE*.XSO
+    sets on entry. It reached the suppress set once, which both put the game into
+    a boss fight when the item was granted and would have stopped real bosses
+    from setting the flag at all. Anything outside the inventory band plus the
+    known companion ability cells is a story flag and must never be suppressed.
+    """
+    # The inventory band runs 0x00..0x76 (gear from 0x06, consumables/keys from
+    # 0x40). Everything above that is story/progress state — 0x82 is flag 130,
+    # the boss-battle marker — except the companion ability cells we grant
+    # deliberately.
+    ALLOWED_EXTRA = {0xA3, 0xB5, 0xB6, 0xB7, 0xB8}   # bracelet + skill-level cells
+    all_locs = [l["name"] for l in dt._LOCS]
+    for char in ALL_CHARS:
+        for idx in dt.suppress_item_indices(all_locs, char):
+            ok = (0x00 <= idx <= 0x76) or idx in ALLOWED_EXTRA
+            assert ok, (char, hex(idx), "not an item cell — would suppress a story flag")
