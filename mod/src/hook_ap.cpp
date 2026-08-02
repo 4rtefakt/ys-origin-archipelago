@@ -285,6 +285,9 @@ static std::map<uintptr_t, int64_t> g_gear_cell_to_loc;
 // Which gear row the menu is building, from the 0xb0 SetRavalCostToFlag operand
 // that immediately precedes it: 0 = armor, 1 = leggings. Main thread only.
 static int g_gear_kind = -1;
+// The gear location the CURRENT row resolved to, so the bought/price helpers can
+// read it without consuming the one-shot marker again.
+static int64_t g_gear_row_pending = -1;
 extern "C" void ap_note_gear_kind(int kind) { g_gear_kind = kind; }
 
 // The raval slot IS the equipped piece's own item index, and the selector
@@ -294,9 +297,16 @@ static const uintptr_t kArmorSelAbs = 0x0076BB7C;
 static const uintptr_t kBootsSelAbs = 0x0076BB80;
 
 // The AP location for the gear row currently being built, or -1.
+//
+// ONE-SHOT: the marker is consumed here. 0xb0 runs immediately before its own
+// row, so only the very next row may claim it. Leaving it set made every later
+// row whose price is not in the map (the SP fillers, "Nothing right now") claim
+// the gear location too, which duplicated a label and added a phantom row.
 static int64_t gear_row_location() {
-    if (g_gear_kind != 0 && g_gear_kind != 1) return -1;
-    int sel = *(volatile int*)(g_gear_kind == 0 ? kArmorSelAbs : kBootsSelAbs);
+    int kind = g_gear_kind;
+    g_gear_kind = -1;
+    if (kind != 0 && kind != 1) return -1;
+    int sel = *(volatile int*)(kind == 0 ? kArmorSelAbs : kBootsSelAbs);
     if (sel < 0 || sel > 0x200) return -1;
     uintptr_t cell = kRavalBase + (uintptr_t)sel * 4;
     std::lock_guard<std::mutex> lk(g_bless_price_mtx);
@@ -319,7 +329,7 @@ static bool bless_row_bought(int vanilla) {
         auto it = g_bless_price_to_loc.find(vanilla);
         if (it != g_bless_price_to_loc.end()) loc = it->second;
     }
-    if (loc < 0) loc = gear_row_location();
+    if (loc < 0) loc = g_gear_row_pending;   // peek: set by the relabel below
     if (loc < 0) return false;
     std::lock_guard<std::mutex> lk(g_checked_mtx);
     return g_checked.count(loc) != 0;
@@ -915,7 +925,10 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla) {
     }
     // Not a priced blessing -> it is one of the two gear-upgrade rows, whose
     // cost comes from the game's 0xDA ladder and so is not in the price map.
-    if (loc < 0) loc = gear_row_location();
+    if (loc < 0) {
+        loc = gear_row_location();      // consumes the 0xb0 marker
+        g_gear_row_pending = loc;       // for bless_row_bought / hide_price
+    }
     if (loc < 0) return;
     std::string found;
     {
