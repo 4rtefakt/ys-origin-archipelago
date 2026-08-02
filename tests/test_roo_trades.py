@@ -138,12 +138,23 @@ def test_roo_vanilla_items_are_real_or_absent():
     for names in with_items.values():
         for n in names:
             assert n in dt.item_index, n
-    # each character resolves to exactly one variant
-    for n, names in with_items.items():
-        if len(names) > 1:
-            picked = {dt.location_vanilla_item(n, c)
-                      for c in ("yunica", "hugo", "toal")}
-            assert picked <= set(names), (n, picked)
+    # each character resolves to the variant its own script actually grants —
+    # not merely "some variant from the list", which passed while every character
+    # was silently getting the first entry.
+    assert {c: dt.location_vanilla_item(
+                "Silent Sands: Roo End — Roo Trade", c)
+            for c in ("yunica", "hugo", "toal")} == {
+        "yunica": "Sylphen Boots", "hugo": "Elder Shoes", "toal": "Demon Greaves"}
+    assert {c: dt.location_vanilla_item(
+                "Corrupted Blood: Outer Corridor 1 — Roo Trade", c)
+            for c in ("yunica", "hugo", "toal")} == {
+        "yunica": "Battle Armor", "hugo": "Crimson Coat", "toal": "Phantom Mail"}
+    # S_3104: TALKRUU_HUGO grants the Hammer, TALKRUU_THOR the Ring of Ease, and
+    # TALKRUU_YUNICA only a BGM, so Yunica follows the generic Hammer path.
+    assert {c: dt.location_vanilla_item(
+                "Flames of Guilt: Roo Start — Roo Trade", c)
+            for c in ("yunica", "hugo", "toal")} == {
+        "yunica": "Hammer", "hugo": "Hammer", "toal": "Ring of Ease"}
 
 
 def _run_all():
