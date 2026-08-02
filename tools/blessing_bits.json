@@ -59,8 +59,9 @@
   "_note": "Same bit, same price, same effect — only the menu STRING differs. verified_bit / the AP location names use the majority wording.",
   "7": {
    "yunica": "Increase stun effect",
+   "toal": "Increase stun effect",
    "hugo": "Strengthen Eyes of Fact",
-   "toal": "Increase stun effect"
+   "_confirmed": "maintainer: Hugo's 'Strengthen Eyes of Fact' REPLACES the 'Increase stun effect' row — same slot, different string."
   },
   "13": {
    "yunica": "Increase movement speed",
@@ -68,5 +69,5 @@
    "toal": "Increase attack range"
   }
  },
- "_bit21_uncertain": "bit 21 is recorded as 'Strengthen Eyes of Fact'. A live HUGO menu shows that name on an 8000 SP row — but GROW09 (bit 7) and GROW23 (bit 21) BOTH cost 8000, and only one 8000 row was on screen, so it is not decidable which one it was. Yunica and Toal both call bit 7 'Increase stun effect' (bit 7 is live-confirmed: buying it flipped bit 7), and 'Eyes of Fact' is a Hugo-only ability, so it is plausible either as Hugo's name for bit 7 OR as bit 21's real name. Resolve by buying BOTH 8000 SP blessings in one Hugo run and watching which bit each flips."
+ "_bit21_uncertain": "bit 21's label 'Strengthen Eyes of Fact' is almost certainly WRONG. That is Hugo's name for bit 7 (confirmed: it replaces 'Increase stun effect' on the same row), and the original sweep was a Hugo run — so it looks recorded against the wrong bit. GROW09 (bit 7) and GROW23 (bit 21) both cost 8000, which is how they got conflated. bit 21's REAL name is unknown; the AP location keeps the old string for now because renaming shifts every location id after it. Resolve by buying both 8000 SP blessings in one run."
 }
