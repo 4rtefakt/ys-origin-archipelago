@@ -340,9 +340,18 @@ static int64_t gear_row_location(int price) {
     if (!is_gear_price(price)) return -1;
     int64_t armor = gear_cell_loc(*(volatile int*)kArmorSelAbs);
     int64_t boots = gear_cell_loc(*(volatile int*)kBootsSelAbs);
+    // "Still buyable" must be judged from the GAME's state, not the server's.
+    // A slot is priced exactly while its raval level is 0 — that is the same
+    // thing the menu script tests. Using g_checked instead desynced after a New
+    // Game: the level resets locally but the check stays sent, so the armor slot
+    // was wrongly dropped from the candidates and its row lost its label.
+    int armor_sel = *(volatile int*)kArmorSelAbs;
+    int boots_sel = *(volatile int*)kBootsSelAbs;
     int64_t cand[2]; int n = 0;
-    if (armor >= 0 && !loc_checked(armor)) cand[n++] = armor;
-    if (boots >= 0 && !loc_checked(boots)) cand[n++] = boots;
+    if (armor >= 0 && *(volatile int*)(kRavalBase + (uintptr_t)armor_sel * 4) < 1)
+        cand[n++] = armor;
+    if (boots >= 0 && *(volatile int*)(kRavalBase + (uintptr_t)boots_sel * 4) < 1)
+        cand[n++] = boots;
     int slot = g_menu_row++;
     return (slot < n) ? cand[slot] : -1;
 }
