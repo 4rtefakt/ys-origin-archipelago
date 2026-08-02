@@ -1946,6 +1946,58 @@ static void sweep_flag_locations(std::vector<int64_t>& fire) {
         }
 }
 
+// --- 1F post-Kishgal scene-teardown repair --------------------------------- #
+//
+// Reported twice from live runs (Discord, 1.9.x; and our own Yunica playtest on
+// 2.0.0-beta.1): after the Kishgal fight the game drops you on 1F for a story
+// scene, and that scene's Yunica-specific tail never takes effect. Everything
+// before it and everything after it does, so the save lands in a state vanilla
+// cannot produce - the scene ran, but its per-character branch did not.
+//
+// The branch is S3009_Y.XSO pc 62..82 (and the identical block in its sibling
+// S3xxx scenes):
+//
+//     test g_flags[150] == 1        <- Yunica
+//     jump-if-false past the block
+//       g_flags[278] += 4
+//       g_flags[284] = 1
+//       g_flags[286] = 1
+//       g_flags[285] = 1
+//       g_flags[287] = 1
+//       g_flags[243] = 1
+//
+// g_flags[243] is what STOP1000_ROI_NORTH tests before it starts the "walk down
+// the stairs" event, so with it clear that exit never fires AND the Crystal
+// refuses to warp ("If I go anywhere, I'll just get in everyone's way"). There
+// is no in-game recovery: the run is over without a memory editor.
+//
+// WE DO NOT KNOW WHY THE BRANCH IS SKIPPED. The leading theory is that
+// fast-forwarding (cutscene_skip) lets the room transition tear the script down
+// while its tail is still executing, but that is unproven, so this is a REPAIR
+// rather than a cure - it replays those six writes and nothing else.
+//
+// The trigger cannot fire in a reachable vanilla state: g_flags[346] is set at
+// the very top of every S3xxx story scene, unguarded, while 243 is set inside
+// the branch. "Scene ran but branch did not" is precisely 346 && !243. Scoped
+// to Yunica standing on 1F, because that is the only branch and the only room
+// where the missing flag strands you.
+static void repair_1f_scene_teardown(int scene) {
+    if (scene != 1000) return;                       // only strands you on 1F
+    volatile int* f = (volatile int*)kGFlagsAbs;
+    if (f[150] != 1) return;                         // Yunica's branch only
+    if (f[346] != 1 || f[243] != 0) return;          // scene ran? branch didn't?
+
+    f[278] += 4;
+    f[284] = 1;
+    f[286] = 1;
+    f[285] = 1;
+    f[287] = 1;
+    f[243] = 1;
+    mod_log("repair: 1F story scene ran (g_flags[346]=1) but its Yunica branch "
+            "did not (g_flags[243]=0) - replayed S3009_Y pc62..82; the stairs "
+            "event and the Crystal work again");
+}
+
 // Poll-method checks (each client tick): blessing bits, out-of-g_flags value
 // cells (armor blessing), and "Reach NF" floors. These are all written natively
 // (shop menu / floor transition), so the VM store hook never sees them. Each
@@ -1979,6 +2031,7 @@ static void poll_value_checks() {
     int scene = read_current_scene();
     if (scene <= 0) return;
     enforce_item_cell_invariant();   // repair inflated key-item counts (run-ending)
+    repair_1f_scene_teardown(scene); // repair the post-Kishgal 1F softlock
     std::vector<int64_t> fire;
     for (const auto& pb : g_poll_bits)
         if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&
