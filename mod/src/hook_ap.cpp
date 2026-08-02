@@ -280,6 +280,29 @@ static std::map<int, int> g_bless_price_map;
 // be RELABELLED with what the seed actually placed there instead of the vanilla
 // blessing's own name. Same key and same guarantee as g_bless_price_map.
 static std::map<int, int64_t> g_bless_price_to_loc;
+// raval cell address -> AP location, for the two gear-upgrade rows.
+static std::map<uintptr_t, int64_t> g_gear_cell_to_loc;
+// Which gear row the menu is building, from the 0xb0 SetRavalCostToFlag operand
+// that immediately precedes it: 0 = armor, 1 = leggings. Main thread only.
+static int g_gear_kind = -1;
+extern "C" void ap_note_gear_kind(int kind) { g_gear_kind = kind; }
+
+// The raval slot IS the equipped piece's own item index, and the selector
+// globals hold that index (0x76BB7C armor / 0x76BB80 leggings).
+static const uintptr_t kRavalBase   = 0x0076A654;
+static const uintptr_t kArmorSelAbs = 0x0076BB7C;
+static const uintptr_t kBootsSelAbs = 0x0076BB80;
+
+// The AP location for the gear row currently being built, or -1.
+static int64_t gear_row_location() {
+    if (g_gear_kind != 0 && g_gear_kind != 1) return -1;
+    int sel = *(volatile int*)(g_gear_kind == 0 ? kArmorSelAbs : kBootsSelAbs);
+    if (sel < 0 || sel > 0x200) return -1;
+    uintptr_t cell = kRavalBase + (uintptr_t)sel * 4;
+    std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+    auto it = g_gear_cell_to_loc.find(cell);
+    return it == g_gear_cell_to_loc.end() ? -1 : it->second;
+}
 
 
 extern "C" int ap_substitute_bless_price(int vanilla) {
@@ -294,9 +317,10 @@ static bool bless_row_bought(int vanilla) {
     {
         std::lock_guard<std::mutex> lk(g_bless_price_mtx);
         auto it = g_bless_price_to_loc.find(vanilla);
-        if (it == g_bless_price_to_loc.end()) return false;
-        loc = it->second;
+        if (it != g_bless_price_to_loc.end()) loc = it->second;
     }
+    if (loc < 0) loc = gear_row_location();
+    if (loc < 0) return false;
     std::lock_guard<std::mutex> lk(g_checked_mtx);
     return g_checked.count(loc) != 0;
 }
@@ -887,9 +911,12 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla) {
     {
         std::lock_guard<std::mutex> lk(g_bless_price_mtx);
         auto it = g_bless_price_to_loc.find(vanilla);
-        if (it == g_bless_price_to_loc.end()) return;
-        loc = it->second;
+        if (it != g_bless_price_to_loc.end()) loc = it->second;
     }
+    // Not a priced blessing -> it is one of the two gear-upgrade rows, whose
+    // cost comes from the game's 0xDA ladder and so is not in the price map.
+    if (loc < 0) loc = gear_row_location();
+    if (loc < 0) return;
     std::string found;
     {
         std::lock_guard<std::mutex> lk(g_scout_mtx);
@@ -1178,6 +1205,14 @@ static void on_slot_connected(const nlohmann::json& sd) {
                     // Outside g_flags (e.g. the armor blessing cell): the VM
                     // store hook can't see it — poll for value >= 1 instead.
                     g_poll_vals.push_back({kImageBase + (uintptr_t)off, loc});
+                    // The gear-upgrade blessings live in the raval array, so
+                    // remember cell -> location: the statue menu needs it to
+                    // relabel those rows (they carry no vanilla price, so the
+                    // price-keyed map cannot reach them).
+                    {
+                        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+                        g_gear_cell_to_loc[kImageBase + (uintptr_t)off] = loc;
+                    }
                 } else {
                     mod_log("ap: WARN dropped flag detect, offset 0x%X out of range", off);
                     continue;
@@ -1263,6 +1298,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
         std::lock_guard<std::mutex> lk(g_bless_price_mtx);
         g_bless_price_map.clear();
         g_bless_price_to_loc.clear();
+        g_gear_cell_to_loc.clear();
         if (sd.contains("blessing_vanilla_price_map")) {
             for (auto& kv : sd["blessing_vanilla_price_map"].items()) {
                 int vanilla = atoi(kv.key().c_str());
