@@ -121,20 +121,29 @@ def test_roo_vanilla_items_are_real_or_absent():
     from the guide, and S_2011 bumps the fire skill level (0x67 on 0xB7) inline,
     which is a Ruby. Missing these let the Roo hand out its vanilla reward on top
     of the AP item — seen live: the 4F Roo upgraded the weapon to Lv2."""
-    with_items = {}
-    for name in dt.ROO_LOCATIONS:
-        items = _by_name(name).get("items", [])
-        assert len(items) <= 1, f"{name}: unexpected multi-item Roo"
-        if items:
-            with_items[name] = items[0]["name"]
+    with_items = {n: [i["name"] for i in _by_name(n).get("items", [])]
+                  for n in dt.ROO_LOCATIONS}
     assert with_items == {
-        "Wailing Blue: 4F Forward Room — Roo Trade": "Cleria Ore",
-        "Flooded Prison: 8F Path 2 — Roo Trade": "Ruby",
-        "Flames of Guilt: Roo Start — Roo Trade": "Hammer",
-        "Demonic Core: 22F Mirror Path — Roo Trade": "Demon Greaves",
+        "Wailing Blue: 4F Forward Room — Roo Trade": ["Cleria Ore"],
+        "Flooded Prison: 8F Path 2 — Roo Trade": ["Ruby"],
+        # per-character variants, in yunica/hugo/toal order
+        "Flames of Guilt: Roo Start — Roo Trade": ["Hammer", "Ring of Ease"],
+        "Silent Sands: Roo End — Roo Trade":
+            ["Sylphen Boots", "Elder Shoes", "Demon Greaves"],
+        "Corrupted Blood: Outer Corridor 1 — Roo Trade":
+            ["Battle Armor", "Crimson Coat", "Phantom Mail"],
+        # Topic only
+        "Demonic Core: 22F Mirror Path — Roo Trade": [],
     }, with_items
-    # and it must be a real pool item, or the pool would be short one slot
-    assert "Hammer" in dt.item_index
+    for names in with_items.values():
+        for n in names:
+            assert n in dt.item_index, n
+    # each character resolves to exactly one variant
+    for n, names in with_items.items():
+        if len(names) > 1:
+            picked = {dt.location_vanilla_item(n, c)
+                      for c in ("yunica", "hugo", "toal")}
+            assert picked <= set(names), (n, picked)
 
 
 def _run_all():

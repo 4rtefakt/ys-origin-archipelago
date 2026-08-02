@@ -4579,7 +4579,12 @@
    {
     "id": "0x60",
     "name": "Hammer",
-    "class": "filler"
+    "class": "useful"
+   },
+   {
+    "id": "0x3D",
+    "name": "Ring of Ease",
+    "class": "useful"
    }
   ]
  },
@@ -4594,7 +4599,23 @@
    "method": "flag",
    "offset": "0x36BF2C"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x21",
+    "name": "Sylphen Boots",
+    "class": "useful"
+   },
+   {
+    "id": "0x27",
+    "name": "Elder Shoes",
+    "class": "useful"
+   },
+   {
+    "id": "0x2D",
+    "name": "Demon Greaves",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_5100/AGERU/0x19E",
@@ -4607,7 +4628,23 @@
    "method": "flag",
    "offset": "0x36BF94"
   },
-  "items": []
+  "items": [
+   {
+    "id": "0x0A",
+    "name": "Battle Armor",
+    "class": "useful"
+   },
+   {
+    "id": "0x10",
+    "name": "Crimson Coat",
+    "class": "useful"
+   },
+   {
+    "id": "0x16",
+    "name": "Phantom Mail",
+    "class": "useful"
+   }
+  ]
  },
  {
   "id": "S_6009/AGERU/0x1CA",
@@ -4620,13 +4657,7 @@
    "method": "flag",
    "offset": "0x36C044"
   },
-  "items": [
-   {
-    "id": "0x2D",
-    "name": "Demon Greaves",
-    "class": "useful"
-   }
-  ]
+  "items": []
  },
  {
   "id": "blessing/gear/yunica/0x06",
