@@ -200,6 +200,7 @@ __declspec(naked) static void Hook_GrantAdd() {
 extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
 extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
 extern "C" int  ap_on_blessing_purchase(int index);        // hook_ap.cpp
+extern "C" int  ap_bless_compare_price(int vanilla);       // hook_ap.cpp
 
 static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
 static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
@@ -236,7 +237,7 @@ __declspec(naked) static void Hook_BlessCmp() {
         cmp  eax, 0xD8                  // the SP (zenny shadow) cell?
         jne  bc_done
         push edi                        // arg: the vanilla price
-        call ap_substitute_bless_price
+        call ap_bless_compare_price     // unaffordable if already bought
         add  esp, 4
         mov  [esp], eax                 // pushad slot 0 = saved EDI
     bc_done:

@@ -287,6 +287,32 @@ extern "C" int ap_substitute_bless_price(int vanilla) {
     auto it = g_bless_price_map.find(vanilla);
     return it == g_bless_price_map.end() ? vanilla : it->second;
 }
+
+// Has this row's location already been checked?
+static bool bless_row_bought(int vanilla) {
+    int64_t loc = -1;
+    {
+        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
+        auto it = g_bless_price_to_loc.find(vanilla);
+        if (it == g_bless_price_to_loc.end()) return false;
+        loc = it->second;
+    }
+    std::lock_guard<std::mutex> lk(g_checked_mtx);
+    return g_checked.count(loc) != 0;
+}
+
+// Price for the AFFORDABILITY compare only — never for the deduction.
+//
+// With blessing effects shuffled, the purchase no longer sets the effect bit,
+// and that bit is what the game uses to grey a row out as already bought. So a
+// bought row stays selectable and would happily take the player's SP again for a
+// check the server has already recorded. Returning an unaffordable price is the
+// least invasive way to close that: the script's own "not enough SP" branch
+// handles it, and the deduction is never reached.
+extern "C" int ap_bless_compare_price(int vanilla) {
+    if (bless_row_bought(vanilla)) return 999999999;
+    return ap_substitute_bless_price(vanilla);
+}
 static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap first
 static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
 static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
@@ -884,6 +910,7 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla) {
         auto f = g_loc_flags.find(loc);
         if (f != g_loc_flags.end() && (f->second & 1)) out = "* " + out;
     }
+    if (bless_row_bought(vanilla)) out += "  (bought)";
     // The vanilla label ENDS with the " - [SP:]" separator — the handler appends
     // the formatted price straight onto this buffer — so replacing the whole
     // string swallowed it and rows rendered as "Celcetan Panacea670".
