@@ -59,6 +59,13 @@ extern "C" void saveredir_set_seed(const char* seed);
 extern "C" const char* saveredir_seed_cstr();
 // Cutscene fast-forward mode (hook_vm.cpp): 0 off, 1 hold Right-Ctrl, 2 always.
 extern "C" int g_cutscene_skip_mode;
+// yso_ap.cfg overrides for the two EXP multipliers (-1 = not set). Applied AFTER
+// slot_data so the local file wins: the multipliers are baked into the seed at
+// generation, and a run that turns out under-tuned would otherwise need a whole
+// new seed to re-pace. Only meaningful while level_scaling is on (mode 2 or 3).
+static int g_cfg_exp_base_mult = -1;
+static int g_cfg_exp_catchup_mult = -1;
+
 extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
 
@@ -161,6 +168,14 @@ static void load_config() {
             }
         }
         else if (!strcmp(key, "chat")) { apchat::set_visible(atoi(val) != 0); }
+        else if (!strcmp(key, "exp_mult_base")) {
+            int v = atoi(val);
+            if (v >= 1 && v <= 100) g_cfg_exp_base_mult = v;
+        }
+        else if (!strcmp(key, "exp_mult_catchup")) {
+            int v = atoi(val);
+            if (v >= 1 && v <= 100) g_cfg_exp_catchup_mult = v;
+        }
         else if (!strcmp(key, "cutscene_skip")) {
             int m = atoi(val);
             g_cutscene_skip_mode = (m < 0 || m > 2) ? 1 : m;
@@ -1503,10 +1518,25 @@ static void on_slot_connected(const nlohmann::json& sd) {
             {
                 std::lock_guard<std::mutex> lk(g_bless_price_mtx);
                 g_bless_price_to_loc.clear();
-                for (const auto& si : g_shop_items)
-                    for (const auto& pm : g_bless_price_map)
-                        if (pm.second == si.cost)
+                // ONE-TO-ONE. The naive double loop assigned every vanilla price
+                // whose randomized cost matched a shop slot, so N blessings that
+                // happen to be priced the SAME all collapsed onto whichever slot
+                // came last: the whole statue list rendered as one repeated item
+                // ("blessings list is still all Boots", Discord, 2.0.0-beta.2),
+                // and buying that one row then read as bought for all of them.
+                // Vanilla-price collisions are already pinned world-side; it is
+                // RANDOMIZED-price collisions that do this, and those are common
+                // whenever the cost range is narrow (min == max makes every row
+                // identical). Consuming each slot at most once keeps every row on
+                // its own location no matter how the prices land.
+                std::set<int64_t> used;
+                for (const auto& pm : g_bless_price_map)
+                    for (const auto& si : g_shop_items)
+                        if (pm.second == si.cost && !used.count(si.loc)) {
                             g_bless_price_to_loc[pm.first] = si.loc;
+                            used.insert(si.loc);
+                            break;
+                        }
                 mod_log("ap: statue menu relabel: %d of %d rows mapped",
                         (int)g_bless_price_to_loc.size(), (int)g_shop_items.size());
             }
@@ -1605,6 +1635,16 @@ static void on_slot_connected(const nlohmann::json& sd) {
     g_level_margin = sd.value("level_margin", 3);
     g_exp_base_mult = sd.value("exp_base_mult", 3);
     g_exp_catchup_mult = sd.value("exp_catchup_mult", 5);
+    if (g_cfg_exp_base_mult > 0) {
+        mod_log("exp: yso_ap.cfg overrides base multiplier %d -> %d",
+                g_exp_base_mult, g_cfg_exp_base_mult);
+        g_exp_base_mult = g_cfg_exp_base_mult;
+    }
+    if (g_cfg_exp_catchup_mult > 0) {
+        mod_log("exp: yso_ap.cfg overrides catch-up multiplier %d -> %d",
+                g_exp_catchup_mult, g_cfg_exp_catchup_mult);
+        g_exp_catchup_mult = g_cfg_exp_catchup_mult;
+    }
     g_exp_catchup_margin = sd.value("exp_catchup_margin", 5);
     if (sd.contains("scene_levels")) {
         for (auto& kv : sd["scene_levels"].items())
@@ -1709,6 +1749,19 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             // g_flags cell, so it is granted by setting the bit rather than by
             // ap_give (which is bounded to the 0x200-wide flag array).
             grant_blessing_bit(f->second - 0x200);
+        } else if (replay && is_counted_item_cell(f == g_name_to_idx.end()
+                                                  ? -1 : f->second)) {
+            // A COUNTED cell (Roda Fruit / Cleria Ore / Panacea) is a running
+            // total that the SAVE already carries, and one the player SPENDS —
+            // fruits go to the Roos, panaceas get drunk. Replaying the grant
+            // added another copy on every reconnect, so a dropped connection
+            // quietly multiplied the player's consumables and un-spent ones they
+            // had already used ("I got resent all my items randomly, duplicating
+            // most of the items I got ... prog boots, roda fruit, and panaceas",
+            // Discord, 2.0.0-beta.2). Same reasoning as the SP branch above:
+            // spendable state is not idempotent, so a replay must not touch it.
+            mod_log("ap: replay '%s' — counted item, already in the save, skipped",
+                    name.c_str());
         } else if (f != g_name_to_idx.end()) {
             ap_give_tier(f->second, 1, tier);
             remember_gear(f->second, tier);   // survive save/load wipes
@@ -1721,10 +1774,19 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
                 // bracelets, the mobility bracelets). The three elemental SKILL
                 // LEVELS are not: they run 1..3 and the vanilla gem chests bump
                 // them with `0x67 +=`, so an Emerald/Ruby/Topaz has to add.
-                ap_give(sk->second, 1, /*stack=*/is_counted_ability_cell(sk->second));
-                remember_gear(sk->second, tier);
-                mod_log("ap: '%s' -> also unlocked skill g_flags[0x%X]",
-                        name.c_str(), sk->second);
+                if (replay && is_counted_ability_cell(sk->second)) {
+                    // Same trap as the counted item cells: the elemental skill
+                    // LEVELS add rather than set, so replaying a gem pushed the
+                    // level up again on every reconnect.
+                    mod_log("ap: replay '%s' — skill level already in the save, "
+                            "skipped", name.c_str());
+                } else {
+                    ap_give(sk->second, 1,
+                            /*stack=*/is_counted_ability_cell(sk->second));
+                    remember_gear(sk->second, tier);
+                    mod_log("ap: '%s' -> also unlocked skill g_flags[0x%X]",
+                            name.c_str(), sk->second);
+                }
             }
         } else
             mod_log("ap: received '%s' (id %lld) — no g_flags index, skipped",
