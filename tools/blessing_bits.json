@@ -54,5 +54,19 @@
   "19": "Reduce MP usage LV3",
   "7": "Increase stun effect"
  },
- "_labels_are_per_character": "The menu STRING differs by character for the same slot: bit 13 (GROW15, 500000 SP) reads 'Increase attack range' for Toal and 'Increase movement speed' in the original (Hugo) capture. verified_bit below is the Hugo-era naming except bit 7, captured on Toal."
+ "_labels_are_per_character": "The menu STRING differs by character for the same slot: bit 13 (GROW15, 500000 SP) reads 'Increase attack range' for Toal and 'Increase movement speed' in the original (Hugo) capture. verified_bit below is the Hugo-era naming except bit 7, captured on Toal.",
+ "_per_character_names": {
+  "_note": "Same bit, same price, same effect — only the menu STRING differs. verified_bit / the AP location names use the majority wording.",
+  "7": {
+   "yunica": "Increase stun effect",
+   "hugo": "Strengthen Eyes of Fact",
+   "toal": "Increase stun effect"
+  },
+  "13": {
+   "yunica": "Increase movement speed",
+   "hugo": "Increase movement speed",
+   "toal": "Increase attack range"
+  }
+ },
+ "_bit21_uncertain": "bit 21 is recorded as 'Strengthen Eyes of Fact'. A live HUGO menu shows that name on an 8000 SP row — but GROW09 (bit 7) and GROW23 (bit 21) BOTH cost 8000, and only one 8000 row was on screen, so it is not decidable which one it was. Yunica and Toal both call bit 7 'Increase stun effect' (bit 7 is live-confirmed: buying it flipped bit 7), and 'Eyes of Fact' is a Hugo-only ability, so it is plausible either as Hugo's name for bit 7 OR as bit 21's real name. Resolve by buying BOTH 8000 SP blessings in one Hugo run and watching which bit each flips."
 }
