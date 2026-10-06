@@ -249,6 +249,30 @@ def test_suppression_still_covers_items_written_to_other_characters():
     assert 0x5E in dt.suppress_give_ids(all_locs, "toal")
 
 
+def test_the_usable_dreaming_idol_is_never_suppressed():
+    """0x69 (the UNCHARGED idol Dino gives) is the one Yunica can Use: her item
+    page and Use list carry 0x69, not 0x68 (CleriaCore inventory.cpp,
+    pausebook.cpp), and S_COMMON/USESEKIZOU needs it. Sinking Dino's write left
+    no usable idol in the game at all, so the petrified party could never be
+    cured. 0x68 is the pool's (charged) idol and stays suppressed."""
+    all_locs = [l["name"] for l in dt._LOCS]
+    supp = set(dt.suppress_item_indices(all_locs, "yunica"))
+    assert 0x69 not in supp
+    assert 0x68 in supp
+
+
+def test_no_location_detects_on_a_skill_level_cell():
+    """g_flags[0xB6..0xB8] are the element skill LEVELS. Detecting a check on one
+    (the Fire Altar read 0xB8) exempts that cell from suppression in the mod, so
+    the vanilla fire-gem chests' +1 stacked on the AP levels to 4 — and level 4
+    reads past MP regen's table (Aug 2026, "MP at -650%"). The altars have their
+    own done flags: wind 304, thunder 335, fire 350."""
+    level_cells = {hex(0x36B91C + 4 * i) for i in (0xB6, 0xB7, 0xB8)}
+    bad = [l["name"] for l in dt._LOCS
+           if l["detect"].get("offset", "").lower() in level_cells]
+    assert not bad, bad
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

@@ -271,19 +271,6 @@ _CHAR_BY_VALUE = {0: "yunica", 1: "hugo", 2: "toal"}
 LOCATION_VARIANTS: Dict[str, List[str]] = {
     l["name"]: [it["name"] for it in l["items"]] for l in _LOCS
 }
-# (location, item name) -> the cell that location's script really writes. Usually
-# item_index[name], but not always: Dino's TALKC280 writes the UNCHARGED Dreaming
-# Idol 0x69, while the pool's "Dreaming Idol" is the charged 0x68 the S_4017
-# event gives. Suppression has to sink the cell the script writes.
-_WRITTEN_CELL: Dict[Tuple[str, str], int] = {}
-for _l in _LOCS:
-    for _it in _l["items"]:
-        try:
-            _cell = int(str(_it.get("id", "")), 16)
-        except ValueError:
-            continue
-        if _cell < 0x200:
-            _WRITTEN_CELL[(_l["name"], _it["name"])] = _cell
 _item_class: Dict[str, str] = {}
 for _l in _LOCS:
     for _it in _l["items"]:
@@ -1377,9 +1364,6 @@ def suppress_item_indices(active, char: str = "hugo") -> List[int]:
             continue
         if vanilla in item_index:
             out.add(item_index[vanilla])
-        written = _WRITTEN_CELL.get((name, vanilla))
-        if written is not None and written != item_index.get(vanilla):
-            out.add(written)          # the cell the script writes, if different
         power = skill_grants().get(vanilla)
         if power is not None:
             out.add(power)

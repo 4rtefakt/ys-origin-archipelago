@@ -988,14 +988,28 @@ static void enforce_item_cell_invariant() {
                     "an inflated count fails its own 0x5F == test)", idx, v);
         }
     }
+    // Element skill levels (wind / thunder / fire = g_flags[0xB6..0xB8]) never
+    // exceed 3 in vanilla. MP regen indexes a 4-entry table by this level
+    // (short[0x68B078][level], CleriaCore ABILITIES_VERIFIED §2.3): level 4 reads
+    // the low half of a pointer, -20348, so one cast desyncs the regen lag for
+    // good and the next resync drops MP to about -650% — the Yunica "MP stopped
+    // regenerating, then went to -650% in the 20F Small room" report (Aug 2026).
+    // It got there because the Fire Altar check was detected on g_flags[0xB8]
+    // itself, which exempted the fire-gem chests' +1 from suppression. The data
+    // is fixed (flag 350); this clamp repairs saves that already went over.
+    for (int idx = 0xB6; idx <= 0xB8; idx++) {
+        volatile int* cell = (volatile int*)(kGFlagsAbs + idx * 4);
+        int v = *cell;
+        if (v > 3) {
+            *cell = 3;
+            request_recalc();
+            mod_log("repair: skill level g_flags[0x%X] was %d -> clamped to 3 "
+                    "(level 4+ breaks MP regen)", idx, v);
+        }
+    }
 }
 
 
-// Rewrite a GEAR row (armor / leggings) wholesale.
-//
-// Unlike a blessing row this one is handled after the handler has already
-// appended the formatted price, because the 0xdd ITEM operand that identifies it
-// is not fetched until then. So we rebuild the entire line, price suffix and all.
 // What the seed placed at `loc`, as a menu label: "Item", "Owner's Item", with a
 // leading "* " for progression. "" when the location is not scouted yet.
 static std::string menu_label_for_loc(int64_t loc) {
@@ -1843,6 +1857,11 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
                     // level up again on every reconnect.
                     mod_log("ap: replay '%s' — skill level already in the save, "
                             "skipped", name.c_str());
+                } else if (is_counted_ability_cell(sk->second) &&
+                           *(volatile int*)(kGFlagsAbs + sk->second * 4) >= 3) {
+                    // Already at the vanilla maximum: a 4th level breaks MP
+                    // regen (see enforce_item_cell_invariant).
+                    mod_log("ap: '%s' — skill level already 3, not raised", name.c_str());
                 } else {
                     ap_give(sk->second, 1,
                             /*stack=*/is_counted_ability_cell(sk->second));
@@ -2054,56 +2073,100 @@ static void sweep_flag_locations(std::vector<int64_t>& fire) {
         }
 }
 
-// --- 1F post-Kishgal scene-teardown repair --------------------------------- #
+// --- 1F post-Kishgal softlock repair --------------------------------------- #
 //
-// Reported twice from live runs (Discord, 1.9.x; and our own Yunica playtest on
-// 2.0.0-beta.1): after the Kishgal fight the game drops you on 1F for a story
-// scene, and that scene's Yunica-specific tail never takes effect. Everything
-// before it and everything after it does, so the save lands in a state vanilla
-// cannot produce - the scene ran, but its per-character branch did not.
+// Reported again and again (Discord 1.9.x, 2.0 betas, August 2026; Yunica):
+// after losing the Kishgal duel the game returns her to 1F ("I'm just a
+// burden"), and she can neither take the stairs nor warp — for good.
 //
-// The branch is S3009_Y.XSO pc 62..82 (and the identical block in its sibling
-// S3xxx scenes):
+// The vanilla state, from the shipped scripts (CleriaCore assets):
+//   * losing runs S_3080/BATTLE_0 (232 = 1), then S_1000/AFTERFEENA3080_0{1,2}
+//     sets 242 = 1 — the "burden" state is 242 == 1 && 243 == 0;
+//   * the Crystal refuses to warp on exactly that (S_COMMON/CHECKWING pc 54,
+//     CHECKWING2 pc 110), and STOP1000_ROI_NORTH bounces her off the north
+//     stairs while 243 == 0;
+//   * the only exit is the south-east / south-west slope (STOP1000_ROI_SOUTH*
+//     pc 15: 243 == 0 && 278 == 4) -> the Roy scene, STOP1000_ROI_TALK_TOUGOU,
+//     which sets 243 = 1 at pc 1838;
+//   * 278 must be EXACTLY 4: each of the four 1F NPCs bumps it once — TALKC250
+//     (284), TALKC260_SUB (286), TALKC280 Dino (285), TALKM840 (287).
 //
-//     test g_flags[150] == 1        <- Yunica
-//     jump-if-false past the block
-//       g_flags[278] += 4
-//       g_flags[284] = 1
-//       g_flags[286] = 1
-//       g_flags[285] = 1
-//       g_flags[287] = 1
-//       g_flags[243] = 1
+// Why it strands a randomizer run: each NPC's "+1" sits at the bottom of a
+// newest-story-flag-wins dialogue chain. Any LATER story flag already set — the
+// post-Jenocres Evil Ring chatter (261), or simply owning the Crimson Lotusblade
+// (item cell 109, which AP can hand out early) — makes the NPC play that later
+// line instead, so 278 never reaches 4 and the slope never opens.
 //
-// g_flags[243] is what STOP1000_ROI_NORTH tests before it starts the "walk down
-// the stairs" event, so with it clear that exit never fires AND the Crystal
-// refuses to warp ("If I go anywhere, I'll just get in everyone's way"). There
-// is no in-game recovery: the run is over without a memory editor.
+// The previous repair keyed on g_flags[346], which is the RED MOON CREST ALTAR
+// flag (S_3001/S_REDMOON), not a story-scene marker: it never fired for a seed
+// that skipped the 10F altar, and fired before Kishgal for one that did.
 //
-// WE DO NOT KNOW WHY THE BRANCH IS SKIPPED. The leading theory is that
-// fast-forwarding (cutscene_skip) lets the room transition tear the script down
-// while its tail is still executing, but that is unproven, so this is a REPAIR
-// rather than a cure - it replays those six writes and nothing else.
-//
-// The trigger cannot fire in a reachable vanilla state: g_flags[346] is set at
-// the very top of every S3xxx story scene, unguarded, while 243 is set inside
-// the branch. "Scene ran but branch did not" is precisely 346 && !243. Scoped
-// to Yunica standing on 1F, because that is the only branch and the only room
-// where the missing flag strands you.
-static void repair_1f_scene_teardown(int scene) {
-    if (scene != 1000) return;                       // only strands you on 1F
-    volatile int* f = (volatile int*)kGFlagsAbs;
-    if (f[150] != 1) return;                         // Yunica's branch only
-    if (f[346] != 1 || f[243] != 0) return;          // scene ran? branch didn't?
+// Repair: in the burden state, mark the four talks done (278 = 4, assigned, and
+// their own flags), so walking down the slope plays the vanilla Roy scene and
+// the game clears the state itself. If she is still stuck a minute later (the
+// scene did not run), write its result directly: 243 = 1 plus the control
+// flags the scene's tail restores (185, 180).
+static unsigned long g_burden_since = 0;
 
-    f[278] += 4;
-    f[284] = 1;
-    f[286] = 1;
-    f[285] = 1;
-    f[287] = 1;
+static void repair_1f_burden_softlock(int scene) {
+    volatile int* f = (volatile int*)kGFlagsAbs;
+    bool burden = scene == 1000 && f[150] == 1 && f[242] == 1 && f[243] == 0;
+    if (!burden) { g_burden_since = 0; return; }
+    if (f[278] != 4) {
+        f[278] = 4;
+        f[284] = 1;
+        f[285] = 1;
+        f[286] = 1;
+        f[287] = 1;
+        mod_log("repair: post-Kishgal 1F state (242=1, 243=0) - marked the four "
+                "1F talks done (278=4); the south slope now plays the Roy scene");
+    }
+    unsigned long now = GetTickCount();
+    if (!g_burden_since) { g_burden_since = now; return; }
+    if (now - g_burden_since < 60000) return;
     f[243] = 1;
-    mod_log("repair: 1F story scene ran (g_flags[346]=1) but its Yunica branch "
-            "did not (g_flags[243]=0) - replayed S3009_Y pc62..82; the stairs "
-            "event and the Crystal work again");
+    f[185] = 1;
+    f[180] = 1;
+    g_burden_since = 0;
+    mod_log("repair: post-Kishgal 1F state persisted 60 s - set 243/185/180 "
+            "directly; the stairs and the Crystal work again");
+}
+
+// --- Dreaming Idol chain repair (Yunica) ----------------------------------- #
+//
+// "Got to the part where the party is turned to stone... Talking to Feena
+// mentions needing the Dreaming Idol from Dino. But talking to Dino only gives
+// generic dialogue" (Discord, Aug 2026). The vanilla chain, from the scripts:
+//   1. S_4017/EV_4017_YUNICA_2 (Feena) sets 293 or 294 at its very end;
+//   2. S_1000/TALKC280 (Dino), on 293/294, gives the UNCHARGED idol 0x69 (105)
+//      and sets 296 — but only if no later story flag (225, 235, 237, 270,
+//      271) is already set: his dialogue is newest-flag-wins, and a randomizer
+//      run reaches later flags out of order;
+//   3. S_4017 (296 && 269) runs EV_4017_YUNICA_3: charges it (104), 270 = 1;
+//   4. the idol is USED as item 0x69 (her item page and Use list carry 105,
+//      not 104 — CleriaCore inventory.cpp / pausebook.cpp), and the cure
+//      (S_5080/S_USESEKIZOU) needs 104 == 1 and 270 == 1.
+// Repairs, both narrow: when Feena's step is done but Dino can no longer hand
+// over his gift, grant what he would (105, 296); and once the idol is charged
+// and the event done, make sure the usable copy (105) is there.
+static void repair_dreaming_idol_chain() {
+    volatile int* f = (volatile int*)kGFlagsAbs;
+    if (f[150] != 1) return;                                  // Yunica's story
+    bool feena_done = f[293] == 1 || f[294] == 1;
+    bool dino_blocked = f[225] == 1 || f[235] == 1 || f[237] == 1;
+    if (feena_done && f[296] == 0 && dino_blocked) {
+        if (f[105] < 1) f[105] = 1;
+        f[296] = 1;
+        request_recalc();
+        mod_log("repair: Dino's Dreaming Idol gift was blocked by a later story "
+                "flag - granted it (g_flags[105]=1, 296=1)");
+    }
+    if (f[104] == 1 && f[270] == 1 && f[271] == 0 && f[105] < 1) {
+        f[105] = 1;
+        request_recalc();
+        mod_log("repair: charged Dreaming Idol had no usable copy - set "
+                "g_flags[105]=1 so it can be Used on the petrified party");
+    }
 }
 
 // Poll-method checks (each client tick): blessing bits, out-of-g_flags value
@@ -2139,7 +2202,8 @@ static void poll_value_checks() {
     int scene = read_current_scene();
     if (scene <= 0) return;
     enforce_item_cell_invariant();   // repair inflated key-item counts (run-ending)
-    repair_1f_scene_teardown(scene); // repair the post-Kishgal 1F softlock
+    repair_1f_burden_softlock(scene); // repair the post-Kishgal 1F softlock
+    repair_dreaming_idol_chain();      // Dino / idol use for Yunica
     std::vector<int64_t> fire;
     for (const auto& pb : g_poll_bits)
         if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&

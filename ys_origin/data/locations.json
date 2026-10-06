@@ -1356,7 +1356,7 @@
   "name": "Flames of Guilt: Fire Altar — Crimson Lotusblade",
   "detect": {
    "method": "flag",
-   "offset": "0x36BBFC"
+   "offset": "0x36BE94"
   },
   "items": [
    {
