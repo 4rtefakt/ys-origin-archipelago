@@ -193,6 +193,12 @@ for _sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
 _room_logic_doc: dict = json.loads(_read_data("data/room_logic.json"))
 _room_logic: dict = _room_logic_doc.get("scenes", {})
 _loc_region_override: Dict[str, str] = _room_logic_doc.get("locations", {})
+# location -> scenes that must ALL be reachable too: checks whose story event
+# needs other rooms visited first (the Dreaming Idol chain spans Silent Sands and
+# Corrupted Blood). Applied as CanReachRegion rules in rules.py.
+LOCATION_REQUIRES: Dict[str, List[str]] = {
+    k: v for k, v in _room_logic_doc.get("location_requires", {}).items()
+    if not k.startswith("_")}
 # zone -> the authored scene you physically EXIT through to the next zone. For an
 # authored zone we route the next zone's entry from this room (so the next zone
 # is only reachable after the full intra-zone traversal), instead of the coarse

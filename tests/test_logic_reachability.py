@@ -274,6 +274,18 @@ def test_dreaming_idol_checks_follow_the_story():
             if dt.location_for_char(feena, c)] == ["yunica", "hugo"]
 
 
+def test_location_requires_name_real_things():
+    """room_logic.json `location_requires`: every key is a real location and
+    every scene a real region (a typo would silently drop the rule)."""
+    names = {l["name"] for l in dt._LOCS}
+    regions = set(dt.ALL_REGIONS)
+    assert dt.LOCATION_REQUIRES, "the Dreaming Idol chain must be encoded"
+    for loc, scenes in dt.LOCATION_REQUIRES.items():
+        assert loc in names, loc
+        for s in scenes:
+            assert dt.scene_region(s) in regions, (loc, s)
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

@@ -24,6 +24,7 @@ from .data_tables import (
     PROGRESSIVE_SKILLS,
     CONNECTIONS,
     GOAL_ITEM,
+    LOCATION_REQUIRES,
     RODA_FRUIT,
     ROO_LOCATIONS,
     active_gates,
@@ -113,6 +114,7 @@ def set_rules(world: "YsOriginWorld") -> None:
     _set_blessing_price_rules(world)
     _set_roo_rules(world)
     _set_gear_upgrade_rules(world)
+    _set_location_requires(world)
 
 
 def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
@@ -139,6 +141,27 @@ def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
         except KeyError:
             continue        # category disabled for this world
         world.set_rule(location, CanReachRegion(anchor_region))
+
+
+def _set_location_requires(world: "YsOriginWorld") -> None:
+    """Checks whose story event needs OTHER rooms visited first.
+
+    The Dreaming Idol chain (CleriaCore scripts): Dino's gift needs Feena's
+    S_4017 step (293/294), which only starts once Yunica has been to S_5080
+    (268, S_EVT5080_YUNICA); the S_4017 charging event needs the S_5102 Black
+    Pearl event (269). A single region override cannot say "both rooms", so each
+    listed scene becomes a CanReachRegion term. Scenes this world does not
+    create are skipped, and so are locations it does not have."""
+    live = set(world._region_names())
+    for loc_name, scenes in LOCATION_REQUIRES.items():
+        try:
+            location = world.get_location(loc_name)
+        except KeyError:
+            continue
+        terms = [CanReachRegion(scene_region(s)) for s in scenes
+                 if scene_region(s) in live]
+        if terms:
+            world.set_rule(location, terms[0] if len(terms) == 1 else And(*terms))
 
 
 def _set_roo_rules(world: "YsOriginWorld") -> None:

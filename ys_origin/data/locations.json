@@ -925,6 +925,7 @@
   "floor": "",
   "room": "Toal's Room",
   "name": "Corrupted Blood: Toal's Room",
+  "char": "toal",
   "detect": {
    "method": "flag",
    "offset": "0x36C018"
@@ -3856,6 +3857,7 @@
   "floor": "",
   "room": "Toal's Room",
   "name": "Explore: Toal's Room (S_5002)",
+  "char": "toal",
   "detect": {
    "method": "scene",
    "scene": "S_5002"
