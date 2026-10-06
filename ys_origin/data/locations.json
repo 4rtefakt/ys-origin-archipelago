@@ -4480,45 +4480,6 @@
   "items": []
  },
  {
-  "id": "S_6100/room",
-  "type": "room",
-  "zone": "Demonic Core",
-  "floor": "23F",
-  "room": "23F Outer Corridor",
-  "name": "Explore: 23F Outer Corridor (S_6100)",
-  "detect": {
-   "method": "scene",
-   "scene": "S_6100"
-  },
-  "items": []
- },
- {
-  "id": "S_6150/room",
-  "type": "room",
-  "zone": "Demonic Core",
-  "floor": "24F",
-  "room": "24F Outer Corridor 1",
-  "name": "Explore: 24F Outer Corridor 1 (S_6150)",
-  "detect": {
-   "method": "scene",
-   "scene": "S_6150"
-  },
-  "items": []
- },
- {
-  "id": "S_6151/room",
-  "type": "room",
-  "zone": "Demonic Core",
-  "floor": "24F",
-  "room": "24F Outer Corridor 2",
-  "name": "Explore: 24F Outer Corridor 2 (S_6151)",
-  "detect": {
-   "method": "scene",
-   "scene": "S_6151"
-  },
-  "items": []
- },
- {
   "id": "S_1012/blue_necklace",
   "type": "event",
   "zone": "Wailing Blue",

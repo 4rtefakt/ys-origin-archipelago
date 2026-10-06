@@ -9,7 +9,7 @@ Two layers, both applied here:
   (e.g. the wind altar's far door needs the Ventus Bracelet). Authored
   zone-by-zone; un-authored scenes stay on the free, zone-gated default edge.
 
-Completion = obtaining the Devil Medallion (the final boss reward).
+Completion = reaching the summit stairs (S_6097) through the Devil Medallion door.
 """
 
 from __future__ import annotations
@@ -256,7 +256,11 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
 
 
 def set_completion_condition(world: "YsOriginWorld") -> None:
-    rule = Has(GOAL_ITEM)
+    # The Devil Medallion is not the win, the door it opens is: S_6053's
+    # OPEN_THE_DOOR consumes it to open the way to S_6099 -> S_6097 -> the summit
+    # (S_7000), where the final fight has no further gate. Holding the medallion
+    # did not prove that door was reachable.
+    rule = And(Has(GOAL_ITEM), CanReachRegion(scene_region("S_6097")))
     if world.options.goal.value == world.options.goal.option_defeat_all_bosses:
         # Every floor boss's arena must be reachable as well; the mod sends the
         # goal only once all of them are dead (g_flags[220..225]) and the final
