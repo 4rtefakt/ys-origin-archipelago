@@ -635,10 +635,19 @@ __declspec(naked) static void Hook_WaitTail() {
         cmp  byte ptr [g_cutscene_ff], 0
         je   passthrough
         push eax                          // preserve the check fn's al
+        // A manager pointer is NULL while the engine (re)builds them — on the
+        // title screen and during the New-Game transition, where "Always" mode
+        // and the intro window already have FF armed. Dereferencing it there
+        // crashed ("I crash when I press A to select New Game", Aug 2026), so a
+        // null manager counts as loading: wait normally.
         mov  eax, dword ptr [0x730194]
+        test eax, eax
+        jz   loading
         cmp  dword ptr [eax], 0
         jne  loading
         mov  eax, dword ptr [0x730170]
+        test eax, eax
+        jz   loading
         cmp  dword ptr [eax], 0
         jne  loading
         pop  eax                          // restore al

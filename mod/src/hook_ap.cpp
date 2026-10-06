@@ -228,6 +228,10 @@ static std::atomic<bool> g_run{false};
 // `autoconnect=1` is set in yso_ap.cfg — the player connects from the menu.
 static std::mutex g_conn_mtx;
 static std::atomic<bool> g_conn_req{false};
+// True once a slot's data has been applied on this client (and false again
+// when the client is dropped): gates writes that only make sense for a
+// connected seed, e.g. clamping the weapon down to the AP-granted tier.
+static std::atomic<bool> g_slot_live{false};
 static char g_req_host[128] = "";
 static int  g_req_port = 0;
 static char g_req_slot[128] = "";
@@ -719,6 +723,8 @@ __declspec(naked) static void do_warp_native() {
         mov  ebx, 0x0076BB40
         mov  dword ptr [ebx], esi              // 0x76BB40 = target index
         mov  esi, dword ptr [0x0074E238]
+        test esi, esi                          // not built yet (title / New-Game
+        je   s3                                // init): no warp, never a crash
         test byte ptr [esi+8], 0x80
         jne  s1
         mov  ebx, 0x006D6067
@@ -1314,6 +1320,7 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
 
 static void on_slot_connected(const nlohmann::json& sd) {
     int supp = 0, locs = 0, names = 0;
+    g_slot_live = true;
     // Are blessing EFFECTS shuffled into the item pool? Read FIRST: the detect
     // registration below branches on it.
     g_bless_as_items = sd.value("blessing_items", false);
@@ -2641,9 +2648,16 @@ extern "C" void exp_scaling_on_frame() {
         (now - g_intro_arm_tick.load()) >= kIntroDelayMs;
     bool want_auto = delay_passed && !g_force_spawn_done.load() && !landed;
     static unsigned long s_last_fire = 0;
-    if (spawn_seed && (manual || want_auto)) {
+    // Bounded: a spawn that has not landed after ~20 s of retries is not going
+    // to, and an endless warp loop outside gameplay is how a stray arm could
+    // turn into a crash. A manual F9 always fires.
+    static int s_auto_tries = 0;
+    if (!want_auto) s_auto_tries = 0;
+    if (spawn_seed && (manual || (want_auto && s_auto_tries < 50))) {
         if (manual || now - s_last_fire >= kWarpRetryMs) {
             s_last_fire = now;
+            if (!manual && ++s_auto_tries == 50)
+                mod_log("force-spawn: gave up after 50 tries (spawn never loaded)");
             force_spawn();
         }
     }
@@ -2716,8 +2730,12 @@ extern "C" void exp_scaling_on_frame() {
         // a fresh entity whose combat weapon defaults to Lv1 -> deals 1 dmg).
         apply_weapon_level(g_weapon_applied);
         g_weapon_entity = *kPlayerEntPtr;
-    } else if (*(volatile int*)kWeaponLevelAbs > g_weapon_applied) {
-        // Clamp DOWN to what AP has actually granted.
+    } else if (g_slot_live && cur_ent != nullptr && read_current_scene() > 0 &&
+               *(volatile int*)kWeaponLevelAbs > g_weapon_applied) {
+        // Clamp DOWN to what AP has actually granted — only for a connected
+        // seed in a loaded room: offline it reverted every vanilla upgrade each
+        // frame, and on the title / New-Game init it called the game's weapon
+        // setters with no player entity.
         //
         // Some vanilla scripts raise the weapon without going through an item
         // cell at all: the 4F Roo's reward child script calls 0x7F
@@ -2815,6 +2833,7 @@ static void create_client() {
         mod_log("ap: tearing down existing client before reconnect");
         delete g_ap;
         g_ap = nullptr;
+        g_slot_live = false;
     }
     if (strstr(g_host, "://"))
         snprintf(g_uri, sizeof(g_uri), "%s:%d", g_host, g_port);
