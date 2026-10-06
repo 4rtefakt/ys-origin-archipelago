@@ -87,11 +87,13 @@ static int g_hp_field = 0x98;       // HP offset within the entity
 // Filled from yso_ap.cfg in load_config; documented at their feature blocks
 // (overlay blessing shop / goal reporting) further down.
 static int g_bless_arr_idx[32];     // bless_idx_N: bit -> state-array idx (-1 unmapped)
-// goal_scene=: the ending scene(s), comma-separated. Only S_7002 is confirmed --
-// captured on a real Toal clear (Darm dies in S_7099 -> current_scene blanks to 0
-// for the death cutscene -> the ending loads as S_7002). Yunica and Hugo end on
-// Dalles instead and their ending is NOT captured yet, hence a list: adding it is
-// a config line, not a rebuild.
+// goal_scene=: the ending scene(s), comma-separated. S_7002 is the post-final
+// epilogue for ALL three characters: captured live on a Toal clear (Darm dies in
+// S_7099 -> current_scene blanks to 0 -> S_7002), and the shipped scripts show
+// Yunica and Hugo reaching it too after Dalles (S_7080 -> S_7000 -> demo5 ->
+// S_7002/EVT_7000_{YUNICA,HUGO}_3 -> S_0003 -> demo7; CleriaCore SCENEFLOW.md).
+// It stays configurable, and poll_goal_flags() backs it up with the story flags
+// of the final fight, so a missed scene can no longer strand a seed.
 //
 // Deliberately an explicit list rather than "any 7xxx scene after the last boss".
 // The 7xxx range is not ending-only -- a real Toal endgame ran
@@ -481,6 +483,54 @@ extern "C" int ap_on_blessing_purchase(int index) {
 // a fresh game can't false-complete the slot, while a clear always has it set.
 static bool g_goal_sent = false;
 static bool g_saw_gameplay = false;
+// slot_data "goal": 0 = finish the game (Dalles for Yunica/Hugo, Darm for Toal),
+// 1 = also defeat every floor boss (Velagunder .. Zava) first.
+static int g_goal_mode = 0;
+
+// Story flags behind the goal (CleriaCore, from the shipped scripts):
+//   g_flags[150]       character: 1 Yunica, 2 Hugo, 3 Toal
+//   g_flags[220..225]  floor bosses beaten: Velagunder, Nygtilger, Gelaldy,
+//                      Khonsclard, Pictimos, Zava (set by each boss's brain; the
+//                      battle script waits on them)
+//   g_flags[226]       Dalles beaten — the end of Yunica's and Hugo's story
+//   g_flags[227]       Darm: 1 when he dies, 2 once S_7099/BATTLE_END has run —
+//                      the end of Toal's story
+// All of them sit in the 128..511 band New Game zeroes, so they cannot leak from
+// a previous run. They make the goal independent of which ending scene loads.
+static int goal_flag(int idx) {
+    return *(volatile int*)(0x0076B91C + idx * 4);
+}
+static bool goal_bosses_done() {
+    for (int f = 220; f <= 225; f++)
+        if (goal_flag(f) < 1) return false;
+    return true;
+}
+static bool goal_final_done() {
+    switch (goal_flag(150)) {
+        case 1: case 2: return goal_flag(226) >= 1;   // Yunica / Hugo: Dalles
+        case 3:         return goal_flag(227) >= 2;   // Toal: Darm, after BATTLE_END
+        default:        return false;
+    }
+}
+// Send StatusUpdate(GOAL) once per connection; `why` names the trigger for the log.
+static void send_goal(const char* why) {
+    if (g_goal_sent || !g_ap) return;
+    g_goal_sent = true;
+    try {
+        g_ap->StatusUpdate(APClient::ClientStatus::GOAL);
+        overlay::push_item("GOAL complete!");
+        mod_log("ap: goal reached (%s) — StatusUpdate(GOAL) sent", why);
+    } catch (...) {}
+}
+
+// Scene-independent goal trigger, polled every client tick: the story flags of
+// the final fight (and, in all-bosses mode, every floor boss).
+static void poll_goal_flags() {
+    if (g_goal_sent || !g_ap || !goal_final_done()) return;
+    if (g_goal_mode == 1 && !goal_bosses_done()) return;
+    send_goal(g_goal_mode == 1 ? "final boss + every floor boss beaten"
+                               : "final boss beaten");
+}
 // Chat send queue (chat.cpp input -> poll thread -> g_ap->Say).
 static std::mutex g_say_mtx;
 static std::vector<std::string> g_say_queue;
@@ -1705,6 +1755,9 @@ static void on_slot_connected(const nlohmann::json& sd) {
         mod_log("ap: level scaling mode=%d (margin %d, exp x%d base / x%d catch-up +%d)",
                 g_level_scaling, g_level_margin, g_exp_base_mult,
                 g_exp_catchup_mult, g_exp_catchup_margin);
+    g_goal_mode = sd.contains("goal") ? sd["goal"].get<int>() : 0;
+    mod_log("ap: goal mode %d (%s)", g_goal_mode,
+            g_goal_mode == 1 ? "all floor bosses + final boss" : "final boss");
     if (sd.contains("death_link")) g_death_link = sd["death_link"].get<bool>();
     if (g_death_link) {
         g_ap->ConnectUpdate(false, 0, true, {std::string("DeathLink")});
@@ -1921,33 +1974,16 @@ static void poll_scene() {
     // rather than a New-Game intro. Gates the goal check below.
     if (scene >= 1000 && scene <= 6999) g_saw_gameplay = true;
 
-    // An unlisted 7xxx scene reached after real gameplay is a candidate ending we
-    // haven't captured (Yunica/Hugo finish on Dalles, and their ending is unknown).
-    // Surface it loudly instead of guessing: if the player just won, this number is
-    // exactly what goal_scene= wants, and they can be released manually meanwhile.
-    // Costs nothing when it's only a hub/cutscene, which is why it's a hint and not
-    // a trigger.
-    if (scene >= 7000 && scene < 8000 && g_saw_gameplay && !g_goal_sent &&
-        !g_goal_scenes.count(scene)) {
-        mod_log("goal: scene %d is not a known ending. If you JUST beat the game, "
-                "set goal_scene=%d in yso_ap.cfg and report it.", scene, scene);
-        char buf[96];
-        snprintf(buf, sizeof(buf),
-                 "If you just won: goal_scene=%d", scene);
-        overlay::push_item(buf);
-    }
-
-    // Goal: entering a known ending scene marks the slot as GOALed so the
-    // multiworld releases/completes properly. g_saw_gameplay gates it so the
-    // shared 7xxx intro range can't complete a freshly-started slot (verified
-    // live: Darm -> scene 0 -> 7002 -> GOAL).
-    if (g_goal_scenes.count(scene) && g_saw_gameplay && !g_goal_sent && g_ap) {
-        g_goal_sent = true;
-        try {
-            g_ap->StatusUpdate(APClient::ClientStatus::GOAL);
-            overlay::push_item("GOAL complete!");
-            mod_log("ap: goal scene %d reached — StatusUpdate(GOAL) sent", scene);
-        } catch (...) {}
+    // Goal: entering the ending scene marks the slot as GOALed so the multiworld
+    // releases/completes properly. g_saw_gameplay gates it so the shared 7xxx
+    // intro range can't complete a freshly-started slot (verified live: Darm ->
+    // scene 0 -> 7002 -> GOAL). poll_goal_flags() is the second, scene-independent
+    // trigger; whichever sees the win first sends it.
+    if (g_goal_scenes.count(scene) && g_saw_gameplay && !g_goal_sent &&
+        (g_goal_mode != 1 || goal_bosses_done())) {
+        char why[64];
+        snprintf(why, sizeof(why), "ending scene %d", scene);
+        send_goal(why);
     }
 
     // Blessing-shop one-per-floor pacing: count distinct floors from the RELIABLE
@@ -2169,6 +2205,7 @@ static void poll_value_checks() {
     }
     sweep_flag_locations(fire);
     fire_poll_locs(fire);
+    poll_goal_flags();
 }
 
 // -- overlay trackers -------------------------------------------------------- #

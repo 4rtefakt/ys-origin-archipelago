@@ -42,7 +42,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 # blessing price, say) come out regularly.
 CHOICES: dict[str, list] = {
     "character": ["yunica", "hugo", "toal"],
-    "goal": ["defeat_darm"],
+    "goal": ["defeat_darm", "defeat_all_bosses"],
     "statue_checks": [True, False],
     "blessing_checks": [True, False],
     "boss_checks": [True, False],

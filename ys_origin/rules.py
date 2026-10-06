@@ -20,6 +20,7 @@ from rule_builder.rules import And, CanReachRegion, Has, HasAny, True_
 
 from .data_tables import (
     CLERIA_ORE,
+    FLOOR_BOSS_SCENES,
     PROGRESSIVE_SKILLS,
     CONNECTIONS,
     GOAL_ITEM,
@@ -34,6 +35,7 @@ from .data_tables import (
     open_scene_edge_requirements,
     warp_edge_rules,
     zone_ore_requirements,
+    scene_region,
 )
 
 if TYPE_CHECKING:
@@ -254,4 +256,11 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
 
 
 def set_completion_condition(world: "YsOriginWorld") -> None:
-    world.set_completion_rule(Has(GOAL_ITEM))
+    rule = Has(GOAL_ITEM)
+    if world.options.goal.value == world.options.goal.option_defeat_all_bosses:
+        # Every floor boss's arena must be reachable as well; the mod sends the
+        # goal only once all of them are dead (g_flags[220..225]) and the final
+        # boss falls. Open mode can warp past a boss, so this is not implied by
+        # reaching the Devil Medallion.
+        rule = And(rule, *(CanReachRegion(scene_region(s)) for s in FLOOR_BOSS_SCENES))
+    world.set_completion_rule(rule)

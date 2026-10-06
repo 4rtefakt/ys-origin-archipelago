@@ -51,6 +51,18 @@ ZONE_GATE: Dict[str, str] = {
 
 GOAL_ITEM = "Devil Medallion"
 
+# The six floor bosses every character fights, by arena scene. `goal:
+# defeat_all_bosses` requires reaching each of them; the mod confirms the kills
+# from their story flags (g_flags[220..225], CleriaCore boss_re/*).
+FLOOR_BOSS_SCENES: Tuple[str, ...] = (
+    "S_1099",   # Velagunder
+    "S_2099",   # Nygtilger
+    "S_3099",   # Gelaldy
+    "S_4099",   # Khonsclard
+    "S_5099",   # Pictimos
+    "S_6082",   # Zava (24F Yog & Om)
+)
+
 CATEGORIES = ("chest", "event", "statue", "blessing", "boss", "floor", "room")
 ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 

@@ -28,7 +28,13 @@ class Character(Choice):
 
 
 class Goal(Choice):
-    """What finishing the seed requires."""
+    """What finishing the seed requires.
+
+    defeat_darm: finish your character's story. Toal's ends with Darm; Yunica's
+    and Hugo's end with Dalles, so for them this means beating Dalles.
+    defeat_all_bosses: the same, after also defeating all six floor bosses
+    (Velagunder, Nygtilger, Gelaldy, Khonsclard, Pictimos and Zava). Useful with
+    warps, which can otherwise skip a boss."""
     display_name = "Goal"
     option_defeat_darm = 0
     option_defeat_all_bosses = 1
