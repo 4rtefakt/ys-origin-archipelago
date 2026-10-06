@@ -273,6 +273,20 @@ def test_no_location_detects_on_a_skill_level_cell():
     assert not bad, bad
 
 
+def test_pool_follows_the_character_location_filter():
+    """A location that does not exist for a character seeds no item for them
+    (the Toal-only S_2005 box_02 Cleria Ore; the per-character blessing rows),
+    so the pool never outgrows the locations; and the Cleria Ore that weapon
+    requirements count still covers the deepest zone's need."""
+    enabled = set(dt.CATEGORIES)
+    need = max(dt.zone_ore_requirements(True).values())
+    for char in ALL_CHARS:
+        locs = sum(len(v) for v in dt.locations_by_region(enabled, char).values())
+        items = dt.vanilla_items(enabled, char, blessing_items=True)
+        assert len(items) <= locs, (char, len(items), locs)
+        assert items.count("Cleria Ore") >= need, (char, items.count("Cleria Ore"), need)
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

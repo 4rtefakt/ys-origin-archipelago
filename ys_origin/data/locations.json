@@ -274,6 +274,7 @@
   "floor": "",
   "room": "Water Dragon Protect",
   "name": "Flooded Prison: Water Dragon Protect #2",
+  "char": "toal",
   "detect": {
    "method": "flag",
    "offset": "0x36BE4C"

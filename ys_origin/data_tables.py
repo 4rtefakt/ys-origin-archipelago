@@ -1410,6 +1410,11 @@ def vanilla_items(enabled: Set[str], char: str = "hugo",
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
+        # Same filter as locations_by_region: a location that does not exist for
+        # this character must not seed an item either, or the pool outgrows the
+        # locations (e.g. the Toal-only S_2005 box_02 Cleria Ore).
+        if not location_for_char(l, char):
+            continue
         it = location_vanilla_item(l["name"], char)
         if not it:
             continue
