@@ -186,11 +186,12 @@ __declspec(naked) static void Hook_GrantAdd() {
 // re-pricing the deduction alone still forces you to AFFORD the vanilla price
 // (fatal for the 500,000 SP entry).
 //
-// The lookup is keyed on the VANILLA price because that is the only thing these
-// sites know: the blessing's 0xAF index does not appear in the script until
-// after the money has moved. The world pins the three colliding vanilla prices
-// (30000, 8000, 20000, each shared by two blessings) to a single randomized
-// price so the key stays unambiguous.
+// What the row SHOWS is rebuilt per row from its script name (ap_menu_row, at
+// 0x56A1E7). The compare finds the blessing from the IsXXX(nn) every GROWnn
+// opens with (Hook_IsXXX latch). The deduction stays keyed on the VANILLA price
+// — the 0xAF index appears only after the money has moved — and the world pins
+// the three colliding vanilla prices (30000, 8000, 20000, each shared by two
+// blessings) to a single randomized price so that key stays unambiguous.
 //
 // The armor/leggings upgrades are deliberately NOT caught by any of this, and
 // not by accident: GROWAR/GROWLE compare with `0x62` (flag vs flag, SP against
@@ -199,11 +200,10 @@ __declspec(naked) static void Hook_GrantAdd() {
 // — keeps running vanilla even though two of those rungs collide with real
 // blessing prices, which a price-keyed hook would otherwise have re-priced.
 extern "C" int ap_substitute_bless_price(int vanilla);   // hook_ap.cpp
-extern "C" void ap_bless_relabel(char* buf, int vanilla);   // hook_ap.cpp
 extern "C" int  ap_on_blessing_purchase(int index);        // hook_ap.cpp
 extern "C" int  ap_bless_compare_price(int vanilla);       // hook_ap.cpp
-extern "C" int  ap_bless_hide_price(int vanilla);          // hook_ap.cpp
-extern "C" void ap_gear_relabel(char* buf, int item_operand, int price);
+extern "C" void ap_menu_row(char* buf, const char* script, int vanilla);
+extern "C" void ap_note_bless_index(int index);            // hook_ap.cpp
 
 static const uintptr_t kBlessCmp  = 0x00567C43;  // call FUN_005659e0 (0x61)
 static const uintptr_t kBlessSub  = 0x00567E45;  // sub [esi], ecx    (0x69)
@@ -214,22 +214,15 @@ static const uintptr_t kBlessMenu = 0x0056A184;  // push [eax]        (0xdd)
 //   00568D5B  mov  eax,[eax]        ; EAX = blessing index
 //   00568D5D  cmp  eax,0x21         <- spliced (3 bytes) + ja rel32 (6) = 9
 //   00568D66  jmp  [eax*4+0x56E6F0]
-// Right after the price sprintf, before it is concatenated onto the label:
-//   0056A192  call FUN_0040a460        ; sprintf(priceBuf, "%d", price)
-//   0056A197  lea  edx,[ebp-0x2CC]     <- spliced (6 bytes)
-// Blanking priceBuf here makes the concat append nothing, which is what lets a
-// bought row read "- [Done]" with no number after it.
-// The 0xdd ITEM operand (1 = armor, 4 = leggings) is fetched LAST, at 0x56A1E2,
-// by which point the row text is fully assembled in [ebp-0x3F8] with the price
-// already appended. So gear rows are rewritten wholesale here instead of being
-// guessed at from prices or from 0xb0 ordering.
-//   0056A1E2  call FUN_00566100     ; EAX -> operand 1
+// Operand 1 of 0xdd is fetched LAST, at 0x56A1E2, as a STRING: the script the
+// row runs ("@GrowAr", "@GrowLe", "@GrowNN" — S_COMMON/GROWMENU.XSO). By then
+// the row text is fully assembled in [ebp-0x3F8] with the vanilla price
+// appended, so every row — gear and blessing — is rebuilt here, keyed on that
+// name (ap_menu_row), instead of being guessed at from prices or row order.
+//   0056A1E2  call FUN_00566100     ; EAX -> operand 1 (string)
 //   0056A1E7  mov  ecx,[ebp-0x14]   <- spliced
 static const uintptr_t kBlessItemOp = 0x0056A1E7;
 static void* g_orig_blessitemop = nullptr;
-
-static const uintptr_t kBlessPriceStr = 0x0056A197;
-static void* g_orig_blesspricestr = nullptr;
 
 static const uintptr_t kBlessGrant = 0x00568D5D;
 static const uintptr_t kVmTail     = 0x005664C9;  // where every 0xAF case lands
@@ -240,9 +233,8 @@ static void* g_orig_blesscmp  = nullptr;
 static void* g_orig_blesssub  = nullptr;
 static void* g_orig_blessmenu = nullptr;
 
-// Scratch the menu hook points the push at. Main-thread only (the event VM), so
-// a single slot is enough — same assumption as the box-relabel hook above.
-static int g_bless_menu_price = 0;
+// The current row's vanilla price, from the menu hook to the row rebuild.
+// Main-thread only (the event VM), so a single slot is enough.
 static int g_bless_vanilla = 0;
 
 // 0x61 affordability. Spliced ON the operand-accessor call, where the flag index
@@ -285,47 +277,30 @@ __declspec(naked) static void Hook_BlessSub() {
     }
 }
 
-// 0xdd menu entry: the next instruction pushes [eax] into the price sprintf.
-// Point eax at our scratch instead of writing through it — [eax] is the script's
-// own operand table and a write there would persist for the rest of the run.
-// Clobbering eax is free: the very next instruction (0x56A186) reloads it.
-// Also RELABELS the row. By this instruction the script's own label has already
-// been copied into the handler's buffer at [ebp-0x3F8] (the strcpy loop at
-// 0x56A162) and the formatted price has not been appended yet, so overwriting
-// the buffer here swaps the name and still gets " - [SP:]nnn" added after it.
-// EBP is the handler's frame and untouched by pushfd/pushad, so it is valid.
+// 0xdd menu entry: record the row's vanilla price operand ([eax]) for the row
+// rebuild at 0x56A1E7, and let the game format it as usual. The row is rewritten
+// there, once its script name (its identity) has been fetched — see ap_menu_row.
 __declspec(naked) static void Hook_BlessMenu() {
     __asm {
-        pushfd
-        pushad
-        mov  eax, [eax]                 // the vanilla price operand
-        mov  g_bless_vanilla, eax       // keep it: it keys BOTH substitutions
-        push eax
-        call ap_substitute_bless_price
-        add  esp, 4
-        mov  g_bless_menu_price, eax
-        lea  eax, [ebp - 0x3F8]         // the label buffer the script filled
-        push g_bless_vanilla
-        push eax
-        call ap_bless_relabel           // no-op for rows we don't recognise
-        add  esp, 8
-        popad
-        popfd
-        lea  eax, g_bless_menu_price    // push [eax] now reads our price
+        push ecx
+        mov  ecx, [eax]                 // the vanilla price operand
+        mov  g_bless_vanilla, ecx
+        pop  ecx
         jmp  dword ptr [g_orig_blessmenu]
     }
 }
 
+// 0x56A1E7: EAX = operand 1 of 0xdd, the script the row runs ("@GrowAr",
+// "@GrowLe", "@GrowNN"); [ebp-0x3F8] = the assembled row text.
 __declspec(naked) static void Hook_BlessItemOp() {
     __asm {
         pushfd
         pushad
         push g_bless_vanilla            // this row's vanilla price
-        mov  eax, [eax]                 // operand 1: 1 = armor, 4 = leggings
-        push eax
+        push eax                        // the row's script name
         lea  eax, [ebp - 0x3F8]         // the assembled row text
         push eax
-        call ap_gear_relabel            // no-op for every non-gear row
+        call ap_menu_row
         add  esp, 12
         popad
         popfd
@@ -333,20 +308,21 @@ __declspec(naked) static void Hook_BlessItemOp() {
     }
 }
 
-__declspec(naked) static void Hook_BlessPriceStr() {
+// 0x9A IsXXX(n): latch the blessing index for the purchase compare. Spliced on
+//   00568FCF  cmp eax,0x21 ; ja 0x56DB1D   (EAX = n, read just before)
+// the same shape as the 0xAF grant splice below.
+static const uintptr_t kIsXXX = 0x00568FCF;
+static void* g_orig_isxxx = nullptr;
+__declspec(naked) static void Hook_IsXXX() {
     __asm {
         pushfd
         pushad
-        push g_bless_vanilla            // same row the menu hook just handled
-        call ap_bless_hide_price
+        push eax                        // the IsXXX index
+        call ap_note_bless_index
         add  esp, 4
-        test eax, eax
-        jz   bp_done
-        mov  byte ptr [ebp - 0x2CC], 0  // empty the formatted price string
-    bp_done:
         popad
         popfd
-        jmp  dword ptr [g_orig_blesspricestr]
+        jmp  dword ptr [g_orig_isxxx]
     }
 }
 
@@ -811,9 +787,10 @@ void hook_vm_install() {
             (int)cbc, (int)ebc, (int)cbs, (int)ebs, (int)cbm, (int)ebm);
     MH_CreateHook((void*)kBlessItemOp, (void*)&Hook_BlessItemOp, &g_orig_blessitemop);
     MH_EnableHook((void*)kBlessItemOp);
-    MH_CreateHook((void*)kBlessPriceStr, (void*)&Hook_BlessPriceStr,
-                  &g_orig_blesspricestr);
-    MH_EnableHook((void*)kBlessPriceStr);
+    MH_STATUS cix = MH_CreateHook((void*)kIsXXX, (void*)&Hook_IsXXX, &g_orig_isxxx);
+    MH_STATUS eix = MH_EnableHook((void*)kIsXXX);
+    mod_log("hook_vm_install: 0x9A IsXXX latch @0x%X create=%d enable=%d",
+            (unsigned)kIsXXX, (int)cix, (int)eix);
     MH_STATUS cbg = MH_CreateHook((void*)kBlessGrant, (void*)&Hook_BlessGrant,
                                   &g_orig_blessgrant);
     MH_STATUS ebg = MH_EnableHook((void*)kBlessGrant);

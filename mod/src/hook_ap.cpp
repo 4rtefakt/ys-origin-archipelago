@@ -307,26 +307,13 @@ static const uintptr_t kRavalBase   = 0x0076A654;
 static const uintptr_t kArmorSelAbs = 0x0076BB7C;
 static const uintptr_t kBootsSelAbs = 0x0076BB80;
 
-// GROWMENU emits the gear rows FIRST (armor rungs, then leggings rungs), before
-// any blessing row, and exactly one rung of each passes its guard — so at most
-// two gear rows appear and they are the first two of the menu.
-//
-// The 0xdd operands cannot identify them: operand 1 turned out to be another
-// STRING, not the item index (it read back as ASCII). What IS reliable is the
-// pair of selector globals plus the cost ladder, both of which the menu has
-// already resolved by this point.
-static const int kGearLadder[] = {100, 300, 1000, 3000, 6000, 12000};
-static bool is_gear_price(int p) {
-    for (int v : kGearLadder) if (v == p) return true;
-    return false;
-}
-
-// Row counter for the current menu build. A menu is emitted in one burst, so a
-// gap since the last row means a new menu — simpler and more robust than trying
-// to hook the menu open, which shares its opcode with everything else.
-static int g_menu_row = 0;
-static unsigned long g_menu_last_tick = 0;
-
+// Menu rows are identified by their 0xdd operand 1, the script the row runs:
+// "@GrowAr" / "@GrowLe" for the armor / leggings upgrades, "@GrowNN" for
+// blessing index NN (S_COMMON/GROWMENU.XSO). The handler fetches it last, at
+// 0x56A1E7, as a string — see ap_menu_row. Price and row order identified
+// nothing: two gear rungs (1000, 3000) are also blessing prices, three vanilla
+// prices are shared by two blessings, and a shared armor piece with no gear
+// location still emits a row.
 static int64_t gear_cell_loc(int sel) {
     if (sel < 0 || sel > 0x200) return -1;
     std::lock_guard<std::mutex> lk(g_bless_price_mtx);
@@ -340,39 +327,6 @@ static bool loc_checked(int64_t loc) {
     return g_checked.count(loc) != 0;
 }
 
-// Which gear location a priced row belongs to.
-//
-// Row ORDER alone does not work: once a gear upgrade is bought the script emits
-// that row through 0xD8 Menu_Add (the "[Done]" form) instead of 0xDD, so this
-// hook never sees it and the counter slid, labelling the leggings row as armor.
-//
-// Instead, a row is matched against the gear slots that are still BUYABLE, in
-// script order (armor then leggings). A bought slot drops out of the running
-// exactly as it drops out of the priced rows, so the two stay in step without
-// counting anything.
-static int64_t gear_row_location(int price) {
-    unsigned long now = GetTickCount();
-    if (now - g_menu_last_tick > 250) g_menu_row = 0;   // menus arrive in one burst
-    g_menu_last_tick = now;
-    if (!is_gear_price(price)) return -1;
-    int64_t armor = gear_cell_loc(*(volatile int*)kArmorSelAbs);
-    int64_t boots = gear_cell_loc(*(volatile int*)kBootsSelAbs);
-    // "Still buyable" must be judged from the GAME's state, not the server's.
-    // A slot is priced exactly while its raval level is 0 — that is the same
-    // thing the menu script tests. Using g_checked instead desynced after a New
-    // Game: the level resets locally but the check stays sent, so the armor slot
-    // was wrongly dropped from the candidates and its row lost its label.
-    int armor_sel = *(volatile int*)kArmorSelAbs;
-    int boots_sel = *(volatile int*)kBootsSelAbs;
-    int64_t cand[2]; int n = 0;
-    if (armor >= 0 && *(volatile int*)(kRavalBase + (uintptr_t)armor_sel * 4) < 1)
-        cand[n++] = armor;
-    if (boots >= 0 && *(volatile int*)(kRavalBase + (uintptr_t)boots_sel * 4) < 1)
-        cand[n++] = boots;
-    int slot = g_menu_row++;
-    return (slot < n) ? cand[slot] : -1;
-}
-
 
 
 extern "C" int ap_substitute_bless_price(int vanilla) {
@@ -381,37 +335,6 @@ extern "C" int ap_substitute_bless_price(int vanilla) {
     return it == g_bless_price_map.end() ? vanilla : it->second;
 }
 
-// Has this row's location already been checked?
-static bool bless_row_bought(int vanilla) {
-    int64_t loc = -1;
-    {
-        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
-        auto it = g_bless_price_to_loc.find(vanilla);
-        if (it != g_bless_price_to_loc.end()) loc = it->second;
-    }
-    if (loc < 0) return false;
-    std::lock_guard<std::mutex> lk(g_checked_mtx);
-    return g_checked.count(loc) != 0;
-}
-
-// Price for the AFFORDABILITY compare only — never for the deduction.
-//
-// With blessing effects shuffled, the purchase no longer sets the effect bit,
-// and that bit is what the game uses to grey a row out as already bought. So a
-// bought row stays selectable and would happily take the player's SP again for a
-// check the server has already recorded. Returning an unaffordable price is the
-// least invasive way to close that: the script's own "not enough SP" branch
-// handles it, and the deduction is never reached.
-// Should the formatted price be suppressed for this row? (bought rows render
-// "- [Done]" instead, so the number must not be appended after it.)
-extern "C" int ap_bless_hide_price(int vanilla) {
-    return bless_row_bought(vanilla) ? 1 : 0;
-}
-
-extern "C" int ap_bless_compare_price(int vanilla) {
-    if (bless_row_bought(vanilla)) return 999999999;
-    return ap_substitute_bless_price(vanilla);
-}
 static std::vector<BlessShopItem> g_shop_items;      // sorted by cost, cheap first
 static std::map<int64_t, int> g_loc_bitmap;          // blessing loc -> bit
 static int g_shop_unlock_mode = 0;                   // 0 all, 1 one-per-floor
@@ -443,6 +366,65 @@ static void ap_fire_location(int64_t loc);   // defined with ap_on_check below
 static std::mutex g_bless_mtx;
 static std::map<int, int64_t> g_bless_bit_to_loc;
 static bool g_bless_as_items = false;   // slot_data: are effects in the pool?
+
+// Blessing index -> its AP location (index -> bit: identity up to 6, +2 from 9
+// up; 7/8 are the armor/leggings raval scripts and set no bit).
+static int64_t bless_index_loc(int index) {
+    if (index == 7 || index == 8 || index < 0 || index > 33) return -1;
+    int bit = (index <= 6) ? index : index - 2;
+    std::lock_guard<std::mutex> lk(g_bless_mtx);
+    auto it = g_bless_bit_to_loc.find(bit);
+    return it == g_bless_bit_to_loc.end() ? -1 : it->second;
+}
+
+// The seed's price for a blessing location (shuffled costs), or -1 for vanilla.
+static int shop_cost_for_loc(int64_t loc) {
+    std::lock_guard<std::mutex> lk(g_reg_mtx);
+    for (const auto& si : g_shop_items)
+        if (si.loc == loc) return si.cost;
+    return -1;
+}
+
+// Which blessing is being bought. Every GROWnn.XSO opens with 0x9A IsXXX(nn)
+// and reaches its 0x61 affordability compare a few ops later in the same VM
+// run (CleriaCore menu_re/BLESSING_SHOP.md §1), so the 0x9A hook latches the
+// index and the compare reads it back. Time-boxed: 0x9A runs all over the game,
+// and only a latch set moments before the compare belongs to it.
+static std::atomic<int> g_isxxx_index{-1};
+static std::atomic<unsigned long> g_isxxx_tick{0};
+
+extern "C" void ap_note_bless_index(int index) {
+    g_isxxx_index.store(index);
+    g_isxxx_tick.store(GetTickCount());
+}
+
+static int latched_bless_index() {
+    if (GetTickCount() - g_isxxx_tick.load() > 1000) return -1;
+    return g_isxxx_index.load();
+}
+
+// Price for the AFFORDABILITY compare only — never for the deduction (that one
+// stays keyed on the vanilla price; the world pins vanilla-price twins to one
+// seed price, so it charges the same).
+//
+// Keyed on the blessing itself, not its price: by price, the twin of an already
+// bought row (30000 / 20000 / 8000 are each shared by two blessings) read as
+// bought too and stayed "Not enough SP" for good.
+//
+// With blessing effects shuffled a purchase no longer sets the effect bit, so a
+// bought row stays selectable and would take the SP again for a check the server
+// already has: return an unaffordable price and let the script's own "not
+// enough SP" branch refuse it. With effects NOT shuffled, buying again (after a
+// New Game) is legitimate — it grants the vanilla effect — so it is allowed.
+extern "C" int ap_bless_compare_price(int vanilla) {
+    int64_t loc = bless_index_loc(latched_bless_index());
+    if (loc >= 0) {
+        if (g_bless_as_items && loc_checked(loc)) return 999999999;
+        int cost = shop_cost_for_loc(loc);
+        if (cost >= 0) return cost;
+    }
+    return ap_substitute_bless_price(vanilla);
+}
 
 // Grant a blessing EFFECT (received as an item): set its bit + recompute.
 static void grant_blessing_bit(int bit) {
@@ -1014,74 +996,19 @@ static void enforce_item_cell_invariant() {
 // Unlike a blessing row this one is handled after the handler has already
 // appended the formatted price, because the 0xdd ITEM operand that identifies it
 // is not fetched until then. So we rebuild the entire line, price suffix and all.
-extern "C" void ap_gear_relabel(char* buf, int item_operand, int price) {
-    if (!buf) return;
-    (void)item_operand;                 // unreliable: it is a string, not an id
-    int64_t loc = gear_row_location(price);
-    if (loc < 0) return;
+// What the seed placed at `loc`, as a menu label: "Item", "Owner's Item", with a
+// leading "* " for progression. "" when the location is not scouted yet.
+static std::string menu_label_for_loc(int64_t loc) {
     std::string found;
     int flags = 0;
     {
         std::lock_guard<std::mutex> lk(g_scout_mtx);
         auto f = g_loc_found.find(loc);
-        if (f == g_loc_found.end()) return;      // not scouted: keep vanilla
+        if (f == g_loc_found.end() || f->second.empty()) return "";
         found = f->second;
         auto fl = g_loc_flags.find(loc);
         if (fl != g_loc_flags.end()) flags = fl->second;
     }
-    std::string item = found, who;
-    size_t arrow = found.find("  -> ");
-    if (arrow != std::string::npos) {
-        item = found.substr(0, arrow);
-        who = found.substr(arrow + 5);
-    }
-    std::string out = (!who.empty() && who != g_slot) ? (who + "'s " + item) : item;
-    if (flags & 1) out = "* " + out;
-    bool bought;
-    {
-        std::lock_guard<std::mutex> lk(g_checked_mtx);
-        bought = g_checked.count(loc) != 0;
-    }
-    char tail[32];
-    if (bought) snprintf(tail, sizeof(tail), " - [Done]");
-    else        snprintf(tail, sizeof(tail), " - [SP:]%d", price);
-    out += tail;
-    if (out.size() > 180) out.resize(180);
-    memcpy(buf, out.c_str(), out.size() + 1);
-}
-
-// Rewrite a vanilla statue-menu row to show what the seed placed there.
-//
-// Called from the 0xdd menu hook at the moment the price is fetched: the label
-// the script supplied has already been copied into the handler's buffer, and the
-// formatted price has not been appended yet, so overwriting the buffer here
-// replaces the name and still gets " - [SP:]nnn" tacked on after it.
-//
-// Falls back to the vanilla label (writes nothing) for any row we don't
-// recognise — including the armor/leggings upgrades, whose price is not in the
-// map because they run on the game's own cost ladder.
-//
-// `buf` is the handler's on-stack label buffer; the price string lands 0x12C
-// bytes further up, so the cap is what keeps the two from colliding.
-extern "C" void ap_bless_relabel(char* buf, int vanilla) {
-    if (!buf) return;
-    int64_t loc = -1;
-    {
-        std::lock_guard<std::mutex> lk(g_bless_price_mtx);
-        auto it = g_bless_price_to_loc.find(vanilla);
-        if (it != g_bless_price_to_loc.end()) loc = it->second;
-    }
-    // Not a priced blessing -> it is one of the two gear-upgrade rows, whose
-    // cost comes from the game's 0xDA ladder and so is not in the price map.
-    if (loc < 0) return;
-    std::string found;
-    {
-        std::lock_guard<std::mutex> lk(g_scout_mtx);
-        auto f = g_loc_found.find(loc);
-        if (f == g_loc_found.end()) return;      // not scouted (yet) — keep vanilla
-        found = f->second;
-    }
-    if (found.empty()) return;
     // g_loc_found is "Item  -> Owner". Render someone else's as "Owner's Item".
     std::string item = found, who;
     size_t arrow = found.find("  -> ");
@@ -1089,31 +1016,68 @@ extern "C" void ap_bless_relabel(char* buf, int vanilla) {
         item = found.substr(0, arrow);
         who = found.substr(arrow + 5);
     }
-    std::string out;
-    if (!who.empty() && who != g_slot) out = who + "'s " + item;
-    else                               out = item;
-    // Mark progression so it stands out in a wall of filler. The menu draws
-    // plain text with no markup, so a leading glyph is the only styling
-    // available — the same trick the F5 shop uses.
-    {
-        std::lock_guard<std::mutex> lk(g_scout_mtx);
-        auto f = g_loc_flags.find(loc);
-        if (f != g_loc_flags.end() && (f->second & 1)) out = "* " + out;
-    }
-    if (bless_row_bought(vanilla)) {
-        // Render exactly like the game's own already-bought rows:
-        // "* Devil Medallion - [Done]", with no price after it. The handler
-        // appends the formatted price to this same buffer, so the companion
-        // hook below blanks that string for these rows.
-        out += " - [Done]";
-        if (out.size() > 180) out.resize(180);
-        memcpy(buf, out.c_str(), out.size() + 1);
+    std::string out = (!who.empty() && who != g_slot) ? (who + "'s " + item) : item;
+    // The menu draws plain text, so a leading glyph is the only styling there is.
+    if (flags & 1) out = "* " + out;
+    return out;
+}
+
+// Rewrite one statue-menu row to show what the seed placed there and what it
+// really costs.
+//
+// Called at 0x56A1E7, the last point of the 0xdd handler: `buf` holds the fully
+// assembled row ("<label> - [SP:]<price>", the game's own vanilla price) and
+// `script` is operand 1, the script the row runs — "@GrowAr" / "@GrowLe" for
+// the armor / leggings upgrade, "@GrowNN" for blessing index NN. That name is
+// the row's identity; nothing else in the handler is (see gear_cell_loc).
+//
+//   * Gear rows keep the game's own price: GROWAR/GROWLE charge the raval
+//     ladder (0xb0 + 0x62 compare + 0x6A), which nothing re-prices. Showing a
+//     blessing's seed price on the 1000/3000 rungs was the "Not enough SP to
+//     buy this despite having the SP" report (Discord, Aug 2026). A piece with
+//     no gear location (Chain Mail, Plate Mail, Raval Armor, shields) keeps its
+//     vanilla row instead of borrowing another location's label.
+//   * Blessing rows show their seed price and placed item. A location already
+//     sent shows "[Done]" when effects are shuffled (the row cannot be bought
+//     again); otherwise it reverts to the vanilla row, which re-buys the vanilla
+//     effect — legitimate after a New Game.
+//
+// `buf` is the handler's label buffer; the price string sits 0x12C bytes above
+// it, so the length cap keeps the two apart.
+extern "C" void ap_menu_row(char* buf, const char* script, int vanilla) {
+    if (!buf || !script) return;
+    const char* s = script;
+    if (*s == '@') s++;
+    if (_strnicmp(s, "Grow", 4) != 0) return;          // not a statue-menu row
+    s += 4;
+    bool gear = false;
+    int64_t loc = -1;
+    int price = vanilla;
+    if ((s[0] == 'A' || s[0] == 'a' || s[0] == 'L' || s[0] == 'l') && s[1] && !s[2]) {
+        gear = true;
+        bool armor = (s[0] == 'A' || s[0] == 'a');
+        loc = gear_cell_loc(*(volatile int*)(armor ? kArmorSelAbs : kBootsSelAbs));
+    } else if (s[0] >= '0' && s[0] <= '9' && s[1] >= '0' && s[1] <= '9' && !s[2]) {
+        loc = bless_index_loc((s[0] - '0') * 10 + (s[1] - '0'));
+        int cost = (loc >= 0) ? shop_cost_for_loc(loc) : -1;
+        if (cost >= 0) price = cost;
+    } else {
         return;
     }
-    // The vanilla label ENDS with the " - [SP:]" separator — the handler appends
-    // the formatted price straight onto this buffer — so replacing the whole
-    // string swallowed it and rows rendered as "Celcetan Panacea670".
-    out += " - [SP:]";
+    std::string row(buf);
+    size_t sep = row.find(" - [SP:]");
+    if (sep == std::string::npos) return;             // unknown layout: leave it
+    std::string base = row.substr(0, sep);
+    bool sent = loc_checked(loc);
+    bool done = !gear && sent && g_bless_as_items;
+    if (loc >= 0 && (!sent || done)) {
+        std::string label = menu_label_for_loc(loc);
+        if (!label.empty()) base = label;
+    }
+    char tail[32];
+    if (done) snprintf(tail, sizeof(tail), " - [Done]");
+    else      snprintf(tail, sizeof(tail), " - [SP:]%d", price);
+    std::string out = base + tail;
     if (out.size() > 180) out.resize(180);
     memcpy(buf, out.c_str(), out.size() + 1);
 }
@@ -2324,7 +2288,9 @@ static void update_trackers() {
 // -- overlay blessing shop accessors (UI in shop.cpp) ------------------------- #
 
 static bool shop_item_owned(const BlessShopItem& it) {
-    if ((*(volatile int*)kBlessBitsAbs >> it.bit) & 1) return true;
+    // With effects shuffled the bit is set by RECEIVING the effect item, so it
+    // says nothing about this slot: only the sent check does.
+    if (!g_bless_as_items && ((*(volatile int*)kBlessBitsAbs >> it.bit) & 1)) return true;
     std::lock_guard<std::mutex> lk(g_checked_mtx);
     return g_checked.count(it.loc) != 0;
 }
@@ -2440,6 +2406,15 @@ bool ap_shop_buy(int i) {
         volatile int* sp = (volatile int*)kSpAbs;
         if (*sp < it.cost) return false;
         *sp = *sp - it.cost;
+    }
+    if (g_bless_as_items) {
+        // Effects are pool items: the purchase is ONLY the check. Setting the bit
+        // here granted the vanilla effect for free, and no bit poll exists in
+        // this mode, so the check itself never fired.
+        ap_fire_location(it.loc);
+        mod_log("ap: shop bought '%s' (bit %d, %d SP) -> check only",
+                it.name.c_str(), it.bit, it.cost);
+        return true;
     }
     *(volatile int*)kBlessBitsAbs |= (1 << it.bit);      // purchase bit -> check
     int idx = (it.bit >= 0 && it.bit < 32) ? g_bless_arr_idx[it.bit] : -1;

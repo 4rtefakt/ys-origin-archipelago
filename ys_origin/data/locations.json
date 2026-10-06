@@ -2104,6 +2104,7 @@
   "floor": "",
   "room": "Goddess Statue",
   "name": "Divine Blessing: Strengthen Eyes of Fact",
+  "char": "hugo",
   "detect": {
    "method": "bit",
    "offset": "0x36BC80",
@@ -2164,6 +2165,10 @@
   "floor": "",
   "room": "Goddess Statue",
   "name": "Divine Blessing: Increase stun effect",
+  "char": [
+   "yunica",
+   "toal"
+  ],
   "detect": {
    "method": "bit",
    "offset": "0x36BC80",
