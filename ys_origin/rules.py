@@ -37,6 +37,7 @@ from .data_tables import (
     warp_edge_rules,
     zone_ore_requirements,
     scene_region,
+    split_term,
 )
 
 if TYPE_CHECKING:
@@ -82,9 +83,15 @@ def _req_rule(req: list):
     counter, so a name that is not a real item is simply never satisfied.
     """
     return _all_of(
-        [HasAny(*[_sub(x) for x in t]) if isinstance(t, (list, tuple))
-         else Has(_sub(t)) for t in req]
+        [HasAny(*[_sub(split_term(x)[0]) for x in t]) if isinstance(t, (list, tuple))
+         else _has_term(t) for t in req]
     )
+
+
+def _has_term(term: str):
+    """``"Roda Fruit#3"`` -> Has("Roda Fruit", 3); a bare name -> Has(name)."""
+    name, n = split_term(term)
+    return Has(_sub(name), n) if n > 1 else Has(_sub(name))
 
 
 def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
@@ -144,22 +151,29 @@ def _set_blessing_price_rules(world: "YsOriginWorld") -> None:
 
 
 def _set_location_requires(world: "YsOriginWorld") -> None:
-    """Checks whose story event needs OTHER rooms visited first.
+    """Checks that need more than reaching their own room.
 
-    The Dreaming Idol chain (CleriaCore scripts): Dino's gift needs Feena's
-    S_4017 step (293/294), which only starts once Yunica has been to S_5080
-    (268, S_EVT5080_YUNICA); the S_4017 charging event needs the S_5102 Black
-    Pearl event (269). A single region override cannot say "both rooms", so each
-    listed scene becomes a CanReachRegion term. Scenes this world does not
-    create are skipped, and so are locations it does not have."""
+    Two kinds of term. A scene (``S_xxxx``) must be reachable too: the Dreaming
+    Idol chain (CleriaCore scripts) - Dino's gift needs Feena's S_4017 step
+    (293/294), which only starts once Yunica has been to S_5080 (268,
+    S_EVT5080_YUNICA); the S_4017 charging event needs the S_5102 Black Pearl
+    event (269). A single region override cannot say "both rooms", so each
+    listed scene becomes a CanReachRegion term. Anything else is an item, for a
+    chest inside a reachable room that its own ledge or hidden bridge still
+    gates; it is character-transformed like a room edge. Scenes this world does
+    not create are skipped, and so are locations it does not have."""
     live = set(world._region_names())
-    for loc_name, scenes in LOCATION_REQUIRES.items():
+    char = char_name(world.options)
+    for loc_name, reqs in LOCATION_REQUIRES.items():
         try:
             location = world.get_location(loc_name)
         except KeyError:
             continue
+        scenes = [r for r in reqs if r.startswith("S_")]
+        items = character_req([r for r in reqs if not r.startswith("S_")], char)
         terms = [CanReachRegion(scene_region(s)) for s in scenes
                  if scene_region(s) in live]
+        terms += [_has_term(t) for t in items]
         if terms:
             world.set_rule(location, terms[0] if len(terms) == 1 else And(*terms))
 

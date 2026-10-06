@@ -48,11 +48,13 @@ def test_artifacts_grant_their_skill():
         assert grants[art] == dt.item_index[skill], f"{art} -> wrong cell"
     # the three elemental powers are the known bracelet cells, plus the two
     # MOBILITY pairings (Gold -> 0xA3 double-jump, Silver -> 0xB5 dash), whose
-    # companion cell is a bare g_flags index rather than an item of its own.
-    assert sorted(grants.values()) == [0x74, 0x75, 0x76, 0xA3, 0xB5,
+    # companion cell is a bare g_flags index rather than an item of its own,
+    # and the Evil Ring's drained twin (the one Rado's Annex door wants held).
+    assert sorted(grants.values()) == [0x5E, 0x74, 0x75, 0x76, 0xA3, 0xB5,
                                        0xB6, 0xB7, 0xB8], sorted(grants.values())
     assert grants["Gold Bracelet"] == 0xA3
     assert grants["Silver Bracelet"] == 0xB5
+    assert grants["Evil Ring"] == 0x5E
     # all distinct: a shared cell would make one item silently light up another
     assert len(set(grants.values())) == len(grants)
     # the artifacts themselves stay real items; the bracelets stay out of the pool

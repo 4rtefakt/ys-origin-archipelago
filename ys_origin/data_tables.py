@@ -193,9 +193,10 @@ for _sc in sorted(SCENE_ROOM, key=lambda s: int(s[2:])):
 _room_logic_doc: dict = json.loads(_read_data("data/room_logic.json"))
 _room_logic: dict = _room_logic_doc.get("scenes", {})
 _loc_region_override: Dict[str, str] = _room_logic_doc.get("locations", {})
-# location -> scenes that must ALL be reachable too: checks whose story event
-# needs other rooms visited first (the Dreaming Idol chain spans Silent Sands and
-# Corrupted Blood). Applied as CanReachRegion rules in rules.py.
+# location -> scenes that must ALL be reachable too (checks whose story event
+# needs other rooms visited first: the Dreaming Idol chain spans Silent Sands and
+# Corrupted Blood), and items it needs beyond its room (a chest on a ledge or a
+# hidden bridge). Applied in rules._set_location_requires.
 LOCATION_REQUIRES: Dict[str, List[str]] = {
     k: v for k, v in _room_logic_doc.get("location_requires", {}).items()
     if not k.startswith("_")}
@@ -249,6 +250,13 @@ for _sc in sorted(SCENE_ROOM):
         _add_edge(_zone if _zone in _present else MENU, _dst)
 
 
+def split_term(term: str) -> Tuple[str, int]:
+    """A requirement term is an item name, optionally with a count:
+    ``"Roda Fruit#3"`` -> ("Roda Fruit", 3); a bare name counts once."""
+    name, _, n = term.partition("#")
+    return name, int(n) if n else 1
+
+
 # Every item named in a room-logic requirement MUST be treated as progression,
 # else AP may place it out of logic (as filler/useful) and soft-lock the seed.
 def _collect_gate_items() -> Set[str]:
@@ -256,13 +264,15 @@ def _collect_gate_items() -> Set[str]:
     for _req in EDGE_REQS.values():
         for _term in _req:
             if isinstance(_term, (list, tuple)):
-                out.update(_term)
+                out.update(split_term(x)[0] for x in _term)
             else:
-                out.add(_term)
+                out.add(split_term(_term)[0])
     return out
 
 
 GATE_ITEMS: Set[str] = _collect_gate_items()
+GATE_ITEMS |= {split_term(r)[0] for _reqs in LOCATION_REQUIRES.values()
+               for r in _reqs if not r.startswith("S_")}
 
 # -- character-aware item selection ----------------------------------------- #
 # Yunica / Hugo / Toal climb the SAME tower but receive different equipment
@@ -771,16 +781,31 @@ def scene_floors() -> Dict[str, int]:
 # gets Cleria Ring where Yunica/Hugo get Mask of Eyes (same chest = the
 # hidden-door ability). Lacked items with no substitute are simply RELAXED (the
 # edge becomes free for that character) — AP-safe (only ever more permissive).
-_GATE_SUBST: Dict[str, Dict[str, str]] = {
+# A substitute may be a list: every term in it is required.
+_GATE_SUBST: Dict[str, Dict[str, object]] = {
     # S_EVT1013 (the 4-statue barrier, 3F Transfer Room) never tests the Blue
     # Necklace for Toal: he passes only while Boost is active, and he learns
     # Boost in S_1006 (S_1006.XSO -> KEKKAIZAKO_01 -> GetBOOST, Toal-only), behind
     # the Bronze Key door. Dropping the necklace made the barrier free for him and
     # let fill put the Bronze Key north of it (Discord, Aug 2026).
     "toal": {"Mask of Eyes": "Cleria Ring", "Blue Necklace": "Bronze Key"},
+    # The 11F noise room (S_3009) drains HP until it is silenced. Hugo uses the
+    # Hammer (S_3103/S_USEHAMMER); Yunica plays the Silver Harmonica, which
+    # S_COMMON/USEHARMONICA only allows once the Flames Roo (S_3104) has taught
+    # her Reah's song (flag 362) - the third Roo, so three Roda Fruit, as in
+    # _set_roo_rules. Toal has neither: his Boost slows the drain enough to walk
+    # through, so the gate drops for him.
+    "yunica": {"Hammer": ["Silver Harmonica", "Roda Fruit#3"]},
 }
+
+
+def _subst_terms(v) -> list:
+    return list(v) if isinstance(v, list) else [v]
+
+
 # substitution targets must also count as progression
-GATE_ITEMS |= {v for m in _GATE_SUBST.values() for v in m.values()}
+GATE_ITEMS |= {split_term(t)[0] for m in _GATE_SUBST.values()
+               for v in m.values() for t in _subst_terms(v)}
 
 
 def character_req(req: list, char: str) -> list:
@@ -791,13 +816,13 @@ def character_req(req: list, char: str) -> list:
     for term in req:
         if isinstance(term, (list, tuple)):
             opts = [subst.get(x, x) for x in term]
-            opts = [x for x in opts if item_allowed(x, char)]
+            opts = [x for x in opts if item_allowed(split_term(x)[0], char)]
             if opts:
                 out.append(opts if len(opts) > 1 else opts[0])
         else:
-            x = subst.get(term, term)
-            if item_allowed(x, char):
-                out.append(x)
+            for x in _subst_terms(subst.get(term, term)):
+                if item_allowed(split_term(x)[0], char):
+                    out.append(x)
     return out
 
 
@@ -1330,6 +1355,13 @@ ABILITY_GRANTS: Dict[str, int] = {
     "Emerald": 0xB6,            # wind skill level
     "Ruby": 0xB7,               # fire skill level
     "Topaz": 0xB8,              # thunder skill level
+    # Rado's Annex door (S_4021/LOOK_DOOR) wants the DRAINED ring 0x5E held as
+    # the tool (`Flag_IsEquip(94)`) AND the charged one counted (`93 == 1`) -
+    # vanilla's Zelkaron event sets both (CleriaCore KEY_ITEMS 3.6). Granting
+    # only 0x5D left nothing to hold, so the door could never open for Yunica
+    # or Hugo. Holding it is lethal without the Blue Necklace, exactly as in
+    # vanilla; the door's room logic asks for both.
+    "Evil Ring": 0x5E,
 }
 
 # Ability cells that are COUNTED, not boolean: the three elemental skill levels
@@ -1457,11 +1489,15 @@ def req_satisfied(req: list, state, player) -> bool:
     ``req`` is a list of terms ANDed together; a term that is itself a list is
     an OR-group (any one suffices). Unknown item names are treated as
     unobtainable (so a typo fails closed rather than silently passing)."""
+    def has(t: str) -> bool:
+        name, n = split_term(t)
+        return state.has(name, player, n)
+
     for term in req:
         if isinstance(term, (list, tuple)):
-            if not any(state.has(x, player) for x in term):
+            if not any(has(x) for x in term):
                 return False
-        elif not state.has(term, player):
+        elif not has(term):
             return False
     return True
 

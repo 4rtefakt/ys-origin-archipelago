@@ -98,7 +98,7 @@
           [
             "Blue Necklace"
           ],
-          "up"
+          "oneway"
         ]
       ]
     },
@@ -185,7 +185,7 @@
         [
           "S_1008",
           [],
-          "oneway"
+          "up"
         ]
       ]
     },
@@ -444,7 +444,7 @@
     "S_3002": {
       "from": [
         [
-          "S_3001",
+          "S_3017",
           []
         ]
       ]
@@ -463,11 +463,8 @@
     "S_3004": {
       "from": [
         [
-          "S_3001",
-          [
-            "Red Moon Crest"
-          ],
-          "up"
+          "S_3003",
+          []
         ]
       ]
     },
@@ -482,15 +479,18 @@
     "S_3099": {
       "from": [
         [
-          "S_3005",
-          []
+          "S_3014",
+          [
+            "Construct Medallion"
+          ],
+          "up"
         ]
       ]
     },
     "S_3006": {
       "from": [
         [
-          "S_3099",
+          "S_3004",
           []
         ]
       ]
@@ -498,7 +498,7 @@
     "S_3007": {
       "from": [
         [
-          "S_3006",
+          "S_3018",
           []
         ]
       ]
@@ -506,29 +506,23 @@
     "S_3008": {
       "from": [
         [
-          "S_3007",
-          [
-            "Crimson Lotusblade"
-          ],
-          "up"
+          "S_3103",
+          []
         ]
       ]
     },
     "S_3009": {
       "from": [
         [
-          "S_3008",
-          [
-            "Crimson Lotusblade"
-          ],
-          "up"
+          "S_3015",
+          []
         ]
       ]
     },
     "S_3103": {
       "from": [
         [
-          "S_3009",
+          "S_3100",
           []
         ]
       ]
@@ -544,7 +538,7 @@
     "S_3100": {
       "from": [
         [
-          "S_3009",
+          "S_3005",
           []
         ]
       ]
@@ -552,7 +546,7 @@
     "S_3101": {
       "from": [
         [
-          "S_3100",
+          "S_3010",
           []
         ]
       ]
@@ -560,34 +554,35 @@
     "S_3102": {
       "from": [
         [
-          "S_3101",
-          []
+          "S_3009",
+          [
+            "Hammer"
+          ]
         ]
       ]
     },
     "S_3010": {
       "from": [
         [
-          "S_3101",
-          []
+          "S_3009",
+          [
+            "Hammer"
+          ]
         ]
       ]
     },
     "S_3011": {
       "from": [
         [
-          "S_3010",
-          [
-            "Crimson Lotusblade"
-          ],
-          "up"
+          "S_3101",
+          []
         ]
       ]
     },
     "S_3016": {
       "from": [
         [
-          "S_3011",
+          "S_3080",
           []
         ]
       ]
@@ -595,7 +590,7 @@
     "S_3017": {
       "from": [
         [
-          "S_3016",
+          "S_3001",
           []
         ]
       ]
@@ -611,7 +606,7 @@
     "S_3013": {
       "from": [
         [
-          "S_3011",
+          "S_3012",
           []
         ]
       ]
@@ -619,11 +614,8 @@
     "S_3012": {
       "from": [
         [
-          "S_3013",
-          [
-            "Crimson Lotusblade"
-          ],
-          "up"
+          "S_3011",
+          []
         ]
       ]
     },
@@ -638,7 +630,7 @@
     "S_3015": {
       "from": [
         [
-          "S_3014",
+          "S_3008",
           []
         ]
       ]
@@ -646,18 +638,15 @@
     "S_3080": {
       "from": [
         [
-          "S_3015",
-          [
-            "Construct Medallion"
-          ],
-          "up"
+          "S_3006",
+          []
         ]
       ]
     },
     "S_3097": {
       "from": [
         [
-          "S_3080",
+          "S_3099",
           []
         ]
       ]
@@ -675,17 +664,31 @@
         [
           "S_4000",
           []
+        ],
+        [
+          "S_4003",
+          []
+        ],
+        [
+          "S_4004",
+          []
         ]
       ]
     },
     "S_4003": {
       "from": [
         [
+          "S_4000",
+          []
+        ],
+        [
           "S_4001",
-          [
-            "Mask of Eyes"
-          ],
-          "up"
+          []
+        ],
+        [
+          "S_4002",
+          [],
+          "oneway"
         ]
       ]
     },
@@ -703,18 +706,23 @@
     "S_4004": {
       "from": [
         [
-          "S_4002",
-          [
-            "Gold Bracelet"
-          ],
-          "up"
+          "S_4000",
+          []
+        ],
+        [
+          "S_4001",
+          []
         ]
       ]
     },
     "S_4005": {
       "from": [
         [
-          "S_4002",
+          "S_4100",
+          []
+        ],
+        [
+          "S_4015",
           []
         ]
       ]
@@ -722,18 +730,27 @@
     "S_4015": {
       "from": [
         [
-          "S_4004",
-          [
-            "Gold Bracelet"
-          ],
-          "up"
+          "S_4005",
+          []
+        ],
+        [
+          "S_4018",
+          []
+        ],
+        [
+          "S_4019",
+          []
         ]
       ]
     },
     "S_4007": {
       "from": [
         [
-          "S_4015",
+          "S_4006",
+          []
+        ],
+        [
+          "S_4008",
           []
         ]
       ]
@@ -749,7 +766,12 @@
     "S_4011": {
       "from": [
         [
-          "S_4008",
+          "S_4006",
+          [],
+          "oneway"
+        ],
+        [
+          "S_4012",
           []
         ]
       ]
@@ -757,7 +779,11 @@
     "S_4104": {
       "from": [
         [
-          "S_4008",
+          "S_4014",
+          []
+        ],
+        [
+          "S_4013",
           []
         ]
       ]
@@ -765,7 +791,7 @@
     "S_4020": {
       "from": [
         [
-          "S_4104",
+          "S_4080",
           []
         ]
       ]
@@ -773,7 +799,11 @@
     "S_4013": {
       "from": [
         [
-          "S_4020",
+          "S_4104",
+          []
+        ],
+        [
+          "S_4016",
           []
         ]
       ]
@@ -789,7 +819,11 @@
     "S_4019": {
       "from": [
         [
-          "S_4016",
+          "S_4015",
+          []
+        ],
+        [
+          "S_4014",
           []
         ]
       ]
@@ -797,7 +831,7 @@
     "S_4021": {
       "from": [
         [
-          "S_4019",
+          "S_4016",
           []
         ]
       ]
@@ -807,7 +841,8 @@
         [
           "S_4021",
           [
-            "Evil Ring"
+            "Evil Ring",
+            "Blue Necklace"
           ],
           "up"
         ]
@@ -816,42 +851,74 @@
     "S_4014": {
       "from": [
         [
-          "S_4013",
+          "S_4019",
           []
+        ],
+        [
+          "S_4104",
+          []
+        ],
+        [
+          "S_4006",
+          [],
+          "oneway"
         ]
       ]
     },
     "S_4018": {
       "from": [
         [
-          "S_4011",
-          [
-            "Amber Key"
-          ],
-          "up"
+          "S_4015",
+          []
         ]
       ]
     },
     "S_4010": {
       "from": [
         [
-          "S_4018",
-          []
+          "S_4009",
+          [
+            "Silver Chimes"
+          ],
+          "oneway"
         ]
       ]
     },
     "S_4006": {
       "from": [
         [
-          "S_4018",
+          "S_4014",
+          [
+            "Amber Key"
+          ],
+          "up"
+        ],
+        [
+          "S_4007",
           []
+        ],
+        [
+          "S_4008",
+          []
+        ],
+        [
+          "S_4010",
+          [],
+          "oneway"
+        ],
+        [
+          "S_4011",
+          [
+            "Earth Dragon's Claws"
+          ],
+          "oneway"
         ]
       ]
     },
     "S_4012": {
       "from": [
         [
-          "S_4006",
+          "S_4011",
           []
         ]
       ]
@@ -859,27 +926,40 @@
     "S_4080": {
       "from": [
         [
-          "S_4012",
+          "S_4011",
           [
             "Earth Dragon's Claws"
           ],
           "up"
+        ],
+        [
+          "S_4020",
+          []
         ]
       ]
     },
     "S_4009": {
       "from": [
         [
-          "S_4080",
-          [],
-          "oneway"
+          "S_4006",
+          [
+            "Gold Bracelet"
+          ],
+          "up"
         ]
       ]
     },
     "S_4100": {
       "from": [
         [
-          "S_4080",
+          "S_4004",
+          [
+            "Gold Bracelet"
+          ],
+          "up"
+        ],
+        [
+          "S_4005",
           []
         ]
       ]
@@ -887,7 +967,7 @@
     "S_4099": {
       "from": [
         [
-          "S_4100",
+          "S_4020",
           [
             "Creeper Medallion"
           ],
@@ -1260,10 +1340,11 @@
   "locations": {
     "Wailing Blue: 2F Path 1 #2": "S_1080",
     "Wailing Blue: 2F Path 1 #3": "S_1080",
-    "Wailing Blue: 1F Save — Dreaming Idol": "S_4017"
+    "Wailing Blue: 1F Save — Dreaming Idol": "S_4017",
+    "Silent Sands: Roo End — Roo Trade": "S_4100"
   },
   "location_requires": {
-    "_doc": "location -> scenes that must ALL be reachable too, for checks whose story event depends on other rooms (beyond the room the check sits in).",
+    "_doc": "location -> what it needs beyond its own room: scenes (S_xxxx) that must ALL be reachable too, for checks whose story event depends on other rooms; and items, for a chest its room's ledge or hidden bridge still gates.",
     "Wailing Blue: 1F Save — Dreaming Idol": [
       "S_4017",
       "S_5080"
@@ -1271,6 +1352,18 @@
     "Silent Sands: Rado Inside 4 (Feena) — Dreaming Idol": [
       "S_4017",
       "S_5102"
+    ],
+    "Silent Sands: Mask of Eyes Path": [
+      "Mask of Eyes"
+    ],
+    "Silent Sands: Double Jump #2": [
+      "Gold Bracelet"
+    ],
+    "Silent Sands: 14F Room": [
+      "Gold Bracelet"
+    ],
+    "Silent Sands: 15F Room #2": [
+      "Gold Bracelet"
     ]
   },
   "zone_exits": {

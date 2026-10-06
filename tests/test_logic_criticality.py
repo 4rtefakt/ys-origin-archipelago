@@ -54,12 +54,14 @@ ZONE_MEDALLIONS = frozenset(dt.ZONE_GATE.values()) - {dt.GOAL_ITEM}
 # chests). At least one must genuinely strand a location, per character — the
 # guard that we never demote something actually required. Character-aware: Toal
 # gets Cleria Ring where Yunica/Hugo get Mask of Eyes (the same hidden-door gate).
+# Not the Red Moon Crest: its altar (S_3001 -> S_3003) only raises the steps up
+# to 10F, and every room past it is a warp-reachable walk down from 11F.
 CRITICAL_CORE = {
-    "yunica": {"Mask of Eyes", "Blue Moon Crest", "Red Moon Crest",
+    "yunica": {"Mask of Eyes", "Blue Moon Crest",
                "Water Dragon's Scales", "Evil Ring", "Bronze Key"},
-    "hugo": {"Mask of Eyes", "Blue Moon Crest", "Red Moon Crest",
+    "hugo": {"Mask of Eyes", "Blue Moon Crest",
              "Water Dragon's Scales", "Evil Ring", "Bronze Key"},
-    "toal": {"Cleria Ring", "Blue Moon Crest", "Red Moon Crest",
+    "toal": {"Cleria Ring", "Blue Moon Crest",
              "Water Dragon's Scales", "Bronze Key"},
 }
 

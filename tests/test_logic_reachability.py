@@ -275,15 +275,38 @@ def test_dreaming_idol_checks_follow_the_story():
 
 
 def test_location_requires_name_real_things():
-    """room_logic.json `location_requires`: every key is a real location and
-    every scene a real region (a typo would silently drop the rule)."""
+    """room_logic.json `location_requires`: every key is a real location, every
+    scene a real region and every item a real item (a typo would silently drop
+    the rule, or fail it closed)."""
     names = {l["name"] for l in dt._LOCS}
     regions = set(dt.ALL_REGIONS)
     assert dt.LOCATION_REQUIRES, "the Dreaming Idol chain must be encoded"
-    for loc, scenes in dt.LOCATION_REQUIRES.items():
+    for loc, reqs in dt.LOCATION_REQUIRES.items():
         assert loc in names, loc
-        for s in scenes:
-            assert dt.scene_region(s) in regions, (loc, s)
+        for r in reqs:
+            if r.startswith("S_"):
+                assert dt.scene_region(r) in regions, (loc, r)
+            else:
+                assert dt.split_term(r)[0] in dt.item_index, (loc, r)
+
+
+def test_flames_noise_room_gate_per_character():
+    """S_3009 drains HP until silenced: Hugo's Hammer, Yunica's Silver Harmonica
+    plus the Flames Roo's song (its third Roda Fruit); Toal walks it on Boost."""
+    req = dt.edge_requirements()[(dt.scene_region("S_3009"), dt.scene_region("S_3010"))]
+    assert dt.character_req(req, "hugo") == ["Hammer"]
+    assert dt.character_req(req, "yunica") == ["Silver Harmonica", "Roda Fruit#3"]
+    assert dt.character_req(req, "toal") == []
+    assert "Silver Harmonica" in dt.GATE_ITEMS and "Roda Fruit" in dt.GATE_ITEMS
+
+
+def test_rado_annex_door_needs_ring_and_necklace():
+    """S_4021/LOOK_DOOR: the Evil Ring held is lethal without the Blue Necklace,
+    and the ring must bring its drained twin (0x5E) or the door never opens."""
+    req = dt.edge_requirements()[(dt.scene_region("S_4021"), dt.scene_region("S_4017"))]
+    assert dt.character_req(req, "yunica") == ["Evil Ring", "Blue Necklace"]
+    assert dt.character_req(req, "toal") == ["Bronze Key"]
+    assert dt.skill_grants()["Evil Ring"] == 0x5E
 
 
 def _run_all() -> int:
