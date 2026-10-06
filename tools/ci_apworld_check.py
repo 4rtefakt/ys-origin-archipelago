@@ -80,6 +80,8 @@ FILL_CASES = [
     ("yunica open", {"character": 0, "random_start": 1, "statue_warp_locks": 1,
                      "blessing_costs": 1}),
     ("toal + rooms", {"character": 2, "room_checks": 1, "blessing_costs": 1}),
+    ("shop wide range", {"blessing_costs": 1, "blessing_cost_min": 5000,
+                         "blessing_cost_max": 500000}),
     ("hugo open, all bosses", {"character": 1, "goal": 1, "random_start": 1,
                                "statue_warp_locks": 1, "blessing_costs": 1}),
 ]

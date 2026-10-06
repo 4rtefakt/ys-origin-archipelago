@@ -1199,7 +1199,67 @@ def price_gate_region(rank: float) -> Optional[str]:
     medallion gate — it tracks how deep the player can actually get, warps
     included.
     """
-    fl = price_gate_floor(rank)
+    return floor_gate_region(price_gate_floor(rank))
+
+
+# Absolute SP -> the tower floor a player must reach to plausibly afford it. The
+# rank bands above are relative to the seed's own ladder, so with a wide range
+# (min 5000, max 500000) the "ungated" bottom 38% still reached 25,000 SP.
+# Thresholds follow what the vanilla climb pays out by each zone.
+BLESSING_SP_FLOORS: List[Tuple[int, int]] = [
+    (1_500, 6),      # Flooded Prison
+    (4_000, 10),     # Flames of Guilt
+    (10_000, 14),    # Silent Sands
+    (30_000, 19),    # Corrupted Blood
+    (75_000, 22),    # Demonic Core
+]
+
+
+def sp_gate_floor(sp: int) -> Optional[int]:
+    """Tower floor a purchase totalling `sp` should require (None = none)."""
+    floor: Optional[int] = None
+    for threshold, fl in BLESSING_SP_FLOORS:
+        if sp >= threshold:
+            floor = fl
+    return floor
+
+
+def blessing_slot_floors(prices: Dict[str, int],
+                         ranks: Dict[str, float]) -> Dict[str, Optional[int]]:
+    """Tower floor each blessing slot requires before it is in logic.
+
+    Two rules on top of the slot's own rank band:
+
+    * real money: the SP actually spent gates too (sp_gate_floor), so a wide
+      price range cannot leave a five-figure slot ungated;
+    * tier order: the statue menu lists LVn only after LVn-1 is bought
+      (S_COMMON/GROWMENU.XSO tests IsXXX on the lower tier first), so buying LVn
+      really costs LV1..LVn together, and LVn can never be easier to reach than
+      the tiers below it. Pricing the tiers independently let a cheap LV3 sit in
+      sphere 1 behind two 22F-priced tiers — the "Blue Moon Crest behind level 3
+      of the most expensive item in the store" report (Discord, Aug 2026).
+    """
+    def worst(*floors: Optional[int]) -> Optional[int]:
+        real = [f for f in floors if f]
+        return max(real) if real else None
+
+    out: Dict[str, Optional[int]] = {
+        n: worst(price_gate_floor(ranks[n]), sp_gate_floor(prices[n]))
+        for n in prices}
+    by_bit = {blessing_bit_of(n): n for n in prices}
+    for bits in PROGRESSIVE_BLESSINGS.values():
+        tiers = [by_bit[b] for b in bits if b in by_bit]
+        spent = 0
+        floor: Optional[int] = None
+        for n in tiers:
+            spent += prices[n]
+            floor = worst(floor, out[n], sp_gate_floor(spent))
+            out[n] = floor
+    return out
+
+
+def floor_gate_region(fl: Optional[int]) -> Optional[str]:
+    """Anchor region for tower floor `fl` (None when ungated)."""
     if not fl:
         return None
     # Snap to the deepest anchored floor at or below the target, so a band whose

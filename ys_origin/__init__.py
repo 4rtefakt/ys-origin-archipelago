@@ -111,6 +111,8 @@ class YsOriginWorld(World):
         self.blessing_gates: dict[str, str] = {}
         if o.blessing_costs.value:
             self._roll_blessing_prices()
+        else:
+            self._gate_vanilla_blessing_prices()
 
         # Lean progression (open / warp mode only). The warp network + level
         # scaling makes the climb-gating and room-gating items non-essential to
@@ -368,14 +370,38 @@ class YsOriginWorld(World):
         # second is pinned to it (and keeps its own gate, which is derived from
         # its own rank).
         by_vanilla: dict[int, int] = {}
+        ranks: dict[str, float] = {}
         for i, (loc_name, price) in enumerate(zip(slots, ladder)):
             bit = dt.blessing_bit_of(loc_name)
             if bit is not None:
                 vanilla = dt.vanilla_price_for_bit(bit)
                 price = by_vanilla.setdefault(vanilla, price)
             self.blessing_prices[loc_name] = price
-            rank = 0.0 if len(slots) == 1 else i / (len(slots) - 1)
-            region = dt.price_gate_region(rank)
+            ranks[loc_name] = 0.0 if len(slots) == 1 else i / (len(slots) - 1)
+        # Gate from the slot's rank, the SP it really costs, and — for tiered
+        # blessings — every tier below it (see dt.blessing_slot_floors).
+        floors = dt.blessing_slot_floors(
+            {n: self.blessing_prices[n] for n in slots}, ranks)
+        for loc_name, fl in floors.items():
+            region = dt.floor_gate_region(fl)
+            if region and region in live:
+                self.blessing_gates[loc_name] = region
+
+    def _gate_vanilla_blessing_prices(self) -> None:
+        """Gate the blessing slots at their VANILLA prices (blessing_costs:
+        vanilla). They were left ungated, so fill could park progression in a
+        sphere-1 slot that really costs 30,000 SP, or behind tiers that must be
+        bought first. Same rule as the shuffled roll, minus the rank bands: only
+        the SP actually spent, tiers included. Prices themselves stay vanilla."""
+        active = {n for names in self._active_locations().values() for n in names}
+        slots = dt.blessing_bit_location_names(active)
+        if not slots:
+            return
+        prices = {n: dt.vanilla_price_for_bit(dt.blessing_bit_of(n)) for n in slots}
+        live = set(self._region_names())
+        floors = dt.blessing_slot_floors(prices, {n: 0.0 for n in slots})
+        for loc_name, fl in floors.items():
+            region = dt.floor_gate_region(fl)
             if region and region in live:
                 self.blessing_gates[loc_name] = region
 
