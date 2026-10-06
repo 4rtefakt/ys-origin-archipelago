@@ -1318,6 +1318,10 @@
   "floor": "",
   "room": "Rado Inside 4 (Feena)",
   "name": "Silent Sands: Rado Inside 4 (Feena) — Dreaming Idol",
+  "char": [
+   "yunica",
+   "hugo"
+  ],
   "detect": {
    "method": "flag",
    "offset": "0x36BD54"
@@ -1388,9 +1392,10 @@
   "floor": "1F",
   "room": "1F Save",
   "name": "Wailing Blue: 1F Save — Dreaming Idol",
+  "char": "yunica",
   "detect": {
    "method": "flag",
-   "offset": "0x36BD90"
+   "offset": "0x36BDBC"
   },
   "items": [
    {

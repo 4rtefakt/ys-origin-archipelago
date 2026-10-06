@@ -226,9 +226,12 @@ Per-location overrides (reached from a different room than their scene):
   Crimson 0x66, Dragonbone 0x67, Obsidian 0x6E; Red Moon Crest 0x5C
 
 ### Data fixes found during mapping (apply when authoring)
-1. Flag **0x36C094** is labeled chest "Wailing Blue: 2F Path 1 #3" (Mask of
-   Eyes / Cleria Ring) but is really the **EPONA midboss drop in S_1080**.
-   Re-scene it to S_1080 / "3F Midboss".
+1. **[CORRECTED]** Flag **0x36C094** (g_flags[478]) IS the S_1001/S_BOX03 box
+   flag (Mask of Eyes / Cleria Ring) — S_BOX03.XSO tests and sets 478; the
+   S_1080 chest is a different box (flag 313). The S_1080 region override in
+   room_logic.json is still right, for another reason: box_02 (Bronze Key, 314)
+   and box_03 sit on S_1001's upper ledge, reached only on arrival from S_1080
+   (CleriaCore event_re/FLOOR1_ROUTE_AUDIT.md row 2).
 2. **[DONE]** Added the S_1012 Gemma Room event location (Blue Necklace 0x37,
    scene-method) -> now randomized + suppressed; S_1010 gate switched to
    ["Blue Necklace"]. (TODO: fold this into build_locations.py so a regen keeps

@@ -86,7 +86,8 @@
       "from": [
         [
           "S_1013",
-          []
+          [],
+          "oneway"
         ]
       ]
     },
@@ -183,7 +184,8 @@
       "from": [
         [
           "S_1008",
-          []
+          [],
+          "oneway"
         ]
       ]
     },
@@ -1256,7 +1258,8 @@
   },
   "locations": {
     "Wailing Blue: 2F Path 1 #2": "S_1080",
-    "Wailing Blue: 2F Path 1 #3": "S_1080"
+    "Wailing Blue: 2F Path 1 #3": "S_1080",
+    "Wailing Blue: 1F Save — Dreaming Idol": "S_4017"
   },
   "zone_exits": {
     "Wailing Blue": "S_1097",

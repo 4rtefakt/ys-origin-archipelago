@@ -241,6 +241,39 @@ def test_gated_zones_have_single_incoming_edge():
     assert not multi, f"gated zones with >1 incoming edge (ungated backdoor?): {multi}"
 
 
+def test_wailing_blue_north_needs_the_barrier_item():
+    """S_EVT1013 (the 4-statue barrier, 3F Transfer Room) gates the north half of
+    Wailing Blue: Yunica/Hugo need the Blue Necklace, Toal needs Boost, learnt in
+    S_1006 behind the Bronze Key door. With that item missing, nothing north of
+    the barrier may be reachable — the Discord report was a Blue Necklace placed
+    past the very room it opens (Aug 2026)."""
+    north = {dt.scene_region(s) for s in ("S_1010", "S_1008", "S_1015")}
+    for char, key in (("yunica", "Blue Necklace"), ("hugo", "Blue Necklace"),
+                      ("toal", "Bronze Key")):
+        for weapon_on in (False, True):
+            inv = _full_inventory(char)
+            inv.pop(key, None)
+            reached = _expand(inv, char, weapon_on)
+            leak = sorted(north & reached)
+            assert not leak, (char, weapon_on, key, leak)
+
+
+def test_dreaming_idol_checks_follow_the_story():
+    """Dino's 1F gift (TALKC280) sets flag 296 — flag 285 is an unrelated chat —
+    and only once the S_4017 Feena events set 293/294; it is Yunica's alone. The
+    S_4017 idol (flag 270) is set by Yunica's and Hugo's events, never Toal's."""
+    by_name = {l["name"]: l for l in dt._LOCS}
+    dino = by_name["Wailing Blue: 1F Save — Dreaming Idol"]
+    assert dino["detect"]["offset"] == "0x36BDBC"
+    assert dt.location_for_char(dino, "yunica")
+    assert not dt.location_for_char(dino, "hugo")
+    assert not dt.location_for_char(dino, "toal")
+    assert dt._region_of_location(dino) == dt.scene_region("S_4017")
+    feena = by_name["Silent Sands: Rado Inside 4 (Feena) — Dreaming Idol"]
+    assert [c for c in ("yunica", "hugo", "toal")
+            if dt.location_for_char(feena, c)] == ["yunica", "hugo"]
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

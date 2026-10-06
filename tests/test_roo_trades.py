@@ -150,11 +150,13 @@ def test_roo_vanilla_items_are_real_or_absent():
             for c in ("yunica", "hugo", "toal")} == {
         "yunica": "Battle Armor", "hugo": "Crimson Coat", "toal": "Phantom Mail"}
     # S_3104: TALKRUU_HUGO grants the Hammer, TALKRUU_THOR the Ring of Ease, and
-    # TALKRUU_YUNICA only a BGM, so Yunica follows the generic Hammer path.
+    # TALKRUU_YUNICA only a BGM — so Yunica's slot carries no item (filler). The
+    # Hammer is Hugo's alone: Yunica cures the S_3103 noise with the Harmonica,
+    # and a Hammer in her pool was inert (Discord, Aug 2026).
     assert {c: dt.location_vanilla_item(
                 "Flames of Guilt: Roo Start — Roo Trade", c)
             for c in ("yunica", "hugo", "toal")} == {
-        "yunica": "Hammer", "hugo": "Hammer", "toal": "Ring of Ease"}
+        "yunica": "", "hugo": "Hammer", "toal": "Ring of Ease"}
 
 
 def _run_all():

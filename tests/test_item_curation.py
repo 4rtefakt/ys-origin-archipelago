@@ -227,6 +227,28 @@ def test_suppressed_items_track_active_locations():
     assert dt.suppress_item_indices([], "hugo") == []
 
 
+def test_pool_holds_only_items_the_character_can_use():
+    """A character's pool never carries another character's item.
+
+    Such an item is inert (the Hammer in Yunica's pool — she cures the S_3103
+    noise with the Harmonica; Discord, Aug 2026), and a gate item lands in a pool
+    whose logic never asks for it (Toal's Blue Necklace: S_EVT1013 lets him pass
+    while boosting, never by the necklace). Those slots must pad with filler."""
+    enabled = set(dt.CATEGORIES)
+    for char in ALL_CHARS:
+        bad = sorted({n for n in dt.vanilla_items(enabled, char)
+                      if not dt.item_allowed(n, char)})
+        assert not bad, (char, bad)
+
+
+def test_suppression_still_covers_items_written_to_other_characters():
+    """The pool drops another character's item, but suppression must not: the
+    S_4003 chest writes the drained Evil Ring (0x5E) for every character, Toal
+    included, so it stays in Toal's give-item suppress set."""
+    all_locs = [l["name"] for l in dt._LOCS]
+    assert 0x5E in dt.suppress_give_ids(all_locs, "toal")
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

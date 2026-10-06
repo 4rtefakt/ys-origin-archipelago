@@ -271,6 +271,19 @@ _CHAR_BY_VALUE = {0: "yunica", 1: "hugo", 2: "toal"}
 LOCATION_VARIANTS: Dict[str, List[str]] = {
     l["name"]: [it["name"] for it in l["items"]] for l in _LOCS
 }
+# (location, item name) -> the cell that location's script really writes. Usually
+# item_index[name], but not always: Dino's TALKC280 writes the UNCHARGED Dreaming
+# Idol 0x69, while the pool's "Dreaming Idol" is the charged 0x68 the S_4017
+# event gives. Suppression has to sink the cell the script writes.
+_WRITTEN_CELL: Dict[Tuple[str, str], int] = {}
+for _l in _LOCS:
+    for _it in _l["items"]:
+        try:
+            _cell = int(str(_it.get("id", "")), 16)
+        except ValueError:
+            continue
+        if _cell < 0x200:
+            _WRITTEN_CELL[(_l["name"], _it["name"])] = _cell
 _item_class: Dict[str, str] = {}
 for _l in _LOCS:
     for _it in _l["items"]:
@@ -300,14 +313,27 @@ def item_allowed(name: str, char: str) -> bool:
 
 def location_vanilla_item(loc_name: str, char: str = "hugo") -> str:
     """The vanilla item a location grants the given character — its per-character
-    variant among the chest's items (fallback: the first variant)."""
-    variants = LOCATION_VARIANTS.get(loc_name, [])
-    if len(variants) <= 1:
-        return variants[0] if variants else ""  # single item = shared by all
-    for v in variants:                          # multi = pick the char's variant
+    variant among the chest's items, or "" when none of them is that character's
+    (the pool then pads the slot with filler).
+
+    Never fall back to another character's item: it is inert in their inventory
+    (the Hammer is Hugo's alone — Yunica cures the S_3103 noise with the
+    Harmonica, and TALKRUU_YUNICA gives her a BGM), and a gate item would enter a
+    pool whose logic never asks for it (Toal's Blue Necklace)."""
+    for v in LOCATION_VARIANTS.get(loc_name, []):
         if item_allowed(v, char):
             return v
-    return variants[0]
+    return ""
+
+
+def location_written_item(loc_name: str, char: str = "hugo") -> str:
+    """The item a location's script may WRITE for `char` — what suppression must
+    sink. Broader than location_vanilla_item on purpose: a script can hand a
+    character an item that is not theirs (S_4003/S_BOX01 writes the drained Evil
+    Ring, 0x5E, unconditionally — Toal included), and that store must still be
+    swallowed even though the pool no longer carries the item for them."""
+    variants = LOCATION_VARIANTS.get(loc_name, [])
+    return location_vanilla_item(loc_name, char) or (variants[0] if variants else "")
 
 
 # -- progressive gear (optional, progressive_armor) -------------------------- #
@@ -656,7 +682,7 @@ def suppress_give_ids(active, char: str = "hugo") -> List[int]:
     the g_flags suppress set (see GEM_GIVE_IDS)."""
     out: Set[int] = set()
     for name in active:
-        v = location_vanilla_item(name, char)
+        v = location_written_item(name, char)
         if v in GEM_GIVE_IDS:
             out.add(GEM_GIVE_IDS[v])
         if v in VARIANT_GIVE_IDS:
@@ -753,7 +779,12 @@ def scene_floors() -> Dict[str, int]:
 # hidden-door ability). Lacked items with no substitute are simply RELAXED (the
 # edge becomes free for that character) — AP-safe (only ever more permissive).
 _GATE_SUBST: Dict[str, Dict[str, str]] = {
-    "toal": {"Mask of Eyes": "Cleria Ring"},
+    # S_EVT1013 (the 4-statue barrier, 3F Transfer Room) never tests the Blue
+    # Necklace for Toal: he passes only while Boost is active, and he learns
+    # Boost in S_1006 (S_1006.XSO -> KEKKAIZAKO_01 -> GetBOOST, Toal-only), behind
+    # the Bronze Key door. Dropping the necklace made the barrier free for him and
+    # let fill put the Bronze Key north of it (Discord, Aug 2026).
+    "toal": {"Mask of Eyes": "Cleria Ring", "Blue Necklace": "Bronze Key"},
 }
 # substitution targets must also count as progression
 GATE_ITEMS |= {v for m in _GATE_SUBST.values() for v in m.values()}
@@ -874,6 +905,17 @@ def _region_of_location(l: dict) -> str:
     return zone if zone in _present else MENU
 
 
+def location_for_char(loc: dict, char: str) -> bool:
+    """Does `loc` exist for `char`? ``char`` absent = every character; a string or
+    a list names the only characters whose scripts can ever set its detect flag
+    (a location no script sets for the chosen character could never be sent, and
+    fill might hide another player's progression on it)."""
+    who = loc.get("char")
+    if not who:
+        return True
+    return char in ([who] if isinstance(who, str) else who)
+
+
 def locations_by_region(enabled: Set[str], char: str = "") -> Dict[str, List[str]]:
     """Active locations grouped by region.
 
@@ -888,7 +930,7 @@ def locations_by_region(enabled: Set[str], char: str = "") -> Dict[str, List[str
     for l in _LOCS:
         if l["type"] not in enabled:
             continue
-        if char and l.get("char") and l["char"] != char:
+        if char and not location_for_char(l, char):
             continue
         out[_region_of_location(l)].append(l["name"])
     return dict(out)
@@ -1270,11 +1312,14 @@ def suppress_item_indices(active, char: str = "hugo") -> List[int]:
     """
     out: Set[int] = set()
     for name in active:
-        vanilla = location_vanilla_item(name, char)
+        vanilla = location_written_item(name, char)
         if not vanilla:
             continue
         if vanilla in item_index:
             out.add(item_index[vanilla])
+        written = _WRITTEN_CELL.get((name, vanilla))
+        if written is not None and written != item_index.get(vanilla):
+            out.add(written)          # the cell the script writes, if different
         power = skill_grants().get(vanilla)
         if power is not None:
             out.add(power)
