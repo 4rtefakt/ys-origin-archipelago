@@ -1359,10 +1359,12 @@ ABILITY_GRANTS: Dict[str, int] = {
     # catalog dropped them as junk "hex placeholder" items and their eight chests
     # were left with an empty vanilla-item list; the chest then handed out the
     # real skill upgrade on top of the AP item (seen live on the 4F Emerald).
-    # Names from the guide: Emerald powers Wind, Ruby Fire, Topaz Thunder.
+    # Names from the guide: Emerald powers Wind, Topaz Thunder, Ruby Fire. The
+    # cells follow the altars (S_2009 thunder zeroes 0xB7, S_3007 fire 0xB8) and
+    # the gem chests' own text (0x81 names skill 117, 0x82 skill 118).
     "Emerald": 0xB6,            # wind skill level
-    "Ruby": 0xB7,               # fire skill level
-    "Topaz": 0xB8,              # thunder skill level
+    "Topaz": 0xB7,              # thunder skill level
+    "Ruby": 0xB8,               # fire skill level
     # Rado's Annex door (S_4021/LOOK_DOOR) wants the DRAINED ring 0x5E held as
     # the tool (`Flag_IsEquip(94)`) AND the charged one counted (`93 == 1`) -
     # vanilla's Zelkaron event sets both (CleriaCore KEY_ITEMS 3.6). Granting

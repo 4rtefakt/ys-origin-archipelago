@@ -185,6 +185,15 @@ def test_cleaned_chests_seed_filler():
         assert dt.location_vanilla_item(loc) == gem, loc
 
 
+def test_gems_raise_their_own_element():
+    """A gem's level cell is the one its progressive chain names: the Ruby/Topaz
+    rename swapped the names everywhere but ABILITY_GRANTS, which went unseen
+    because progressive skills keep the bare gems out of the pool."""
+    for prog, d in dt.PROGRESSIVE_SKILLS.items():
+        assert dt.ABILITY_GRANTS[d["gem"]] == d["level_cell"], prog
+    assert dt.GEM_GIVE_IDS == {"Emerald": 0x80, "Topaz": 0x81, "Ruby": 0x82}
+
+
 def test_suppressed_items_include_the_skill_power_cells():
     """The elemental power cells must be suppressed, not just the artifacts.
 
