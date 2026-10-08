@@ -19,7 +19,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PKG = REPO / "ys_origin"
 
-WORLD_VERSION = "2.0.0"
+WORLD_VERSION = "2.0.1"
 MIN_AP_VERSION = "0.6.7"  # Rule Builder: verified present in the 0.6.7 release tag
 
 MANIFEST = {

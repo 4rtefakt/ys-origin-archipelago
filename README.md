@@ -184,6 +184,10 @@ overlay.
   since the last statue. It waits for a safe moment (you in control, not in a
   cutscene or a sealed fight). `autosave_slot=N` in `yso_ap.cfg` picks another
   slot (1-64); `autosave_slot=0` turns it off.
+- **Borderless window** — the game only has windowed and exclusive fullscreen.
+  With `borderless=1` in `yso_ap.cfg` and the game in Windowed mode, the mod
+  drops the window frame and fills the monitor (set the game's resolution to
+  your screen's).
 - **Blessing cost rando + F5 shop** — with `blessing_costs: shuffled`, the mod
   runs its OWN shop overlay (F5): blessings at seed-randomized SP prices, each
   listed with the multiworld item it holds. Buying deducts SP and grants the
