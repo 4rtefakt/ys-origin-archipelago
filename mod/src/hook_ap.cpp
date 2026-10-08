@@ -1562,7 +1562,8 @@ static void on_slot_connected(const nlohmann::json& sd) {
     // goal gate) dead until the player walked through a door.
     {
         int sc = read_current_scene();
-        g_saw_gameplay = (sc >= 1000 && sc <= 6999);
+        g_saw_gameplay = (sc >= 1000 && sc <= 6999) ||
+                         (sc >= 7000 && sc < 8000 && read_level() >= 2);
     }
     g_applied_through = -1;
     {   // the ReceivedItems replay below re-grants everything -> rebuild from scratch
@@ -2135,7 +2136,12 @@ static void poll_scene() {
     // Real gameplay reached (the intro's cutscene scenes are 2 / 7xxx, and play
     // BEFORE any of these) -> the ending scene can now be trusted as an ending
     // rather than a New-Game intro. Gates the goal check below.
-    if (scene >= 1000 && scene <= 6999) g_saw_gameplay = true;
+    // The summit is 7xxx as well: a save loaded straight into S_7000 is
+    // gameplay (Toal's intro there runs at level 1), or neither the goal scene
+    // nor the autosave would ever be trusted in that session.
+    if ((scene >= 1000 && scene <= 6999) ||
+        (scene >= 7000 && scene < 8000 && !toal_intro && read_level() >= 2))
+        g_saw_gameplay = true;
 
     // Goal: entering the ending scene marks the slot as GOALed so the multiworld
     // releases/completes properly. g_saw_gameplay gates it so the shared 7xxx
