@@ -65,6 +65,9 @@ def _all_of(terms: list):
 _SKILL_SUBST = {str(d["artifact"]): prog for prog, d in PROGRESSIVE_SKILLS.items()}
 
 
+# The three elemental artifacts Dalles' barriers demand (see the completion rule).
+DALLES_SKILLS = ("Cerulean Flabellum", "Levinstrike Warhammer", "Crimson Lotusblade")
+
 # Set once at the top of set_rules; empty when the option is off. Module-level so
 # the two rule builders below need no signature change.
 _ACTIVE_SUBST: dict = {}
@@ -306,7 +309,12 @@ def set_completion_condition(world: "YsOriginWorld") -> None:
     # OPEN_THE_DOOR consumes it to open the way to S_6099 -> S_6097 -> the summit
     # (S_7000), where the final fight has no further gate. Holding the medallion
     # did not prove that door was reachable.
-    rule = And(Has(GOAL_ITEM), CanReachRegion(scene_region("S_6097")))
+    #
+    # Dalles (every character fights him at the summit; Toal goes on to Darm)
+    # raises three barriers in his second form, each broken only by its own
+    # element, so the fight cannot be won without all three skills.
+    rule = And(Has(GOAL_ITEM), CanReachRegion(scene_region("S_6097")),
+               *(Has(_sub(a)) for a in DALLES_SKILLS))
     if world.options.goal.value == world.options.goal.option_defeat_all_bosses:
         # Every floor boss's arena must be reachable as well; the mod sends the
         # goal only once all of them are dead (g_flags[220..225]) and the final

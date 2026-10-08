@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from Options import (
     Choice, DeathLink, DefaultOnToggle, OptionDict, OptionList,
-    PerGameCommonOptions, Range, Toggle, Visibility,
+    PerGameCommonOptions, Range, StartInventoryPool, Toggle, Visibility,
 )
 
 
@@ -441,3 +441,4 @@ class YsOriginOptions(PerGameCommonOptions):
     item_classification_overrides: ItemClassificationOverrides
     trap_count: TrapCount
     death_link: DeathLink
+    start_inventory_from_pool: StartInventoryPool

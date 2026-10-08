@@ -94,12 +94,40 @@ static LRESULT CALLBACK hk_WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return CallWindowProc(o_WndProc, hwnd, msg, wp, lp);
 }
 
+extern "C" int ap_cfg_borderless();   // yso_ap.cfg borderless=1 (hook_ap.cpp)
+
+// The game has windowed and exclusive fullscreen but no borderless mode. In
+// windowed mode, drop the frame and stretch the window over its monitor; with
+// the game's resolution set to the monitor's this is borderless fullscreen.
+static void make_borderless(IDirect3DDevice9* dev, HWND wnd) {
+    IDirect3DSwapChain9* sc = nullptr;
+    D3DPRESENT_PARAMETERS pp{};
+    if (FAILED(dev->GetSwapChain(0, &sc)) || !sc) return;
+    HRESULT hr = sc->GetPresentParameters(&pp);
+    sc->Release();
+    if (FAILED(hr) || !pp.Windowed) return;        // exclusive fullscreen: leave it
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoA(MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+    LONG style = GetWindowLongA(wnd, GWL_STYLE);
+    style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+    SetWindowLongA(wnd, GWL_STYLE, style | WS_POPUP);
+    SetWindowPos(wnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+                 mi.rcMonitor.right - mi.rcMonitor.left,
+                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                 SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+    mod_log("borderless: window stretched to %ldx%ld at (%ld,%ld)",
+            mi.rcMonitor.right - mi.rcMonitor.left,
+            mi.rcMonitor.bottom - mi.rcMonitor.top, mi.rcMonitor.left, mi.rcMonitor.top);
+}
+
 static void imgui_init(IDirect3DDevice9* dev) {
     mod_log("imgui_init: begin (dev=%p)", (void*)dev);
     D3DDEVICE_CREATION_PARAMETERS cp{};
     dev->GetCreationParameters(&cp);
     g_hwnd = cp.hFocusWindow;
     mod_log("imgui_init: hFocusWindow=%p", (void*)g_hwnd);
+    if (ap_cfg_borderless()) make_borderless(dev, g_hwnd);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();

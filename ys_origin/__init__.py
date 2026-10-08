@@ -221,6 +221,7 @@ class YsOriginWorld(World):
                 and cls == ItemClassification.progression
                 and name != dt.GOAL_ITEM
                 and name != dt.CLERIA_ORE
+                and name not in dt.PROGRESSIVE_SKILLS   # Dalles needs all three
                 and name not in dt.STATUE_UNLOCKS):
             cls = ItemClassification.useful
         # Player override wins over every default above (incl. the promotions):

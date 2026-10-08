@@ -66,6 +66,8 @@ extern "C" int g_cutscene_skip_mode;
 // new seed to re-pace. Only meaningful while level_scaling is on (mode 2 or 3).
 static int g_cfg_exp_base_mult = -1;
 static int g_cfg_exp_catchup_mult = -1;
+static int g_borderless = 0;      // cfg borderless=1: windowed mode fills the monitor
+extern "C" int ap_cfg_borderless() { return g_borderless; }
 static int g_autosave_slot = 8;   // cfg autosave_slot: 1..64, 0 = off (see autosave)
 
 extern "C" void saveredir_config(int enabled, const char* pattern);
@@ -129,6 +131,8 @@ static void load_config() {
                   "# autosave_slot=8   # save slot (1-64) the mod autosaves to after a\n"
                   "#                   # check, a received item, a door or a Panacea.\n"
                   "#                   # 0 = no autosave.\n"
+                  "# borderless=1      # in Windowed mode, drop the window frame and fill\n"
+                  "#                   # the monitor (set the game's resolution to match)\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
                   "# cutscene_skip=1   # 0 off, 1 hold Right-Ctrl to fast-forward,\n"
@@ -163,6 +167,7 @@ static void load_config() {
         else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
         else if (!strcmp(key, "save_redirect")) { saveredir_config(atoi(val), nullptr); }
         else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
+        else if (!strcmp(key, "borderless")) { g_borderless = atoi(val) != 0; }
         else if (!strcmp(key, "autosave_slot")) {
             int n = atoi(val);
             g_autosave_slot = (n >= 0 && n <= 64) ? n : 8;
@@ -1552,7 +1557,13 @@ static void on_slot_connected(const nlohmann::json& sd) {
         g_flag_fired.clear();
     }
     g_goal_sent = false;
-    g_saw_gameplay = false;
+    // A reconnect in the middle of a room is still gameplay: poll_scene only
+    // sets this on a room CHANGE, so clearing it here left the autosave (and the
+    // goal gate) dead until the player walked through a door.
+    {
+        int sc = read_current_scene();
+        g_saw_gameplay = (sc >= 1000 && sc <= 6999);
+    }
     g_applied_through = -1;
     {   // the ReceivedItems replay below re-grants everything -> rebuild from scratch
         std::lock_guard<std::mutex> lk(g_gear_mtx);
@@ -1939,7 +1950,7 @@ static void apply_items(const std::list<APClient::NetworkItem>& items) {
                 remember_gear(idx, tier);   // survive save/load wipes
             }
             if (!granted)
-                mod_log("ap: '%s' — all tiers owned, no-op", name.c_str());
+                mod_log("ap: '%s' #%d — those tiers are already owned", name.c_str(), n);
         } else if (su != g_statue_item_idx.end()) {
             // Statue warp unlock: fully activate that statue immediately so it's
             // warpable right away (no need to revisit it). Stop clearing its warp
