@@ -690,9 +690,12 @@ extern "C" void cutscene_ff_poll() {
 
     // F9 (edge-triggered) = manually force-spawn, for testing the warp without
     // replaying the intro.
+    // GetAsyncKeyState is global: only while the game has focus.
     static bool f9_prev = false;
     bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
-    if (f9 && !f9_prev) request_force_spawn();
+    DWORD fg_pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &fg_pid);
+    if (f9 && !f9_prev && fg_pid == GetCurrentProcessId()) request_force_spawn();
     f9_prev = f9;
 }
 
