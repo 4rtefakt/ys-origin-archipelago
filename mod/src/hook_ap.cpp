@@ -36,6 +36,7 @@
 #include <vector>
 
 void mod_log(const char* fmt, ...);
+extern "C" void ap_request_autosave();   // defined with the autosave block
 extern "C" void set_pending_box(int art_id, const char* name);  // relabel box (hook_vm.cpp)
 namespace overlay {
 void push_item(const std::string& text);
@@ -65,6 +66,7 @@ extern "C" int g_cutscene_skip_mode;
 // new seed to re-pace. Only meaningful while level_scaling is on (mode 2 or 3).
 static int g_cfg_exp_base_mult = -1;
 static int g_cfg_exp_catchup_mult = -1;
+static int g_autosave_slot = 8;   // cfg autosave_slot: 1..64, 0 = off (see autosave)
 
 extern "C" void saveredir_config(int enabled, const char* pattern);
 extern bool g_statue_lock[0x200]; // locked statue activation flags (suppress purify)
@@ -124,6 +126,9 @@ static void load_config() {
                   "#                   # the normal saves (vanilla saves stay untouched).\n"
                   "#                   # 0 = write the regular save files as usual.\n"
                   "# save_pattern=.bin # filename substring that marks a save file\n"
+                  "# autosave_slot=8   # save slot (1-64) the mod autosaves to after a\n"
+                  "#                   # check, a received item, a door or a Panacea.\n"
+                  "#                   # 0 = no autosave.\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
                   "# cutscene_skip=1   # 0 off, 1 hold Right-Ctrl to fast-forward,\n"
@@ -158,6 +163,10 @@ static void load_config() {
         else if (!strcmp(key, "autoconnect")) { g_autoconnect = atoi(val) != 0; }
         else if (!strcmp(key, "save_redirect")) { saveredir_config(atoi(val), nullptr); }
         else if (!strcmp(key, "save_pattern")) { saveredir_config(-1, val); }
+        else if (!strcmp(key, "autosave_slot")) {
+            int n = atoi(val);
+            g_autosave_slot = (n >= 0 && n <= 64) ? n : 8;
+        }
         else if (!strcmp(key, "goal_scene")) {
             // comma-separated list, e.g. goal_scene=7002,7010 (one per route).
             g_goal_scenes.clear();
@@ -1374,6 +1383,7 @@ static void report_withheld() {
 void ap_on_check(int flag_idx) {
     if (flag_idx < 0 || flag_idx >= 0x200) return;
     g_last_check_tick.store(GetTickCount());
+    ap_request_autosave();
     std::vector<int64_t> locs;
     {
         std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
@@ -1884,6 +1894,7 @@ static void apply_items(const std::list<APClient::NetworkItem>& items) {
     for (const auto& it : items)
         if (it.index > g_applied_through) fresh++;
     bool batch = fresh > 6;
+    bool fresh_new = false;      // anything this save has not seen: autosave
     for (const auto& it : items) {
         if (it.index <= g_applied_through) continue;  // already applied this run
         // A replay is an item we granted in an EARLIER session (the server
@@ -1891,6 +1902,7 @@ static void apply_items(const std::list<APClient::NetworkItem>& items) {
         // rebuilds — g_flags ownership, the gear watermark, statue unlocks, the
         // weapon tier — but skip the effects that would stack a second time.
         const bool replay = (it.index <= g_replay_through);
+        if (!replay) fresh_new = true;
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
         std::string from = it.player == g_ap->get_player_number()
                                ? std::string(g_slot)
@@ -2022,6 +2034,7 @@ static void apply_items(const std::list<APClient::NetworkItem>& items) {
     }
     save_replay_through(g_applied_through);   // one write per batch, not per item
     g_roda_ready = true;
+    if (fresh_new) ap_request_autosave();
     if (batch) {
         char buf[64];
         snprintf(buf, sizeof(buf), "Received %d items", fresh);
@@ -2157,6 +2170,7 @@ static void poll_scene() {
         g_checks.insert(g_checks.end(), fire.begin(), fire.end());
     }
     for (int64_t loc : fire) toast_loc(loc);
+    ap_request_autosave();
 }
 
 // Drop locations the server already has. The polled methods (bit, value, floor,
@@ -2175,6 +2189,7 @@ static void drop_checked(std::vector<int64_t>& fire) {
 static void fire_poll_locs(std::vector<int64_t> fire) {
     drop_checked(fire);
     if (fire.empty()) return;
+    ap_request_autosave();
     {
         std::lock_guard<std::mutex> lk(g_check_mtx);
         g_checks.insert(g_checks.end(), fire.begin(), fire.end());
@@ -2779,6 +2794,71 @@ extern "C" void request_force_spawn() { g_warp_request.store(true); }
 
 // Apply pending stat changes on the GAME's main thread (called from the D3D9
 // EndScene hook). Uses the game's own fns so EXP/threshold/stats stay consistent.
+// -- autosave ------------------------------------------------------------------ #
+// Write the game's own save to a fixed slot after anything worth keeping: a
+// check sent, an AP item received, a door opened (a script zeroing a key item),
+// a Celcetan Panacea drunk. Items live only in memory until the next save, so a
+// crash or a death used to cost whatever arrived since the last statue.
+//
+// The writer is the save menu's own: FUN_0042e9a0(ecx = "yso_NN.bin"), which
+// snapshots the player (SaveContData, FUN_00443d70) and writes the 0x1fc8-byte
+// record; both of its callers set the slot byte 0x74ac3e first (CleriaCore
+// SAVELOAD.md 3.1 / 4). File index = page*8 + row, so slot 8 is yso_07.bin.
+//
+// A request only marks the time. The write happens on the main thread once the
+// moment is safe: a real room that has been loaded for a second, a player
+// entity, control in the player's hands (185 == 1; scripts hold it at 0 while
+// they run) and no fight gate or arena lock (156 / 190), so a load never lands
+// mid-cutscene or sealed inside a boss room.
+static std::atomic<unsigned long> g_autosave_req{0};
+typedef void (__fastcall* SaveWriteFn)(char* name);
+static const SaveWriteFn kSaveWrite = (SaveWriteFn)0x0042E9A0;
+static const uintptr_t kSaveSlotByteAbs = 0x0074AC3E;
+static const unsigned long kAutosaveSettleMs = 1500;
+
+extern "C" void ap_request_autosave() {
+    if (g_autosave_slot > 0 && g_slot_live)
+        g_autosave_req.store(GetTickCount() | 1);     // never 0 (= none pending)
+}
+
+// Main thread only (exp_scaling_on_frame).
+static void autosave_on_frame() {
+    unsigned long req = g_autosave_req.load();
+    if (!req) return;
+    static int s_scene = -1;
+    static unsigned long s_scene_tick = 0;
+    unsigned long now = GetTickCount();
+    int scene = read_current_scene();
+    if (scene != s_scene) { s_scene = scene; s_scene_tick = now; }
+    if (now - req < kAutosaveSettleMs || now - s_scene_tick < 1000) return;
+    if (scene < 1000 || scene > 7999 || !g_saw_gameplay) return;
+    if (!*kPlayerEntPtr || read_hp() == 0) return;
+    const volatile int* f = (const volatile int*)kGFlagsAbs;
+    if (f[185] != 1 || f[156] != 0 || f[190] != 0) return;
+    if (!g_autosave_req.compare_exchange_strong(req, 0)) return;   // a newer request: wait again
+    char name[16];
+    snprintf(name, sizeof(name), "yso_%02d.bin", g_autosave_slot - 1);
+    *(volatile char*)kSaveSlotByteAbs = (char)(g_autosave_slot - 1);
+    kSaveWrite(name);
+    mod_log("autosave: wrote %s (scene %d)", name, scene);
+    char msg[48];
+    snprintf(msg, sizeof(msg), "Autosaved to slot %d", g_autosave_slot);
+    overlay::push_item(msg);
+}
+
+// Poll thread: a Panacea drunk is the cell dropping while nothing else moved.
+static void poll_panacea_use() {
+    static int s_prev = -1, s_scene = -1;
+    static char* s_ent = nullptr;
+    int scene = read_current_scene();
+    char* ent = *kPlayerEntPtr;
+    int cur = *(volatile int*)(kGFlagsAbs + 0x59 * 4);
+    if (scene > 0 && scene == s_scene && ent && ent == s_ent && s_prev > 0 &&
+        cur == s_prev - 1)
+        ap_request_autosave();
+    s_prev = cur; s_scene = scene; s_ent = ent;
+}
+
 extern "C" void exp_scaling_on_frame() {
     // Random-start force-spawn: skip the WHOLE intro. The moment New Game starts
     // its opening (scene 2 seen) and a player entity exists, warp straight to the
@@ -2871,6 +2951,7 @@ extern "C" void exp_scaling_on_frame() {
     // grant — writing g_flags alone leaves the effect unapplied. Main thread, so
     // the read-modify-write of the dirty bitfield is safe.
     apply_pending_recalc();
+    autosave_on_frame();
 
     // Weapon upgrade (Cleria Ore) + the Butterfingers trap. Re-enforce if a save
     // load reset g_flags[0x94] below what we applied.
@@ -2963,6 +3044,7 @@ static void poll_loop() {
             reconcile_gear();   // re-assert granted gear a save/load reset
             reconcile_roda_fruit();
             report_withheld();
+            poll_panacea_use();
             exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;

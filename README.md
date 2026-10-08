@@ -178,6 +178,12 @@ overlay.
   AP runs never touch your vanilla saves, and each multiworld keeps its own
   save set. Vanilla/offline play is unaffected (`save_redirect=0` in
   `yso_ap.cfg` disables it).
+- **Autosave** — the mod writes the game's own save to **slot 8** after every
+  check sent, AP item received, door opened with a key or medallion, and
+  Celcetan Panacea used, so a crash or a death no longer costs what arrived
+  since the last statue. It waits for a safe moment (you in control, not in a
+  cutscene or a sealed fight). `autosave_slot=N` in `yso_ap.cfg` picks another
+  slot (1-64); `autosave_slot=0` turns it off.
 - **Blessing cost rando + F5 shop** — with `blessing_costs: shuffled`, the mod
   runs its OWN shop overlay (F5): blessings at seed-randomized SP prices, each
   listed with the multiworld item it holds. Buying deducts SP and grants the

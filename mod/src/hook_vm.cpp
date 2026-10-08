@@ -26,6 +26,7 @@ void mod_log(const char* fmt, ...);
 void bridge_emit(const char* line);
 void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
 extern "C" void ap_note_withheld(int idx);   // a suppressed item store (hook_ap.cpp)
+extern "C" void ap_request_autosave();       // hook_ap.cpp
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
 extern bool g_supp_give[0x200];  // ITEM ids the give-item op must swallow
@@ -108,6 +109,10 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         return &g_sink;                    // suppress (player gets the AP item)
     }
 
+    // A script zeroing a key item the player holds is that item being used:
+    // UseKey on a door (medallions, keys), the Hammer on the pillar.
+    if (val == 0 && idx >= 0x48 && idx <= 0x73 && *addr >= 1)
+        ap_request_autosave();
     return addr;  // pass through unchanged
 }
 
