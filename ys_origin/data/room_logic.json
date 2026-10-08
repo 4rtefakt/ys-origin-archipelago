@@ -31,7 +31,21 @@
     "the #2 chest and the S_3005 exit, both also wind-jumps) and S_3011/3012/3013",
     "(the barrier on the S_3012 medallion chest). The S_2008 ward's seeds are",
     "Menoak (ENEMYINFO resist 1/-1/-5/1): only fire or thunder hurts them, and",
-    "the ward stands in front of the S_2015 door."
+    "the ward stands in front of the S_2015 door.",
+    "",
+    "UNDEAD WARDS: the revive family (M430 Zeruena, M560 Karon, M570 Zarue, M670",
+    "Bazeraena, M780 Zelkaron) only stays dead under the Silver Chimes. Two wards",
+    "are held by it: S_4009 (Zarue, the pit to S_4010) and S_5080 (four Zeruena;",
+    "kekkai_01 at x -66 stands between the entrance and both the Dragonbone Key",
+    "chest at x -120 and the EVT_5080 story trigger at x -70). S_4014's Zelkarons",
+    "guard no path.",
+    "",
+    "FROM THE WALKTHROUGH (all three characters' routes agree; geometry, so no",
+    "script or object flag shows it): 18F's spike-and-gate room S_5001 is three",
+    "double-jumps from its entrance; the 22F Roda Fruit chest is a double-jump",
+    "plus wind across a gap; the last Roo stands on a ledge a double-jump away;",
+    "the 10F Roda Fruit chest sits on a platform raised by a switch that only the",
+    "Mask of Eyes bridge reaches."
   ],
   "scenes": {
     "S_1000": {
@@ -1016,7 +1030,10 @@
       "from": [
         [
           "S_5000",
-          []
+          [
+            "Gold Bracelet"
+          ],
+          "up"
         ]
       ]
     },
@@ -1368,7 +1385,8 @@
     "_doc": "location -> what it needs beyond its own room: scenes (S_xxxx) that must ALL be reachable too, for checks whose story event depends on other rooms; and items, for a chest its room's ledge or hidden bridge still gates.",
     "Wailing Blue: 1F Save — Dreaming Idol": [
       "S_4017",
-      "S_5080"
+      "S_5080",
+      "Silver Chimes"
     ],
     "Silent Sands: Rado Inside 4 (Feena) — Dreaming Idol": [
       "S_4017",
@@ -1395,6 +1413,19 @@
     ],
     "Flames of Guilt: Bridge Room 2": [
       "Crimson Lotusblade"
+    ],
+    "Corrupted Blood: Boss Room": [
+      "Silver Chimes"
+    ],
+    "Flames of Guilt: 10F Path 2": [
+      "Mask of Eyes"
+    ],
+    "Demonic Core: 22F Path 2": [
+      "Gold Bracelet",
+      "Cerulean Flabellum"
+    ],
+    "Demonic Core: 22F Mirror Path — Roo Trade": [
+      "Gold Bracelet"
     ]
   },
   "zone_exits": {

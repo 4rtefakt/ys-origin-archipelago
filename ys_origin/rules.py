@@ -162,20 +162,28 @@ def _set_location_requires(world: "YsOriginWorld") -> None:
     chest inside a reachable room that its own ledge or hidden bridge still
     gates; it is character-transformed like a room edge. Scenes this world does
     not create are skipped, and so are locations it does not have."""
-    live = set(world._region_names())
-    char = char_name(world.options)
-    for loc_name, reqs in LOCATION_REQUIRES.items():
+    for loc_name in LOCATION_REQUIRES:
+        if loc_name in ROO_LOCATIONS:
+            continue                      # folded into the fruit rule
         try:
             location = world.get_location(loc_name)
         except KeyError:
             continue
-        scenes = [r for r in reqs if r.startswith("S_")]
-        items = character_req([r for r in reqs if not r.startswith("S_")], char)
-        terms = [CanReachRegion(scene_region(s)) for s in scenes
-                 if scene_region(s) in live]
-        terms += [_has_term(t) for t in items]
+        terms = _location_require_terms(world, loc_name)
         if terms:
             world.set_rule(location, terms[0] if len(terms) == 1 else And(*terms))
+
+
+def _location_require_terms(world: "YsOriginWorld", loc_name: str) -> list:
+    """The LOCATION_REQUIRES entry for one location, as rule terms."""
+    reqs = LOCATION_REQUIRES.get(loc_name, [])
+    live = set(world._region_names())
+    scenes = [r for r in reqs if r.startswith("S_")]
+    items = character_req([r for r in reqs if not r.startswith("S_")],
+                          char_name(world.options))
+    terms = [CanReachRegion(scene_region(s)) for s in scenes
+             if scene_region(s) in live]
+    return terms + [_has_term(t) for t in items]
 
 
 def _set_roo_rules(world: "YsOriginWorld") -> None:
@@ -195,7 +203,8 @@ def _set_roo_rules(world: "YsOriginWorld") -> None:
             location = world.get_location(loc_name)
         except KeyError:
             continue
-        world.set_rule(location, Has(RODA_FRUIT, i))
+        world.set_rule(location, _all_of(
+            [Has(RODA_FRUIT, i)] + _location_require_terms(world, loc_name)))
 
 
 def _set_gear_upgrade_rules(world: "YsOriginWorld") -> None:

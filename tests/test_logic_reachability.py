@@ -325,6 +325,18 @@ def test_element_gates():
     assert dt.LOCATION_REQUIRES["Flames of Guilt: Bridge Room 2"] == [fire]
 
 
+def test_undead_wards_need_the_chimes():
+    """The revive family only stays dead under the Silver Chimes, and two wards
+    are held by it: S_4009's Zarues and S_5080's four Zeruena, whose barrier
+    stands before the Dragonbone Key chest and the EVT_5080 story trigger."""
+    edges = dt.edge_requirements()
+    r = dt.scene_region
+    assert edges[(r("S_4009"), r("S_4010"))] == ["Silver Chimes"]
+    assert dt.LOCATION_REQUIRES["Corrupted Blood: Boss Room"] == ["Silver Chimes"]
+    idol = [k for k in dt.LOCATION_REQUIRES if k.startswith("Wailing Blue: 1F Save")]
+    assert "Silver Chimes" in dt.LOCATION_REQUIRES[idol[0]]
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
