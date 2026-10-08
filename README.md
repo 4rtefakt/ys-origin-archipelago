@@ -220,10 +220,10 @@ overlay.
 | `starting_items` | list of item names | `[Crystal, Dark Crystal]` | Items to begin every New Game owning (applied as a floor — marked owned). Defaults to the warp Crystals the intro grants, so `random_start` (which skips the intro) still has them. Unknown names are ignored |
 | `starting_level` | `1`–`60` | `1` | Minimum character level at New Game (only ever raises you). `1` = vanilla. Stacks with `level_scaling` — you get the higher of this and the floor's expected level |
 | `starting_weapon_level` | `1`–`6` | `1` | Minimum displayed weapon level at New Game (a floor). `1` = vanilla starter. The mod still upgrades weapon via Cleria Ore / floor-appropriate gear on top of this |
-| `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `both` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
+| `level_scaling` | `off` / `level_floor` / `exp_multiplier` / `both` | `exp_multiplier` | Catch-up leveling so warping to a far floor isn't a grind wall: bump you toward the floor's level, and/or grant scaled bonus EXP. No-op when you're already on level |
 | `level_margin` | `0`–`10` | `0` | How many levels under a floor's expected level the floor-bump leaves you (0 = right at the expected level); raise for more challenge |
-| `exp_multiplier_base` | `1`–`10` | `3` | Flat EXP multiplier applied everywhere while EXP scaling is on (`1` = vanilla rate) |
-| `exp_multiplier_catchup` | `1`–`20` | `5` | EXP multiplier while your level ≤ the deepest visited floor's expected level + margin — catch up by fighting anywhere, easy floors included |
+| `exp_multiplier_base` | `1`–`100` | `20` | Flat EXP multiplier applied everywhere while EXP scaling is on (`1` = vanilla rate) |
+| `exp_multiplier_catchup` | `1`–`100` | `60` | EXP multiplier while your level ≤ the deepest visited floor's expected level + margin — catch up by fighting anywhere, easy floors included |
 | `exp_catchup_margin` | `0`–`20` | `5` | Levels above the deepest floor's expected level that still count as catching up |
 | `progressive_armor` | `true` / `false` | `true` | Armor & Boots become progressive: gear chests hold "Progressive Armor"/"Progressive Boots", and receiving one grants your character's next tier (pickups never skip ahead). Off = raw pieces shuffled as-is |
 | `weapon_requirements` | `true` / `false` | `true` | Gate each zone behind enough Cleria Ore that the vanilla weapon level for that floor is obtainable first; Cleria Ore becomes progression and upgrades your weapon on pickup. Pairs with `level_scaling` to keep warped-ahead floors playable |

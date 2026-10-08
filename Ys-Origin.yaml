@@ -87,7 +87,7 @@ Ys Origin:
                          #   (0 = right at the expected level; raise for challenge)
   exp_multiplier_base: 20 # flat EXP multiplier everywhere (rando runs zig-zag the
                          #   tower, so everyone levels faster than vanilla). 1 = off.
-  exp_multiplier_catchup: 20 # EXP multiplier while your level <= the deepest floor
+  exp_multiplier_catchup: 60 # EXP multiplier while your level <= the deepest floor
                             #   you've visited's expected level + the margin below —
                             #   falling behind your progress levels you back fast,
                             #   fighting anywhere you like.

@@ -205,13 +205,14 @@ class ExpMultiplierCatchup(Range):
     expected level of the deepest floor you've visited, plus the margin below.
     Replaces the base multiplier whenever the condition holds, so falling behind
     your furthest progress levels you back fast wherever you choose to fight.
-    Defaults to the base rate (20), i.e. a single FLAT always-on multiplier with
-    no catch-up spike (the shipped default). Raise it above the base to add a
-    behind-you-level-faster boost."""
+    Default 60, three times the base: the floor curve climbs steeply from 18F
+    (27 -> 44 over five floors), and at the base rate a player who was on curve
+    at 17F fell a dozen levels behind by 20F. Set it equal to the base for a
+    single flat multiplier with no catch-up."""
     display_name = "Catch-up EXP multiplier"
     range_start = 1
     range_end = 100
-    default = 20
+    default = 60
 
 
 class ExpCatchupMargin(Range):

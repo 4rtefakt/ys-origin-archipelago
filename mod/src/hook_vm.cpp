@@ -25,6 +25,7 @@
 void mod_log(const char* fmt, ...);
 void bridge_emit(const char* line);
 void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
+extern "C" void ap_note_withheld(int idx);   // a suppressed item store (hook_ap.cpp)
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
 extern bool g_supp_give[0x200];  // ITEM ids the give-item op must swallow
@@ -102,6 +103,7 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         // the menu later (g_flags=1, consistent), outside this window.
         if (idx == 0x74 || idx == 0x75 || idx == 0x76)
             g_skill_suppress_until = GetTickCount() + 600;
+        ap_note_withheld((int)idx);
         g_sink = 0;    // the 0x67 add-form redirects here too; don't accumulate
         return &g_sink;                    // suppress (player gets the AP item)
     }

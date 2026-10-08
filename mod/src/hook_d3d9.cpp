@@ -14,15 +14,19 @@
 #include "imgui_impl_dx9.h"
 #include "imgui_impl_win32.h"
 
+#include <mutex>
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 // --- diagnostics: append-only log at %TEMP%\yso_ap_mod.log -------------------
 // The file handle is kept open: the VM grant hook is a hot path, so a
-// fopen/fclose per line would lag the game. Single-threaded callers (the VM and
-// render both run on the game's main thread), so no locking needed.
+// fopen/fclose per line would lag the game. The AP poll thread logs too, so the
+// lazy open and each line are serialised.
 static char g_logpath[MAX_PATH] = "";
 static FILE* g_logf = nullptr;
+static std::mutex g_log_mtx;
 void mod_log(const char* fmt, ...) {
+    std::lock_guard<std::mutex> lk(g_log_mtx);
     if (!g_logf) {
         DWORD n = GetTempPathA(MAX_PATH, g_logpath);
         lstrcpyA(g_logpath + n, "yso_ap_mod.log");

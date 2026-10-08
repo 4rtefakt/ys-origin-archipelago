@@ -357,6 +357,7 @@ static std::mutex g_sp_mtx;
 static const uintptr_t kBlessBitsAbs = kGFlagsAbs + 0xD9 * 4;  // purchase bitfield
 static const uintptr_t kBlessBaseAbs = 0x0076A634;   // state array (+idx*8 = level)
 static const uintptr_t kBlessDirtyAbs = 0x0076B914;  // |= 0x10 -> effect recompute
+static void request_recalc();   // the same word, OR'd on the main thread
 
 static void ap_fire_location(int64_t loc);   // defined with ap_on_check below
 
@@ -437,7 +438,7 @@ static void grant_blessing_bit(int bit) {
     volatile int* cell = (volatile int*)kBlessBitsAbs;
     if (*cell & (1 << bit)) return;
     *cell |= (1 << bit);
-    *(volatile int*)kBlessDirtyAbs |= 0x10;
+    request_recalc();   // poll thread: the dirty word is the main thread's
     mod_log("ap: blessing effect granted — bit %d set", bit);
 }
 
@@ -837,8 +838,10 @@ static std::map<int64_t, std::string> g_loc_item_name;
 // item name -> classification (1/2/4/0), from slot_data; a fallback for the toast
 // color when a received item carries no flags (cheat /send, or a stingy server).
 static std::map<std::string, int> g_item_tiers;
+static std::mutex g_tier_mtx;   // rebuilt on connect (poll), read by the VM hook (main)
 static int tier_or(const std::string& name, int flags) {
     if (flags) return flags;
+    std::lock_guard<std::mutex> lk(g_tier_mtx);
     auto it = g_item_tiers.find(name);
     return it != g_item_tiers.end() ? it->second : 0;
 }
@@ -1207,7 +1210,7 @@ static void grant_progressive_blessing(const std::string& name) {
         if (bit < 0 || bit > 31) continue;
         if (*cell & (1 << bit)) continue;          // that tier is already in
         *cell |= (1 << bit);
-        *(volatile int*)kBlessDirtyAbs |= 0x10;
+        request_recalc();
         mod_log("ap: %s #%d -> bit %d set", name.c_str(), n, bit);
     }
 }
@@ -1330,8 +1333,47 @@ static void ap_fire_location(int64_t loc) {
 // Called by the VM grant hook (game main thread) when a watched location flag
 // fires: one flag can map to several AP locations (the elemental altars grant
 // two things in one script).
+// -- withheld vanilla items --------------------------------------------------- #
+// A story beat that hands over a pool item (the Zelkarons "charging" the Evil
+// Ring, say) still plays its dialogue while the store is suppressed, so the
+// game announces something that did not happen. A chest is fine: its check
+// fires in the same script and the toast says what was really there. So when a
+// suppressed store has NO check around it and the player still lacks the item,
+// say so. Main thread writes the note, the poll thread reports it.
+static std::atomic<int> g_withheld_idx{-1};
+static std::atomic<unsigned long> g_withheld_tick{0};
+static std::atomic<unsigned long> g_last_check_tick{0};
+static const unsigned long kWithheldWindowMs = 4000;
+
+extern "C" void ap_note_withheld(int idx) {
+    // inventory cells only; not the skill powers / drained ring that ride along
+    if (idx < kItemCellLo || idx > 0x73 || idx == 0x5E) return;
+    g_withheld_idx.store(idx);
+    g_withheld_tick.store(GetTickCount());
+}
+
+static void report_withheld() {
+    int idx = g_withheld_idx.load();
+    if (idx < 0) return;
+    unsigned long t = g_withheld_tick.load(), now = GetTickCount();
+    if (now - t < kWithheldWindowMs) return;         // give the check time to fire
+    g_withheld_idx.store(-1);
+    unsigned long c = g_last_check_tick.load();
+    if (c && (c > t ? c - t : t - c) <= kWithheldWindowMs) return;   // a check: toasted
+    if (*(volatile int*)(kGFlagsAbs + idx * 4) >= 1) return;         // already owned
+    for (const auto& kv : g_name_to_idx)
+        if (kv.second == idx) {
+            overlay::push_item("The game's own " + kv.first +
+                               " is withheld - yours comes from the multiworld");
+            mod_log("ap: told the player '%s' was withheld (g_flags[0x%X])",
+                    kv.first.c_str(), idx);
+            return;
+        }
+}
+
 void ap_on_check(int flag_idx) {
     if (flag_idx < 0 || flag_idx >= 0x200) return;
+    g_last_check_tick.store(GetTickCount());
     std::vector<int64_t> locs;
     {
         std::lock_guard<std::mutex> lk(g_reg_mtx);   // vs reconnect re-registration
@@ -1347,7 +1389,12 @@ static void on_location_info(const std::list<APClient::NetworkItem>& items) {
     for (const auto& it : items) {
         std::string game = g_ap->get_player_game(it.player);
         std::string item = g_ap->get_item_name(it.item, game);
-        std::string who = g_ap->get_player_alias(it.player);
+        // Our own items go under the slot name, which is what every "is this
+        // mine?" test compares against; an !alias made them read as someone
+        // else's.
+        std::string who = it.player == g_ap->get_player_number()
+                              ? std::string(g_slot)
+                              : g_ap->get_player_alias(it.player);
         g_loc_found[it.location] = item + "  -> " + who;   // owner = slot name
         // Local Ys Origin item -> remember its g_flags index for the native
         // box art; foreign (other game) -> -1 (use the generic art). Always keep
@@ -1772,10 +1819,13 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["sp_items"].items())
             g_sp_items[kv.key()] = kv.value().get<int>();
     g_sp_flag_idx = sd.value("sp_flag_idx", 0xD8);
-    g_item_tiers.clear();
-    if (sd.contains("item_tiers"))
-        for (auto& kv : sd["item_tiers"].items())
-            g_item_tiers[kv.key()] = kv.value().get<int>();
+    {
+        std::lock_guard<std::mutex> lk(g_tier_mtx);
+        g_item_tiers.clear();
+        if (sd.contains("item_tiers"))
+            for (auto& kv : sd["item_tiers"].items())
+                g_item_tiers[kv.key()] = kv.value().get<int>();
+    }
     g_prog_gear.clear();
     if (sd.contains("progressive_gear"))
         for (auto& kv : sd["progressive_gear"].items()) {
@@ -1842,7 +1892,9 @@ static void apply_items(const std::list<APClient::NetworkItem>& items) {
         // weapon tier — but skip the effects that would stack a second time.
         const bool replay = (it.index <= g_replay_through);
         std::string name = g_ap->get_item_name(it.item, AP_GAME);
-        std::string from = g_ap->get_player_alias(it.player);
+        std::string from = it.player == g_ap->get_player_number()
+                               ? std::string(g_slot)
+                               : g_ap->get_player_alias(it.player);
         int tier = tier_or(name, it.flags);   // classification: 1 prog, 2 useful, 4 trap
         auto su = g_statue_item_idx.find(name);
         auto f = g_name_to_idx.find(name);
@@ -2833,7 +2885,8 @@ extern "C" void exp_scaling_on_frame() {
             set_weapon_game(0);
             g_weapon_entity = cur_ent;
         }
-    } else if (g_weapon_applied > 0 &&
+    } else if (g_weapon_applied > 0 && cur_ent != nullptr &&
+               read_current_scene() > 0 &&
         (wv > 0 || ent_changed || *(volatile int*)kWeaponLevelAbs < g_weapon_applied)) {
         // Re-apply on: new tier, save-load reset, or entity change (respawn spawns
         // a fresh entity whose combat weapon defaults to Lv1 -> deals 1 dmg).
@@ -2909,6 +2962,7 @@ static void poll_loop() {
             poll_statue_warp();
             reconcile_gear();   // re-assert granted gear a save/load reset
             reconcile_roda_fruit();
+            report_withheld();
             exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;
