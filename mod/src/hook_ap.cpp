@@ -123,7 +123,7 @@ static void load_config() {
                   "# save_redirect=1   # AP runs save into archipelago_<seed>/ next to\n"
                   "#                   # the normal saves (vanilla saves stay untouched).\n"
                   "#                   # 0 = write the regular save files as usual.\n"
-                  "# save_pattern=sav  # filename substring that marks a save file\n"
+                  "# save_pattern=.bin # filename substring that marks a save file\n"
                   "# chat=1            # show the AP chat overlay at boot (F6 toggles;\n"
                   "#                   # Enter types, e.g. !hint <item>)\n"
                   "# cutscene_skip=1   # 0 off, 1 hold Right-Ctrl to fast-forward,\n"
@@ -1143,6 +1143,32 @@ static void reconcile_gear() {
     }
 }
 
+// -- Roda Fruit -------------------------------------------------------------- #
+// Logic says the k-th Roo (tower order) needs k fruits, but the player feeds
+// them in any order, and a fruit spent on a later Roo starved an earlier one
+// that logic had promised. So the cell is DERIVED, never counted: with N fruits
+// received it holds the number of unfed Roos among the first N. A Roo beyond N
+// is then fed for free (the script's -1 is refunded), and one within N always
+// finds its fruit. Being derived it also survives a save load and a replay.
+// Empty g_roo_flags (an older apworld) = the plain counted cell, as before.
+static const int kRodaFruitId = 0x57;
+static std::vector<int> g_roo_flags;       // fed flag per Roo, logic order
+static int g_roda_received = 0;            // fruits in the list, this connection
+static bool g_roda_ready = false;          // the connect replay has been applied
+
+static void reconcile_roda_fruit() {
+    if (g_roo_flags.empty() || !g_roda_ready) return;
+    if (read_current_scene() <= 0) return;         // not in-game: block is stale
+    int want = 0;
+    for (size_t k = 0; k < g_roo_flags.size() && (int)k < g_roda_received; k++)
+        if (*(volatile int*)(kGFlagsAbs + g_roo_flags[k] * 4) < 1) want++;
+    volatile int* cell = (volatile int*)(kGFlagsAbs + kRodaFruitId * 4);
+    int cur = *cell;
+    if (cur == want || (want == 0 && cur < 1)) return;   // -1 = never held
+    *cell = want;
+    mod_log("ap: Roda Fruit %d -> %d (%d received)", cur, want, g_roda_received);
+}
+
 // -- progressive elemental skills -------------------------------------------- #
 // One chain per element: the FIRST receipt unlocks the skill (artifact cell +
 // power cell, exactly what the altar does), each later one raises the level cell.
@@ -1155,20 +1181,34 @@ static std::map<std::string, int> g_prog_skill_count;   // receipts so far
 // Tiered blessings (LV1 -> LV2 -> LV3) as one chain: each receipt sets the next
 // bit in order, so a family can never arrive out of sequence.
 static std::map<std::string, std::vector<int>> g_prog_bless;
+// Receipts so far this connection, per progressive blessing / gear chain. The
+// server replays the whole item list on every connect, so the Nth receipt must
+// mean "tiers 1..N are owned", not "one more tier": granting the next unowned
+// tier made every dropped connection advance the ladders again ("I got resent
+// all my items ... prog boots", Discord, 2.0.0-beta.2).
+static std::map<std::string, int> g_prog_chain_count;
+
+// Items that arrive at the title wait here until a game is loaded. Applied on
+// the spot they landed in pre-load memory, which Continue / New Game then
+// overwrote - while the replay watermark had already marked them delivered. The
+// prog/useful cells came back through reconcile_gear; SP, panaceas, blessing
+// effects and skill levels were simply gone. Poll thread only.
+static std::list<APClient::NetworkItem> g_held_items;
 
 static void grant_progressive_blessing(const std::string& name) {
     auto it = g_prog_bless.find(name);
     if (it == g_prog_bless.end()) return;
     volatile int* cell = (volatile int*)kBlessBitsAbs;
+    int n = ++g_prog_chain_count[name];
+    int k = 0;
     for (int bit : it->second) {
+        if (++k > n) break;
         if (bit < 0 || bit > 31) continue;
         if (*cell & (1 << bit)) continue;          // that tier is already in
         *cell |= (1 << bit);
         *(volatile int*)kBlessDirtyAbs |= 0x10;
-        mod_log("ap: %s -> bit %d set (next tier)", name.c_str(), bit);
-        return;
+        mod_log("ap: %s #%d -> bit %d set", name.c_str(), n, bit);
     }
-    mod_log("ap: %s -> all tiers already granted", name.c_str());
 }
 
 // Claim every location whose detect flag is `idx`, WITHOUT firing it.
@@ -1211,8 +1251,11 @@ static void grant_progressive_skill(const std::string& name) {
     } else {
         claim_flag_locations(ps.level_cell);    // our write, not the player's
         volatile int* cell = (volatile int*)(kGFlagsAbs + ps.level_cell * 4);
+        // Receipt N means level N-1 (the game caps these at 3). Set, not add:
+        // the list replays from index 0 on every connect.
         int cur = *cell < 0 ? 0 : *cell;
-        if (cur < 3) *cell = cur + 1;           // the game caps these at 3
+        int want = n - 1 > 3 ? 3 : n - 1;
+        if (cur < want) *cell = want;
         request_recalc();
         mod_log("ap: %s #%d -> level cell 0x%X now %d",
                 name.c_str(), n, ps.level_cell, *cell);
@@ -1329,7 +1372,17 @@ static void on_slot_connected(const nlohmann::json& sd) {
         g_gear_cell_to_loc.clear();     // filled by the detect registration below
     }
     g_prog_skills.clear();
+    g_roo_flags.clear();
+    g_roda_received = 0;
+    g_roda_ready = false;
+    if (sd.contains("roo_flags"))
+        for (auto& v : sd["roo_flags"]) {
+            int i = v.get<int>();
+            if (i >= 0 && i < 0x200) g_roo_flags.push_back(i);
+        }
     g_prog_skill_count.clear();
+    g_prog_chain_count.clear();
+    g_held_items.clear();           // the server replays the whole list anyway
     g_prog_bless.clear();
     if (sd.contains("progressive_blessings")) {
         for (auto& kv : sd["progressive_blessings"].items())
@@ -1754,7 +1807,7 @@ static void on_slot_connected(const nlohmann::json& sd) {
     if (!scout.empty()) g_ap->LocationScouts(scout, 0);  // learn what's at each
 }
 
-static void on_items_received(const std::list<APClient::NetworkItem>& items) {
+static void apply_items(const std::list<APClient::NetworkItem>& items) {
     // A release/collect flood arrives as one big batch: apply everything, but
     // collapse the overlay feed to a single summary line (the chat overlay
     // still carries the full detail via PrintJSON).
@@ -1789,16 +1842,19 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             *spc = *spc + sp->second;
             mod_log("ap: granted SP +%d -> %d", sp->second, *spc);
         } else if (pg != g_prog_gear.end()) {
-            // Progressive gear: grant the first unowned tier in the ladder.
+            // Progressive gear: the Nth receipt owns the first N tiers of the
+            // ladder (see g_prog_chain_count).
             bool granted = false;
-            for (int idx : pg->second)
+            int n = ++g_prog_chain_count[name], k = 0;
+            for (int idx : pg->second) {
+                if (++k > n) break;
                 if (idx >= 0 && idx < 0x200 &&
                     *(volatile int*)(kGFlagsAbs + idx * 4) < 1) {
                     ap_give_tier(idx, 1, tier);
-                    remember_gear(idx, tier);   // survive save/load wipes
                     granted = true;
-                    break;
                 }
+                remember_gear(idx, tier);   // survive save/load wipes
+            }
             if (!granted)
                 mod_log("ap: '%s' — all tiers owned, no-op", name.c_str());
         } else if (su != g_statue_item_idx.end()) {
@@ -1818,6 +1874,9 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             int wtier = kWeaponTier[(n < 5 ? n : 5) - 1];
             g_pending_weapon.store(wtier);
             mod_log("ap: Cleria Ore #%d -> weapon tier value %d (pending)", n, wtier);
+        } else if (f != g_name_to_idx.end() && f->second == kRodaFruitId &&
+                   !g_roo_flags.empty()) {
+            g_roda_received++;          // the cell follows in reconcile_roda_fruit
         } else if (replay && is_trap_item(name)) {
             // A trap is a one-shot effect that already happened. Re-arming it on
             // every reconnect meant restarting the client punished the player.
@@ -1828,7 +1887,8 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
             grant_progressive_skill(name);
         } else if (g_prog_bless.count(name)) {
             grant_progressive_blessing(name);
-        } else if (f != g_name_to_idx.end() && f->second >= 0x200) {
+        } else if (f != g_name_to_idx.end() && f->second >= 0x200 &&
+                   f->second < 0x300) {
             // Blessing EFFECT item: the id is BLESS_ITEM_BASE + bit, not a
             // g_flags cell, so it is granted by setting the bit rather than by
             // ap_give (which is bounded to the 0x200-wide flag array).
@@ -1890,11 +1950,24 @@ static void on_items_received(const std::list<APClient::NetworkItem>& items) {
         g_applied_through = it.index;
     }
     save_replay_through(g_applied_through);   // one write per batch, not per item
+    g_roda_ready = true;
     if (batch) {
         char buf[64];
         snprintf(buf, sizeof(buf), "Received %d items", fresh);
         overlay::push_item(buf);
     }
+}
+
+static void flush_held_items() {
+    if (g_held_items.empty() || read_current_scene() <= 0) return;
+    std::list<APClient::NetworkItem> items;
+    items.swap(g_held_items);
+    apply_items(items);
+}
+
+static void on_items_received(const std::list<APClient::NetworkItem>& items) {
+    g_held_items.insert(g_held_items.end(), items.begin(), items.end());
+    flush_held_items();
 }
 
 // Send a DeathLink bounce (we died). Debounced so a forced death / rapid HP
@@ -1951,7 +2024,12 @@ static void poll_scene() {
     // main thread as soon as a player entity exists (skipping the rest). Fires once
     // per session (g_force_spawn_done not re-armed here, so a 7xxx cutscene playing
     // again mid-game can't re-warp the player).
-    if (scene == 2 || (scene >= 7000 && scene < 8000)) {
+    // The summit (S_7000..) is 7xxx too: on a loaded save nothing had burned the
+    // one-shot, so walking into it armed the warp and threw the player back to
+    // their start statue. An intro comes before any gameplay, at level 1.
+    bool toal_intro = scene >= 7000 && scene < 8000 && !g_saw_gameplay &&
+                      read_level() < 2;
+    if (scene == 2 || toal_intro) {
         if (!g_saw_intro.exchange(true)) {
             g_intro_arm_tick.store(GetTickCount());
             mod_log("force-spawn: armed (New Game intro scene %d seen)", scene);
@@ -2790,10 +2868,12 @@ static void poll_loop() {
         if (g_ap) {
             try { g_ap->poll(); } catch (...) {}
             poll_scene();
+            flush_held_items();
             poll_value_checks();
             poll_deathlink();
             poll_statue_warp();
             reconcile_gear();   // re-assert granted gear a save/load reset
+            reconcile_roda_fruit();
             exp_scaling_poll();
             // drain queued checks
             std::vector<int64_t> pending;

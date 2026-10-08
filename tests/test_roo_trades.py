@@ -119,13 +119,13 @@ def test_roo_vanilla_items_are_real_or_absent():
     The rewards were NOT all visible in the trade script: S_1014 and S_6009 call
     a shared child via 0xB4 StartScript, so their Cleria Ore / Demon Greaves come
     from the guide, and S_2011 bumps the fire skill level (0x67 on 0xB7) inline,
-    which is a Ruby. Missing these let the Roo hand out its vanilla reward on top
+    which is a Topaz. Missing these let the Roo hand out its vanilla reward on top
     of the AP item — seen live: the 4F Roo upgraded the weapon to Lv2."""
     with_items = {n: [i["name"] for i in _by_name(n).get("items", [])]
                   for n in dt.ROO_LOCATIONS}
     assert with_items == {
         "Wailing Blue: 4F Forward Room — Roo Trade": ["Cleria Ore"],
-        "Flooded Prison: 8F Path 2 — Roo Trade": ["Ruby"],
+        "Flooded Prison: 8F Path 2 — Roo Trade": ["Topaz"],
         # per-character variants, in yunica/hugo/toal order
         "Flames of Guilt: Roo Start — Roo Trade": ["Hammer", "Ring of Ease"],
         "Silent Sands: Roo End — Roo Trade":

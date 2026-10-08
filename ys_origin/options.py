@@ -300,8 +300,12 @@ class ProgressiveSkills(DefaultOnToggle):
     Each element is an artifact plus three gems. Shuffled independently you can
     collect three Emeralds and still not have the Wind skill, which they only
     upgrade. On, each element becomes one chain of four: the first grants the
-    skill, the rest raise its level."""
+    skill, the rest raise its level.
+
+    ALWAYS ON since 2.0: hidden, and forced on in generate_early. Kept as an
+    accepted no-op so older yamls still generate."""
     display_name = "Progressive elemental skills"
+    visibility = Visibility.none
 
 
 class BlessingItems(Toggle):
@@ -336,8 +340,9 @@ class WeaponRequirements(DefaultOnToggle):
     there, so the warp network can't strand you somewhere your weapon can't dent.
     When on, the generator guarantees the **vanilla weapon level for each floor**
     is obtainable (by you, or friends in a multiworld) before that zone is in
-    logic, and Cleria Ore becomes progression that upgrades your weapon on pickup.
-    Off = no weapon gating (Cleria Ore is filler)."""
+    logic, and Cleria Ore becomes progression.
+    Off = no weapon gating (Cleria Ore is filler). Either way, receiving a
+    Cleria Ore upgrades your weapon on the spot."""
     display_name = "Weapon requirements"
 
 

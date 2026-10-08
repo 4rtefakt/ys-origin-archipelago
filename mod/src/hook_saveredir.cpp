@@ -12,7 +12,7 @@
 //
 // Implementation: MinHook detours on kernel32 CreateFileA/W (the CRT's fopen
 // lands there too). A path is redirected when its FILENAME contains the
-// `save_pattern` substring (default "sav", case-insensitive) — tune the pattern
+// `save_pattern` substring (default ".bin", case-insensitive) — tune the pattern
 // in yso_ap.cfg if the game's save names don't match. Redirected opens are
 // logged (first sighting per file) so a live session can verify the filter
 // quickly; if the log shows no "saveredir:" lines after saving in-game, the
@@ -32,7 +32,7 @@
 void mod_log(const char* fmt, ...);
 
 static bool g_enabled = true;               // save_redirect (cfg; default on)
-static char g_pattern[32] = "sav";          // save_pattern (cfg)
+static char g_pattern[32] = ".bin";         // save_pattern (cfg)
 static char g_seed[64] = "";                // sanitized AP seed ("" = no redirect)
 static std::mutex g_mtx;
 static std::set<std::string> g_logged;      // one log line per unique file
