@@ -21,7 +21,17 @@
     "beatable, 152/152 regions reachable, 6-sphere playthrough. CAVEAT: zones 3-6",
     "intra-floor topology + some Rado/mirror-maze adjacency are best-effort drafts",
     "(see room_graph_notes.md / git log); gates are anchored to item locations and",
-    "beatability is verified, but a live pass could refine exact free-room edges."
+    "beatability is verified, but a live pass could refine exact free-room edges.",
+    "",
+    "ELEMENT GATES (engine, not script): a SOB object's flag word (+0x14c) makes",
+    "it immune to every damage class but one. Tower-wide there are exactly these:",
+    "thunder-only walls S_2008 kabe_00 (hides the medallion chest), S_2015",
+    "kabe_00 (the S_2010 door), S_4006 kabe_00 (the S_4009 door) and the S_3103",
+    "pole; fire-only torches S_3004 fire_00..02 (raise the steps to the far side:",
+    "the #2 chest and the S_3005 exit, both also wind-jumps) and S_3011/3012/3013",
+    "(the barrier on the S_3012 medallion chest). The S_2008 ward's seeds are",
+    "Menoak (ENEMYINFO resist 1/-1/-5/1): only fire or thunder hurts them, and",
+    "the ward stands in front of the S_2015 door."
   ],
   "scenes": {
     "S_1000": {
@@ -328,7 +338,12 @@
       "from": [
         [
           "S_2008",
-          []
+          [
+            [
+              "Levinstrike Warhammer",
+              "Crimson Lotusblade"
+            ]
+          ]
         ]
       ]
     },
@@ -344,7 +359,9 @@
       "from": [
         [
           "S_2015",
-          []
+          [
+            "Levinstrike Warhammer"
+          ]
         ],
         [
           "S_2011",
@@ -472,7 +489,10 @@
       "from": [
         [
           "S_3004",
-          []
+          [
+            "Crimson Lotusblade",
+            "Cerulean Flabellum"
+          ]
         ]
       ]
     },
@@ -943,7 +963,8 @@
         [
           "S_4006",
           [
-            "Gold Bracelet"
+            "Gold Bracelet",
+            "Levinstrike Warhammer"
           ],
           "up"
         ]
@@ -1364,6 +1385,16 @@
     ],
     "Silent Sands: 15F Room #2": [
       "Gold Bracelet"
+    ],
+    "Flooded Prison: 8F Waterway 1": [
+      "Levinstrike Warhammer"
+    ],
+    "Flames of Guilt: 11F Path 1 #2": [
+      "Crimson Lotusblade",
+      "Cerulean Flabellum"
+    ],
+    "Flames of Guilt: Bridge Room 2": [
+      "Crimson Lotusblade"
     ]
   },
   "zone_exits": {

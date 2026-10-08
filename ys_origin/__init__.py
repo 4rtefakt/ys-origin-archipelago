@@ -92,8 +92,20 @@ class YsOriginWorld(World):
         ``random_start`` is on, so normal (non-random) seeds are byte-identical
         to before — the draw simply moved out of ``fill_slot_data``."""
         o = self.options
+        # Always on (hidden option): off, the gems shuffle apart from the skill
+        # they upgrade.
+        o.progressive_skills.value = 1
         self.open_mode = bool(o.random_start.value)
         if o.random_start.value:
+            # Random start needs the warp locks: the mod only learns the spawn
+            # statue (start_statue_scene) and the unlock items with them on, so
+            # without them the player started on 1F while logic assumed the
+            # spawn and a free warp to every statue.
+            if not o.statue_warp_locks.value:
+                logging.warning("Ys Origin (%s): random_start requires "
+                                "statue_warp_locks; turning it on.",
+                                self.player_name)
+                o.statue_warp_locks.value = 1
             # Cap the spawn to a survivable floor (max_starting_floor); a 25F start
             # drops the player into brutal rooms with no gear behind them.
             candidates = dt.start_statue_candidates(int(o.max_starting_floor.value))
@@ -563,6 +575,8 @@ class YsOriginWorld(World):
                                       if (self.options.progressive_blessings.value
                                           and self.options.blessing_items.value)
                                       else {}),
+            # the flag each Roo sets when fed, in logic order (dt.ROO_LOCATIONS)
+            "roo_flags": dt.roo_flag_indices(),
             "progressive_skills": (dt.progressive_skill_slot_data()
                                    if self.options.progressive_skills.value else {}),
             "suppress_give_ids": dt.suppress_give_ids(

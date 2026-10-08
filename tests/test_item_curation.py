@@ -181,7 +181,7 @@ def test_cleaned_chests_seed_filler():
     for loc in ("Corrupted Blood: Toal's Room",):
         assert dt.location_vanilla_item(loc) == "", loc
     for loc, gem in (("Wailing Blue: 4F Forward Passage 3", "Emerald"),
-                     ("Flames of Guilt: Lava Rods", "Topaz")):
+                     ("Flames of Guilt: Lava Rods", "Ruby")):
         assert dt.location_vanilla_item(loc) == gem, loc
 
 

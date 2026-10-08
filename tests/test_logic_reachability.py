@@ -309,6 +309,22 @@ def test_rado_annex_door_needs_ring_and_necklace():
     assert dt.skill_grants()["Evil Ring"] == 0x5E
 
 
+def test_element_gates():
+    """Engine gates no script tests: a SOB flag word makes the crumbling walls
+    thunder-only and the torches fire-only, and the S_2008 ward's Menoak seeds
+    shrug off melee and wind (CleriaCore ROUTE_F13_TOAL D1/D4)."""
+    edges = dt.edge_requirements()
+    r = dt.scene_region
+    thunder, fire = "Levinstrike Warhammer", "Crimson Lotusblade"
+    assert edges[(r("S_2008"), r("S_2015"))] == [[thunder, fire]]
+    assert edges[(r("S_2015"), r("S_2010"))] == [thunder]
+    assert thunder in edges[(r("S_4006"), r("S_4009"))]
+    assert fire in edges[(r("S_3004"), r("S_3005"))]
+    assert dt.LOCATION_REQUIRES["Flooded Prison: 8F Waterway 1"] == [thunder]
+    assert fire in dt.LOCATION_REQUIRES["Flames of Guilt: 11F Path 1 #2"]
+    assert dt.LOCATION_REQUIRES["Flames of Guilt: Bridge Room 2"] == [fire]
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

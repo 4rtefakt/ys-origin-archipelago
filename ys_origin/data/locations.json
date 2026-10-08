@@ -504,7 +504,7 @@
   "items": [
    {
     "id": "0x301",
-    "name": "Ruby",
+    "name": "Topaz",
     "class": "useful"
    }
   ]
@@ -523,7 +523,7 @@
   "items": [
    {
     "id": "0x302",
-    "name": "Topaz",
+    "name": "Ruby",
     "class": "useful"
    }
   ]
@@ -690,7 +690,7 @@
   "items": [
    {
     "id": "0x302",
-    "name": "Topaz",
+    "name": "Ruby",
     "class": "useful"
    }
   ]
@@ -977,7 +977,7 @@
   "items": [
    {
     "id": "0x301",
-    "name": "Ruby",
+    "name": "Topaz",
     "class": "useful"
    }
   ]
@@ -1068,7 +1068,7 @@
   "items": [
    {
     "id": "0x302",
-    "name": "Topaz",
+    "name": "Ruby",
     "class": "useful"
    }
   ]
@@ -4506,7 +4506,7 @@
   "items": [
    {
     "id": "0x301",
-    "name": "Ruby",
+    "name": "Topaz",
     "class": "useful"
    }
   ]

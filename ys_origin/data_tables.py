@@ -502,9 +502,9 @@ PROGRESSIVE_SKILLS: Dict[str, Dict[str, object]] = {
     "Progressive Wind Skill": {
         "artifact": "Cerulean Flabellum", "gem": "Emerald", "level_cell": 0xB6},
     "Progressive Lightning Skill": {
-        "artifact": "Levinstrike Warhammer", "gem": "Ruby", "level_cell": 0xB7},
+        "artifact": "Levinstrike Warhammer", "gem": "Topaz", "level_cell": 0xB7},
     "Progressive Fire Skill": {
-        "artifact": "Crimson Lotusblade", "gem": "Topaz", "level_cell": 0xB8},
+        "artifact": "Crimson Lotusblade", "gem": "Ruby", "level_cell": 0xB8},
 }
 
 _universe = {v for vs in LOCATION_VARIANTS.values() for v in vs} \
@@ -617,14 +617,14 @@ BLESS_ITEM_BASE = 0x200
 
 # The elemental gems' real ids (0x80/0x81/0x82) are ITEM ids for the give-item op
 # 0x116 — they are NOT g_flags cells. Writing g_flags[0x82] sets flag 130, which
-# every BATTLE*.XSO uses as the boss-battle state, and a granted Topaz put the
+# every BATTLE*.XSO uses as the boss-battle state, and a granted Ruby put the
 # game into a boss fight on 1F. Worse, having 0x82 in the g_flags suppress set
 # would have stopped real boss battles from setting it at all.
 #
 # So the pool items carry a synthetic id (the mod then grants only the companion
 # skill-level cell via ABILITY_GRANTS), and the real ids are published separately
 # for the give-item hook, which is keyed on the item id and does need them.
-GEM_GIVE_IDS: Dict[str, int] = {"Emerald": 0x80, "Ruby": 0x81, "Topaz": 0x82}
+GEM_GIVE_IDS: Dict[str, int] = {"Emerald": 0x80, "Topaz": 0x81, "Ruby": 0x82}
 
 # Items the game stores under a DIFFERENT cell than the one our item table names,
 # because the vanilla pickup hands you a *degraded* variant that a later puzzle
@@ -651,8 +651,8 @@ VARIANT_GIVE_IDS: Dict[str, int] = {"Evil Ring": 0x5E}
 # So they become one progressive chain of four. Pairing confirmed from the altar
 # scripts, each of which zeroes its own level cell:
 #   S_1004 TALKITEM  -> 0xB6   Cerulean Flabellum  + Emerald
-#   S_2009 TALKC940  -> 0xB7   Levinstrike Warhammer + Ruby
-#   S_3007 TALKSAUL  -> 0xB8   Crimson Lotusblade  + Topaz
+#   S_2009 TALKC940  -> 0xB7   Levinstrike Warhammer + Topaz
+#   S_3007 TALKSAUL  -> 0xB8   Crimson Lotusblade  + Ruby
 
 
 def progressive_skill_for(item_name: str) -> Optional[str]:
@@ -713,9 +713,11 @@ CLERIA_ORE = "Cleria Ore"
 # five contribute a filler slot instead, which create_items already pads.
 RODA_FRUIT = "Roda Fruit"
 
-# In feed order. The Nth Roo the player trades at needs N fruits banked, whatever
-# order they visit them in — the fruits are interchangeable and consumed one per
-# trade, so "the k-th of these locations requires k fruits" is the exact rule.
+# In tower order: the k-th of these locations requires k fruits. The player may
+# feed them in any order, so a fruit spent on a later Roo would starve an earlier
+# one that logic had promised. The mod closes that: it keeps the fruit cell at
+# "unfed Roos among the first N", N = fruits received (roo_flag_indices), so a
+# Roo beyond N is fed for free and one within N always has its fruit.
 ROO_LOCATIONS: List[str] = [
     "Wailing Blue: 4F Forward Room — Roo Trade",
     "Flooded Prison: 8F Path 2 — Roo Trade",
@@ -724,6 +726,12 @@ ROO_LOCATIONS: List[str] = [
     "Corrupted Blood: Outer Corridor 1 — Roo Trade",
     "Demonic Core: 22F Mirror Path — Roo Trade",
 ]
+
+def roo_flag_indices() -> List[int]:
+    """g_flags index each Roo sets when fed, in ROO_LOCATIONS order."""
+    return [(int(LOC_META[n]["detect"]["offset"], 16) - 0x36B91C) // 4
+            for n in ROO_LOCATIONS]
+
 
 # Cleria Ore (= weapon-upgrade) count required to ENTER each zone, per the
 # weapon_requirements option: (casual, strict). 5 ore exist (one per zone in
