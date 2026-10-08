@@ -330,6 +330,7 @@ static bool loc_checked(int64_t loc) {
     std::lock_guard<std::mutex> lk(g_checked_mtx);
     return g_checked.count(loc) != 0;
 }
+static void drop_checked(std::vector<int64_t>& fire);   // below, with the firing paths
 
 
 
@@ -1319,7 +1320,9 @@ static void ap_fire_location(int64_t loc) {
         // item: its art (local id, or a generic icon for foreign) and its name.
         // On a multi-location flag (altar double-grants) the last one wins the
         // single native box; the overlay above still lists every item.
-        int art = (local_id >= 0) ? local_id : kForeignArtId;
+        // INVINFO has 128 entries; blessing effects (0x200+) and gems (0x300+)
+        // are ours, not the game's, and would index past its art table.
+        int art = (local_id >= 0 && local_id < 0x80) ? local_id : kForeignArtId;
         set_pending_box(art, name.c_str());
     }
 }
@@ -1372,6 +1375,19 @@ static void on_slot_connected(const nlohmann::json& sd) {
         g_gear_cell_to_loc.clear();     // filled by the detect registration below
     }
     g_prog_skills.clear();
+    // Per-seed tables: the F8 menu can switch rooms without a restart, and
+    // these were only ever added to, so the previous seed's suppress set, statue
+    // locks and spawn leaked into the next one.
+    memset(g_supp_item, 0, sizeof(g_supp_item));
+    memset(g_statue_lock, 0, sizeof(g_statue_lock));
+    g_statue_locks_on = false;
+    g_statue_item_idx.clear();
+    g_statue_reg.clear();
+    g_statue_forced.clear();
+    g_start_statue_scene = 0;
+    g_spawn_reg_idx = g_spawn_flag_idx = -1;
+    g_name_to_idx.clear();
+    g_scene_locs.clear();
     g_roo_flags.clear();
     g_roda_received = 0;
     g_roda_ready = false;
@@ -1593,11 +1609,14 @@ static void on_slot_connected(const nlohmann::json& sd) {
         for (auto& kv : sd["scene_locations"].items())
             for (auto& v : kv.value())
                 g_scene_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
-    g_floor_locations.clear();
-    if (sd.contains("floor_locations"))
-        for (auto& kv : sd["floor_locations"].items())
-            for (auto& v : kv.value())
-                g_floor_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
+    {
+        std::lock_guard<std::mutex> lk(g_reg_mtx);   // warp map reads on the render thread
+        g_floor_locations.clear();
+        if (sd.contains("floor_locations"))
+            for (auto& kv : sd["floor_locations"].items())
+                for (auto& v : kv.value())
+                    g_floor_locations[atoi(kv.key().c_str())].push_back(v.get<int64_t>());
+    }
     g_bless_names.clear();
     if (sd.contains("blessing_names"))
         for (auto& kv : sd["blessing_names"].items())
@@ -2079,6 +2098,7 @@ static void poll_scene() {
     for (int64_t loc : locs->second) {
         if (g_scene_fired.insert(loc).second) fire.push_back(loc);
     }
+    drop_checked(fire);
     if (fire.empty()) return;
     {
         std::lock_guard<std::mutex> lk(g_check_mtx);
@@ -2087,10 +2107,21 @@ static void poll_scene() {
     for (int64_t loc : fire) toast_loc(loc);
 }
 
+// Drop locations the server already has. The polled methods (bit, value, floor,
+// scene) keep their own fired sets, which a reconnect clears, so every connect
+// and every room re-entry toasted old checks again; and a statue purchase fired
+// twice, once from the purchase hook and once from the bit poll.
+static void drop_checked(std::vector<int64_t>& fire) {
+    fire.erase(std::remove_if(fire.begin(), fire.end(),
+                              [](int64_t l) { return loc_checked(l); }),
+               fire.end());
+}
+
 // Fire a batch of poll-detected locations: queue the LocationChecks and echo
 // what was found (from the scout map) on the overlay. Same pattern as
 // poll_scene's firing tail.
-static void fire_poll_locs(const std::vector<int64_t>& fire) {
+static void fire_poll_locs(std::vector<int64_t> fire) {
+    drop_checked(fire);
     if (fire.empty()) return;
     {
         std::lock_guard<std::mutex> lk(g_check_mtx);
@@ -2866,7 +2897,11 @@ static void poll_loop() {
             }
         }
         if (g_ap) {
-            try { g_ap->poll(); } catch (...) {}
+            try { g_ap->poll(); }
+            catch (const std::exception& e) {
+                static int logged = 0;
+                if (logged++ < 10) mod_log("ap: poll threw: %s", e.what());
+            } catch (...) {}
             poll_scene();
             flush_held_items();
             poll_value_checks();
