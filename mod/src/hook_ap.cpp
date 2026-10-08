@@ -1347,6 +1347,29 @@ static void ap_fire_location(int64_t loc) {
 // Called by the VM grant hook (game main thread) when a watched location flag
 // fires: one flag can map to several AP locations (the elemental altars grant
 // two things in one script).
+// -- SP chests ----------------------------------------------------------------- #
+// Five chests pay SP instead of an item: their script runs 0xB2 AddPlayerSP at
+// pc 32 and sets the box flag at pc 35 (S_3003/S_BOX02, S_4003/S_BOX04,
+// S_4015/S_BOX01, S_5002/S_BOX01, S_6014/S_BOX01). There is no item store to
+// suppress, so the vanilla 2,000 to 20,000 SP came on top of the seed's item -
+// more than a whole shuffled shop costs (found by the CleriaCore audit). The
+// box flag's store is the one moment we know the SP was just paid: take it back.
+// Main thread (the VM store hook), for a flag that is a location of this seed.
+extern "C" void ap_sp_chest(int flag_idx) {
+    static const struct { int flag, sp; } kChests[] = {
+        {470, 2000}, {380, 5000}, {391, 5000}, {447, 10000}, {461, 20000}};
+    for (const auto& c : kChests) {
+        if (c.flag != flag_idx) continue;
+        std::lock_guard<std::mutex> lk(g_sp_mtx);
+        volatile int* spc = (volatile int*)kSpAbs;
+        int back = *spc < c.sp ? *spc : c.sp;
+        if (back < 0) back = 0;
+        *spc -= back;
+        mod_log("ap: SP chest g_flags[0x%X] - took back the vanilla %d SP", flag_idx, back);
+        return;
+    }
+}
+
 // -- withheld vanilla items --------------------------------------------------- #
 // A story beat that hands over a pool item (the Zelkarons "charging" the Evil
 // Ring, say) still plays its dialogue while the store is suppressed, so the

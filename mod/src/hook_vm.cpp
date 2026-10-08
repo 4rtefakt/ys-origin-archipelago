@@ -27,6 +27,7 @@ void bridge_emit(const char* line);
 void ap_on_check(int flag_idx);  // notify the embedded AP client (hook_ap.cpp)
 extern "C" void ap_note_withheld(int idx);   // a suppressed item store (hook_ap.cpp)
 extern "C" void ap_request_autosave();       // hook_ap.cpp
+extern "C" void ap_sp_chest(int flag_idx);   // an SP chest's vanilla payout (hook_ap.cpp)
 extern bool g_loc_flag[0x200];   // registered randomized-location flags
 extern bool g_supp_item[0x200];  // vanilla item indices to suppress
 extern bool g_supp_give[0x200];  // ITEM ids the give-item op must swallow
@@ -85,6 +86,7 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
     if (g_loc_flag[idx]) {  // a randomized location's flag is firing — a check
         snprintf(buf, sizeof(buf), "C %X", idx);
         bridge_emit(buf);     // legacy bridge (no-op if no socket client)
+        if (val >= 1 && *addr < 1) ap_sp_chest((int)idx);   // first open only
         ap_on_check((int)idx); // embedded AP client -> LocationChecks
         return addr;  // let the flag set; the chest/event plays normally
     }
