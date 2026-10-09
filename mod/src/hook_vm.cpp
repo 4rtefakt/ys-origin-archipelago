@@ -83,6 +83,26 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
     snprintf(buf, sizeof(buf), "G %X %d", idx, val);
     bridge_emit(buf);
 
+    // An elemental altar zeroes its level cell (S_1004 182 = 0, S_2009 183 = 0,
+    // S_3007 184 = 0): in vanilla that is "the skill starts at level 1". With the
+    // skill already received and levelled, visiting its altar threw the level
+    // back to 1 until the next reconnect re-derived it ("I already had a few lvls
+    // in the spell but it went back down to lvl one", Discord, 2.0.1). The zero
+    // is still the Fire Altar's check (its detect flag IS 184), so report it;
+    // just do not let it land on a level that is above zero.
+    if (idx >= 0xB6 && idx <= 0xB8 && val == 0 && *addr > 0 &&
+        (g_supp_item[idx] || g_loc_flag[idx])) {
+        if (g_loc_flag[idx]) {
+            snprintf(buf, sizeof(buf), "C %X", idx);
+            bridge_emit(buf);
+            ap_on_check((int)idx);
+        }
+        mod_log("altar: kept skill level g_flags[0x%X] = %d (the altar's reset to 0 dropped)",
+                idx, *addr);
+        g_sink = 0;
+        return &g_sink;
+    }
+
     if (g_loc_flag[idx]) {  // a randomized location's flag is firing — a check
         snprintf(buf, sizeof(buf), "C %X", idx);
         bridge_emit(buf);     // legacy bridge (no-op if no socket client)

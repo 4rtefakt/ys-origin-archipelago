@@ -2445,6 +2445,35 @@ static void repair_1f_burden_softlock(int scene) {
             "directly; the stairs and the Crystal work again");
 }
 
+// --- Hugo's Eyes of Fact left hidden ---------------------------------------- #
+//
+// "Right before you fight Toal in the fire area all my magic stopped working and
+// I couldn't shoot projectiles, only use my wand like a melee weapon ... all the
+// fires went out" (Discord, 2.0.1). g_flags[211] is "the Eyes are faded out": a
+// cutscene sets it and puts it back at its end - S_3080/EV_FEENA02 sets 211 = 1
+// at pc 246 and 211 = 0 at pc 1473 of 1570. When the scene is cut short (the
+// cutscene skip zeroes waits; a room change can then tear the script down
+// before its tail) the Eyes stay hidden: no shots, no flames, until some later
+// script happens to clear the flag (BATTLE_WIN does).
+//
+// With the controls in the player's hands (185 == 1) and no fight running
+// (156 == 0) nothing legitimately keeps them hidden, so after three seconds of
+// that state the flag is put back.
+static void repair_hugo_eyes() {
+    static unsigned long s_since = 0;
+    volatile int* f = (volatile int*)kGFlagsAbs;
+    bool stuck = f[150] == 2 && f[211] == 1 && f[185] == 1 && f[156] == 0 &&
+                 *kPlayerEntPtr != nullptr;
+    if (!stuck) { s_since = 0; return; }
+    unsigned long now = GetTickCount();
+    if (!s_since) { s_since = now; return; }
+    if (now - s_since < 3000) return;
+    f[211] = 0;
+    s_since = 0;
+    mod_log("repair: Hugo's Eyes of Fact were left hidden (211 = 1) with the controls "
+            "free - cleared");
+}
+
 // --- Dreaming Idol chain repair (Yunica) ----------------------------------- #
 //
 // "Got to the part where the party is turned to stone... Talking to Feena
@@ -2517,6 +2546,7 @@ static void poll_value_checks() {
     enforce_item_cell_invariant();   // repair inflated key-item counts (run-ending)
     repair_1f_burden_softlock(scene); // repair the post-Kishgal 1F softlock
     repair_dreaming_idol_chain();      // Dino / idol use for Yunica
+    repair_hugo_eyes();                // Eyes of Fact left hidden by a cut scene
     std::vector<int64_t> fire;
     for (const auto& pb : g_poll_bits)
         if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&
