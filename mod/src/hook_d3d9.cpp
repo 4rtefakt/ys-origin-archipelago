@@ -22,20 +22,73 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM,
 // The file handle is kept open: the VM grant hook is a hot path, so a
 // fopen/fclose per line would lag the game. The AP poll thread logs too, so the
 // lazy open and each line are serialised.
+//
+// The log is meant to be POSTED when something goes wrong, so it must not carry
+// anything personal. Two rules, enforced here so no call site can forget them:
+//   * a Windows profile folder in a path ("\Users\<name>\") is written as
+//     "\Users\<user>\" - save paths were logged in full;
+//   * the file starts fresh at every launch. The previous launch is kept as
+//     yso_ap_mod.prev.log only when it was written under these rules (its first
+//     line is kLogHeader); an older, unscrubbed log is deleted instead.
+// The room's address is the caller's job: hook_ap.cpp logs the port (which is
+// the room on archipelago.gg) and a private host as hidden.
+static const char kLogHeader[] =
+    "# yso_ap_mod log v2 - safe to share: no Windows user name, no room port, no password";
 static char g_logpath[MAX_PATH] = "";
 static FILE* g_logf = nullptr;
 static std::mutex g_log_mtx;
+
+// "...\Users\name\..." -> "...\Users\<user>\..." in place (either slash, any case).
+static void scrub_user(char* s, size_t cap) {
+    for (char* p = s; *p; ++p) {
+        if ((*p != '\\' && *p != '/') || _strnicmp(p + 1, "users", 5) != 0 ||
+            (p[6] != '\\' && p[6] != '/'))
+            continue;
+        char* name = p + 7;
+        char* end = name;
+        while (*end && *end != '\\' && *end != '/' && *end != '\'' && *end != '"') ++end;
+        if (end == name) continue;
+        static const char kUser[] = "<user>";
+        size_t tail = strlen(end) + 1, nlen = sizeof(kUser) - 1;
+        if ((size_t)(name - s) + nlen + tail > cap) { *name = 0; return; }   // no room: cut, never leak
+        memmove(name + nlen, end, tail);
+        memcpy(name, kUser, nlen);
+        p = name + nlen - 1;
+    }
+}
+
+static void open_log() {
+    DWORD n = GetTempPathA(MAX_PATH, g_logpath);
+    lstrcpyA(g_logpath + n, "yso_ap_mod.log");
+    char prev[MAX_PATH];
+    lstrcpyA(prev, g_logpath);
+    lstrcpyA(prev + n, "yso_ap_mod.prev.log");
+    bool scrubbed = false;
+    if (FILE* old = fopen(g_logpath, "r")) {
+        char first[160] = "";
+        if (fgets(first, sizeof(first), old))
+            scrubbed = strncmp(first, kLogHeader, sizeof(kLogHeader) - 1) == 0;
+        fclose(old);
+    }
+    DeleteFileA(prev);
+    if (scrubbed) MoveFileA(g_logpath, prev);
+    g_logf = fopen(g_logpath, "w");
+    if (g_logf) { fputs(kLogHeader, g_logf); fputc('\n', g_logf); }
+}
+
 void mod_log(const char* fmt, ...) {
     std::lock_guard<std::mutex> lk(g_log_mtx);
     if (!g_logf) {
-        DWORD n = GetTempPathA(MAX_PATH, g_logpath);
-        lstrcpyA(g_logpath + n, "yso_ap_mod.log");
-        g_logf = fopen(g_logpath, "a");
+        open_log();
         if (!g_logf) return;
     }
+    char line[2048];
     va_list ap; va_start(ap, fmt);
-    vfprintf(g_logf, fmt, ap);
+    vsnprintf(line, sizeof(line) - 16, fmt, ap);     // headroom for a longer "<user>"
     va_end(ap);
+    line[sizeof(line) - 17] = '\0';
+    scrub_user(line, sizeof(line));
+    fputs(line, g_logf);
     fputc('\n', g_logf);
     fflush(g_logf);
 }

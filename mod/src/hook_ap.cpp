@@ -110,6 +110,19 @@ static std::set<int> g_goal_scenes{7002};
 
 static void strip_eol(char* s) { s[strcspn(s, "\r\n")] = '\0'; }
 
+// The room's address as the log may show it (the log is meant to be posted):
+// archipelago.gg and a local server by name, any other host as <private host>,
+// and the port only for a local server - on archipelago.gg the port IS the room,
+// and with a slot name it is enough to connect as that player.
+static std::string log_addr(const char* host, int port) {
+    std::string h = host ? host : "";
+    bool local = h.find("127.0.0.1") != std::string::npos ||
+                 h.find("localhost") != std::string::npos || h.find("[::1]") != std::string::npos;
+    bool known = local || h.find("archipelago.gg") != std::string::npos;
+    return (known ? h : std::string("<private host>")) + ":" +
+           (local ? std::to_string(port) : std::string("<port hidden>"));
+}
+
 static void load_config() {
     FILE* f = fopen("yso_ap.cfg", "r");
     if (!f) {
@@ -202,7 +215,7 @@ static void load_config() {
         }
     }
     fclose(f);
-    mod_log("ap: config host=%s port=%d slot=%s", g_host, g_port, g_slot);
+    mod_log("ap: config server=%s slot=%s", log_addr(g_host, g_port).c_str(), g_slot);
     {   // Log the goal scenes: an empty set means the goal can never report, which
         // is the safe failure but is otherwise invisible (e.g. a typo'd cfg value).
         std::string gs;
@@ -3190,7 +3203,8 @@ static void create_client() {
         snprintf(g_uri, sizeof(g_uri), "%s:%d", g_host, g_port);
     else
         snprintf(g_uri, sizeof(g_uri), "ws://%s:%d", g_host, g_port);
-    mod_log("ap: creating client (game=%s uri=%s slot=%s)", AP_GAME, g_uri, g_slot);
+    mod_log("ap: creating client (game=%s server=%s slot=%s)", AP_GAME,
+            log_addr(g_host, g_port).c_str(), g_slot);
     overlay::set_status(std::string("connecting to ") + g_uri + " ...");
     g_ap = new APClient("YsOrigin-Mod", AP_GAME, g_uri);
 
@@ -3253,7 +3267,8 @@ void ap_request_connect(const char* host, int port, const char* slot,
     strncpy(g_req_pass, pass, sizeof(g_req_pass) - 1); g_req_pass[sizeof(g_req_pass)-1] = 0;
     g_req_port = port;
     g_conn_req.store(true);
-    mod_log("ap: connect requested from menu (host=%s port=%d slot=%s)", host, port, slot);
+    mod_log("ap: connect requested from menu (server=%s slot=%s)",
+            log_addr(host, port).c_str(), slot);
 }
 
 // Prefill accessors for the menu (defaults from yso_ap.cfg).

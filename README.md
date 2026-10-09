@@ -248,7 +248,7 @@ overlay.
 - **Game won't launch / crashes immediately?** Make sure your Ys Origin is the
   current Steam build (**v1.1.1.0**) and that you used the `dinput8.dll` from the
   matching Release (it's built for that exact version).
-- **Diagnostics:** the mod writes a log to `%TEMP%\yso_ap_mod.log`.
+- **Diagnostics:** the mod writes a log to `%TEMP%\yso_ap_mod.log`. It is safe to post when reporting a bug: your Windows user name, the room's port and any private server address are left out, and the password is never logged. It starts fresh at each launch (the launch before is kept as `yso_ap_mod.prev.log`).
 - **Starting gear missing?** Don't run any *other* external AP client at the same
   time as the mod — they conflict. The mod handles everything itself.
 
