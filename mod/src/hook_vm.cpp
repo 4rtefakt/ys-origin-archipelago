@@ -689,6 +689,65 @@ __declspec(naked) static void Hook_WaitTail() {
     }
 }
 
+// --- Wait_ChrMoving watchdog -------------------------------------------------- #
+//
+// Op 0x100 Wait_ChrMoving(actor) holds a script until the actor stops: the
+// handler calls FUN_00570bc0 (al = the actor still has speed, +0x364 / +0x380)
+// and at 0x56A770 does `test al,al ; je 0x56DB1D (proceed) ; jmp 0x56A4B4
+// (wait)`. Unlike the other cutscene waits it does not pass the shared tail, so
+// nothing ever forces it, and an actor that is told to walk but cannot (a scene
+// whose pacing waits were skipped can issue the walk mid-animation) keeps the
+// script there for good with the controls locked: "they went thru their dialog
+// and they are just kinda doing nothing, no input is working" (Hugo, the scene
+// with Epona after Pictimos, S_5099/AFTERBATTLE_HUGO_2 pc 4293; Discord,
+// 2.0.1). No walk in the game takes anywhere near this long, so a script that
+// has sat on one Wait_ChrMoving for kWaitMovingMs is let through.
+static const uintptr_t kWaitMoving = 0x0056A770;   // test al,al ; je proceed
+static void* g_orig_waitmoving = nullptr;
+static const unsigned long kWaitMovingMs = 15000;
+
+extern "C" int __cdecl WaitMovingWatch(int moving, void* ctx) {
+    // Several scripts can sit on this op at once (a scene and its child
+    // scripts), so each context has its own clock.
+    struct Slot { void* ctx; unsigned long since, seen; };
+    static Slot s_slots[8] = {};
+    unsigned long now = GetTickCount();
+    Slot* slot = nullptr;
+    Slot* spare = &s_slots[0];
+    for (Slot& s : s_slots) {
+        if (s.ctx == ctx) { slot = &s; break; }
+        if (!s.ctx || now - s.seen > 1000) spare = &s;     // free, or a wait that ended
+    }
+    if (!moving) { if (slot) slot->ctx = nullptr; return 0; }
+    if (!slot || now - slot->seen > 1000) {             // a new wait
+        slot = slot ? slot : spare;
+        slot->ctx = ctx;
+        slot->since = now;
+    }
+    slot->seen = now;
+    if (now - slot->since < kWaitMovingMs) return 1;
+    slot->ctx = nullptr;
+    mod_log("watchdog: a script waited %lu s on Wait_ChrMoving (scene %d) - let through",
+            kWaitMovingMs / 1000, *(volatile int*)0x0076C100);
+    return 0;
+}
+
+__declspec(naked) static void Hook_WaitMoving() {
+    __asm {
+        pushfd
+        pushad
+        movzx eax, al
+        push edi                          // the script context
+        push eax                          // al: the actor is still moving
+        call WaitMovingWatch
+        add  esp, 8
+        mov  byte ptr [esp + 28], al      // the saved eax's low byte
+        popad
+        popfd
+        jmp  dword ptr [g_orig_waitmoving]   // test al,al ; je 0x56DB1D ; jmp 0x56A4B4
+    }
+}
+
 // Decide whether to fast-forward this tick (called each tick from the AP poll
 // loop). AUTO during the New-Game intro: the intro plays as scene 2 with scene-0
 // interludes, so we arm a window when scene 2 appears and disarm once a real room
@@ -854,6 +913,9 @@ void hook_vm_install() {
     MH_STATUS ew = MH_EnableHook((void*)kWaitOp);
     MH_STATUS ct = MH_CreateHook((void*)kWaitTail, (void*)&Hook_WaitTail, &g_orig_waittail);
     MH_STATUS et = MH_EnableHook((void*)kWaitTail);
+    MH_STATUS cm = MH_CreateHook((void*)kWaitMoving, (void*)&Hook_WaitMoving, &g_orig_waitmoving);
+    MH_STATUS em = MH_EnableHook((void*)kWaitMoving);
+    mod_log("hook_vm_install: wait-moving watchdog=%d/%d", cm, em);
     // Intro-movie skip: report the opening AVIs as not-found.
     //
     // Hook BOTH kernel32 and KERNELBASE. The movie is not opened by the game's
