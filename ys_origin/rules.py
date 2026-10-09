@@ -304,6 +304,63 @@ def _set_rules_open(world: "YsOriginWorld") -> None:
         gate(src, dst, unlock, ore_n, anchor)
 
 
+def _rule_json(rule):
+    """One resolved rule as plain data: True / False, ["has", item, n],
+    ["reach", region index], ["all", ...] or ["any", ...]."""
+    kind = type(rule).__qualname__.split(".")[0]
+    if kind == "Has":
+        return ["has", rule.item_name, rule.count]
+    if kind in ("HasAll", "HasAny"):
+        return ["all" if kind == "HasAll" else "any", *(["has", n, 1] for n in rule.item_names)]
+    if kind in ("HasAllCounts", "HasAnyCount"):
+        return ["all" if kind == "HasAllCounts" else "any", *(["has", n, c] for n, c in rule.item_counts)]
+    if kind in ("And", "Or"):
+        return ["all" if kind == "And" else "any", *(_rule_json(c) for c in rule.children)]
+    if kind == "CanReachRegion":
+        return ["reach", rule.region_name]
+    if kind in ("True_", "False_"):
+        return kind == "True_"
+    raise ValueError(f"logic export: no plain form for the rule {rule!r}")
+
+
+def export_logic(world: "YsOriginWorld") -> dict:
+    """The seed's region graph and rules as plain data (slot_data ``logic``), so
+    a client can count what is in logic from the items received:
+
+        regions   : region names; index 0 is the origin
+        entrances : [from, to, rule]            (region indices)
+        locations : {location id: [region, rule]}
+
+    Rules are the forms of `_rule_json`, with region names turned into indices.
+    An entrance or location with no rule of its own is ``true``."""
+    mw, player = world.multiworld, world.player
+    origin = world.origin_region_name
+    names = [origin] + sorted(r.name for r in mw.get_regions(player) if r.name != origin)
+    index = {n: i for i, n in enumerate(names)}
+
+    def plain(obj):
+        rule = obj.access_rule
+        if not hasattr(rule, "player"):          # the default rule: always true
+            return True
+        return _reindex(_rule_json(rule))
+
+    def _reindex(j):
+        if isinstance(j, list):
+            if j[0] == "reach":
+                return ["reach", index[j[1]]]
+            if j[0] in ("all", "any"):
+                return [j[0], *(_reindex(c) for c in j[1:])]
+        return j
+
+    return {
+        "regions": names,
+        "entrances": [[index[e.parent_region.name], index[e.connected_region.name], plain(e)]
+                      for e in mw.get_entrances(player) if e.connected_region is not None],
+        "locations": {str(l.address): [index[l.parent_region.name], plain(l)]
+                      for l in mw.get_locations(player) if l.address is not None},
+    }
+
+
 def set_completion_condition(world: "YsOriginWorld") -> None:
     # The Devil Medallion is not the win, the door it opens is: S_6053's
     # OPEN_THE_DOOR consumes it to open the way to S_6099 -> S_6097 -> the summit

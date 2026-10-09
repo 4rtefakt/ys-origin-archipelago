@@ -28,7 +28,7 @@ from .items import ItemKind, item_name_groups, item_name_to_id, kind_of
 from .locations import LOC_META, location_name_to_id
 from .options import YsOriginOptions
 from .regions import ALL_REGIONS, CONNECTIONS
-from .rules import set_completion_condition, set_rules
+from .rules import export_logic, set_completion_condition, set_rules
 from . import data_tables as dt
 
 _KIND_TO_AP = {
@@ -494,6 +494,9 @@ class YsOriginWorld(World):
             # so the mod can tell the player when the seed's apworld is newer
             # than the dll they are running
             "apworld_version": dt.WORLD_VERSION,
+            # the region graph and rules as plain data: a client counts what is
+            # in logic from the items it has received (rules.export_logic)
+            "logic": export_logic(self),
             # item name -> tier int (1/2/4/0), for the overlay toast color when a
             # received item carries no classification flags (cheat /send etc.).
             "item_tiers": dt.item_tiers(),
