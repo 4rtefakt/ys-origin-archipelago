@@ -373,3 +373,68 @@ level + the room-load spawn/init path unblocks #4, #6, and half of #5 at once.
 That's the one deep-RE session with the best payoff. Everything else on the
 "needs RE" list is either a single observed scene id (#2) or an offline
 flag-dump grep (#7 first-pass).
+
+---
+
+## After 2.0.1 (added 2026-10-09)
+
+### 15. 🔵 Lila Shell hint menu — *designed, not built*
+
+**Idea (4rtefakt).** The Lila Shell normally calls an NPC for story advice, which
+is mostly wrong in a randomizer. Using it should instead open a hint menu, in
+the game's own UI, not an overlay.
+
+**Flow.**
+1. A normal dialogue box: "Hint points: 12. A hint costs 5."
+2. The game's own menu window with the picker (below) and "Never mind".
+3. Picking an entry sends `!hint <item>`; the answer arrives as a dialogue box
+   and lands in the hint list.
+
+**The picker** (so nobody types an item name): this slot's progression items
+not yet received, ordered by where the tower first needs them
+(`data_tables.ITEM_GATE_FLOOR` already has that depth; publish the order in
+slot_data). First row, preselected: "Whatever I need next" = the top of that
+list. The native menu holds 16 records plus a header, so a longer list needs a
+"More..." row.
+
+**How, retail mod.** Serve a generated script in place of the Shell's:
+* Item use runs `StartScript("@Riranokaigara")` (`FUN_00434970`, name in `ecx`;
+  `@` = `data\map\s_common\<name>.xso`, then `.z`; `0x40a460` formats the path,
+  `0x5defa0` on the archive object `[0x765554]` checks it exists). Toal's
+  `@DarkRiranokaigara` is unreachable in retail.
+* Still to trace: the read of the file's bytes from the archive, which is where
+  the generated script has to be fed in. A stored-block zlib stream avoids
+  needing a compressor.
+* The script uses only shipped ops (CleriaCore `WNDDIALOG_DRAW.md`):
+  `0xd3 Window_Msg(speaker, face, name, text)` with inline strings (string-pool
+  indices), `0xd7 Menu_Init`, `0xd8 Menu_Add(text, label)`, `0xd9
+  Menu_Select(title)`, `0xda Menu_AssignCancel(label)`. A choice jumps to its
+  label, where a `0x64 Flag_SetInt` on a free flag tells the mod which row was
+  picked. XSO layout: `docs/formats/XSO.md` in CleriaCore (header, code words,
+  string pool after the code, label table).
+* The client already has the numbers: `get_hint_points()`,
+  `get_hint_cost_points()` in apclientpp.
+
+**How, CleriaCore port.** Two engine additions, then the mod wires them: an
+"item used" event that covers the Shell (API 4's `item_used` fires for the
+Panacea only), and a call that opens the game's native menu with entries the
+mod supplies. Until then the mod's page can offer the same picker in place of
+its type-a-name field.
+
+**Apworld.** The Shell becomes a starting item (it is a pool item today, with
+one location, `Corrupted Blood: Staircase — Lila Shell`, which then takes
+filler). This changes seeds: ship it with a release, not a hotfix.
+
+### 16. Player feedback, 2.0.1 (Discord, 2026-10-09)
+
+| who | report | status |
+|---|---|---|
+| CaptainSlug | Received **Progressive Wind Skill** right at the start of a New Game (from `Statue: 1F Save (S_1000)`, and on a second try as the first item) and had no wind skill and no Cerulean Flabellum in the inventory. | **Not reproduced; cause not confirmed.** No script resets the skill cells. Hardened on master: receipts are counted by received-list index, and the artifact, power, level cell and blessing bits are re-derived every tick (`reconcile_derived`). Need his `%TEMP%\\yso_ap_mod.log` to confirm. |
+| Ferrene | Could use the **Lv 2 charged fire** skill with only one fire skill found. | Same area, probably a receipt counted twice; covered by the index-based count. Unconfirmed. |
+| Ferrene | With dialogue skip on, stuck at the **Silver Chimes** scene with the goddess's portrait on screen until she warped away. | Open. Matches the standing `cutscene_skip=2` lead (the skip zeroes waits and can cut a scene's tail). |
+| Ferrene | "Logic locked the Silver Chimes behind the Rado Tower purified Evil Ring checks, which need the Chimes." | **Not a logic error.** Nothing gates on the Zelkarons: `S_4014`'s ward only sets flag 393 (read by that room alone) and charges a held drained ring. The received Evil Ring is already charged and opens the door. The vanilla "the Evil Ring is charged" scene suggests otherwise; 2.0.1's withheld-item feed line is the mitigation. |
+| Ferrene | Finished a full all-bosses run as Yunica (locked statues, random start). | The goal, random start and locks work end to end. |
+
+**Also fixed on master after 2.0.1, unreleased:** the five SP chests no longer
+pay their vanilla SP on top of the seed's item (`ap_sp_chest`); the Ruby/Topaz
+rename is finished in `ABILITY_GRANTS`.

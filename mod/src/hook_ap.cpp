@@ -447,8 +447,10 @@ extern "C" int ap_bless_compare_price(int vanilla) {
 }
 
 // Grant a blessing EFFECT (received as an item): set its bit + recompute.
+static std::atomic<unsigned> g_bless_owned{0};   // effect bits AP has granted (reconcile_derived)
 static void grant_blessing_bit(int bit) {
     if (bit < 0 || bit > 31) return;
+    g_bless_owned.fetch_or(1u << bit);
     volatile int* cell = (volatile int*)kBlessBitsAbs;
     if (*cell & (1 << bit)) return;
     *cell |= (1 << bit);
@@ -1194,7 +1196,9 @@ static void reconcile_roda_fruit() {
 // hold three Emeralds with no Wind skill to use them on.
 struct ProgSkill { int artifact, power, level_cell; };
 static std::map<std::string, ProgSkill> g_prog_skills;
-static std::map<std::string, int> g_prog_skill_count;   // receipts so far
+// Received-list indices per chain, not a counter: however often an item is
+// walked (a replay, a resend) it counts once, so the Nth receipt is always N.
+static std::map<std::string, std::set<int>> g_prog_skill_idx;
 
 // Tiered blessings (LV1 -> LV2 -> LV3) as one chain: each receipt sets the next
 // bit in order, so a family can never arrive out of sequence.
@@ -1222,6 +1226,7 @@ static void grant_progressive_blessing(const std::string& name) {
     for (int bit : it->second) {
         if (++k > n) break;
         if (bit < 0 || bit > 31) continue;
+        g_bless_owned.fetch_or(1u << bit);
         if (*cell & (1 << bit)) continue;          // that tier is already in
         *cell |= (1 << bit);
         request_recalc();
@@ -1254,11 +1259,13 @@ static void claim_flag_locations(int idx) {
                     "g_flags[0x%X] — not a player check", (long long)loc, idx);
 }
 
-static void grant_progressive_skill(const std::string& name) {
+static void grant_progressive_skill(const std::string& name, int index) {
     auto it = g_prog_skills.find(name);
     if (it == g_prog_skills.end()) return;
     const ProgSkill& ps = it->second;
-    int n = ++g_prog_skill_count[name];
+    auto& seen = g_prog_skill_idx[name];
+    seen.insert(index);
+    int n = (int)seen.size();
     if (n == 1) {
         ap_give(ps.artifact, 1, /*stack=*/false);
         ap_give(ps.power,    1, /*stack=*/false);
@@ -1278,6 +1285,57 @@ static void grant_progressive_skill(const std::string& name) {
         mod_log("ap: %s #%d -> level cell 0x%X now %d",
                 name.c_str(), n, ps.level_cell, *cell);
     }
+}
+
+// Re-derive what the received list says the player owns, every tick in game.
+//
+// reconcile_gear re-asserts item cells, but a skill is three things: the
+// artifact, its power, and a LEVEL cell in the 128..511 band that New Game
+// zeroes and a save load replaces. A skill item that arrived as a game started
+// (the 1F statue's own check is sent the moment S_1000 loads) could be left
+// with no skill at all, and a level gained since the last save was lost on a
+// reload until the next reconnect ("I should have the wind skill but I don't
+// see anything there", "lvl 2 charged fire with only 1 fire skill found",
+// Discord, 2.0.1). Blessing effects are bits with the same problem. So: with N
+// receipts of a chain the artifact and power are owned and the level is at
+// least N-1; every effect bit AP granted is set.
+static void reconcile_derived() {
+    if (read_current_scene() <= 0) return;         // not in-game: block is stale
+    bool changed = false;
+    for (const auto& kv : g_prog_skill_idx) {
+        int n = (int)kv.second.size();
+        auto it = g_prog_skills.find(kv.first);
+        if (n < 1 || it == g_prog_skills.end()) continue;
+        const ProgSkill& ps = it->second;
+        for (int idx : {ps.artifact, ps.power}) {
+            if (idx < 0 || idx >= 0x200) continue;
+            volatile int* cell = (volatile int*)(kGFlagsAbs + idx * 4);
+            if (*cell < 1) {
+                mod_log("skill: restored g_flags[0x%X] %d -> 1 (%s)", idx, *cell, kv.first.c_str());
+                *cell = 1;
+                changed = true;
+            }
+        }
+        int want = n - 1 > 3 ? 3 : n - 1;
+        if (ps.level_cell >= 0 && ps.level_cell < 0x200 && want > 0) {
+            volatile int* cell = (volatile int*)(kGFlagsAbs + ps.level_cell * 4);
+            if (*cell < want) {
+                claim_flag_locations(ps.level_cell);
+                mod_log("skill: restored level g_flags[0x%X] %d -> %d (%s)", ps.level_cell,
+                        *cell, want, kv.first.c_str());
+                *cell = want;
+                changed = true;
+            }
+        }
+    }
+    unsigned owned = g_bless_owned.load();
+    volatile int* bits = (volatile int*)kBlessBitsAbs;
+    if (owned && ((unsigned)*bits & owned) != owned) {
+        mod_log("bless: restored effect bits 0x%X -> 0x%X", (unsigned)*bits, (unsigned)*bits | owned);
+        *bits |= (int)owned;
+        changed = true;
+    }
+    if (changed) request_recalc();
 }
 
 // Flag-method locations already fired, shared by the two paths that can fire
@@ -1481,7 +1539,8 @@ static void on_slot_connected(const nlohmann::json& sd) {
             int i = v.get<int>();
             if (i >= 0 && i < 0x200) g_roo_flags.push_back(i);
         }
-    g_prog_skill_count.clear();
+    g_prog_skill_idx.clear();
+    g_bless_owned.store(0);
     g_prog_chain_count.clear();
     g_held_items.clear();           // the server replays the whole list anyway
     g_prog_bless.clear();
@@ -2002,7 +2061,7 @@ static void apply_items(const std::list<APClient::NetworkItem>& items) {
         } else if (apply_trap(name)) {
             // Trap effect armed above; the red trap toast fires below like any item.
         } else if (g_prog_skills.count(name)) {
-            grant_progressive_skill(name);
+            grant_progressive_skill(name, it.index);
         } else if (g_prog_bless.count(name)) {
             grant_progressive_blessing(name);
         } else if (f != g_name_to_idx.end() && f->second >= 0x200 &&
@@ -3083,6 +3142,7 @@ static void poll_loop() {
             poll_statue_warp();
             reconcile_gear();   // re-assert granted gear a save/load reset
             reconcile_roda_fruit();
+            reconcile_derived();
             report_withheld();
             poll_panacea_use();
             exp_scaling_poll();
