@@ -123,6 +123,9 @@ static std::string log_addr(const char* host, int port) {
            (local ? std::to_string(port) : std::string("<port hidden>"));
 }
 
+// This dll's version, compared (major.minor) with the seed's apworld_version.
+static const char kModVersion[] = "2.0.1";
+
 static void load_config() {
     FILE* f = fopen("yso_ap.cfg", "r");
     if (!f) {
@@ -1989,6 +1992,21 @@ static void on_slot_connected(const nlohmann::json& sd) {
     }
     mod_log("ap: slot_connected — %d items, %d suppress, %d location flags, "
             "%d scene checks", names, supp, locs, scenes);
+    {   // The seed's apworld against this dll (major.minor: a patch release of
+        // either side stays compatible). A newer apworld means items or rules
+        // this dll has never heard of.
+        std::string av = sd.value("apworld_version", std::string());
+        int am = 0, an = 0, mm = 0, mn = 0;
+        sscanf(kModVersion, "%d.%d", &mm, &mn);
+        mod_log("ap: dll %s, seed made with apworld %s", kModVersion,
+                av.empty() ? "(before 2.0.2: unknown)" : av.c_str());
+        if (sscanf(av.c_str(), "%d.%d", &am, &an) == 2 && (am > mm || (am == mm && an > mn))) {
+            std::string w = "This seed was made with apworld " + av + ", newer than this mod (" +
+                            kModVersion + "): update dinput8.dll";
+            mod_log("ap: WARNING %s", w.c_str());
+            overlay::push_item(w);
+        }
+    }
     overlay::set_status(std::string("connected as ") + g_slot);
     if (!scout.empty()) g_ap->LocationScouts(scout, 0);  // learn what's at each
 }
@@ -3218,7 +3236,27 @@ static void create_client() {
     });
     g_ap->set_room_info_handler([]() {
         mod_log("ap: room_info -> ConnectSlot(%s)", g_slot);
-        g_ap->ConnectSlot(g_slot, g_pass, 0b111);
+        // 0.6.7 is the apworld's required_client_version: older dlls reported
+        // apclientpp's 0.6.4 and are refused by a seed that needs this one.
+        g_ap->ConnectSlot(g_slot, g_pass, 0b111, {}, {0, 6, 7});
+    });
+    // A refusal used to show nothing at all: the status line stayed on
+    // "authenticating" and the game played vanilla, unconnected.
+    g_ap->set_slot_refused_handler([](const std::list<std::string>& reasons) {
+        std::string why;
+        for (const auto& r : reasons) {
+            const char* t = r.c_str();
+            if (r == "InvalidSlot") t = "no slot with that name in this room";
+            else if (r == "InvalidGame") t = "that slot is not a Ys Origin slot";
+            else if (r == "InvalidPassword") t = "wrong or missing password";
+            else if (r == "IncompatibleVersion")
+                t = "this dinput8.dll is too old for the seed: update the mod";
+            if (!why.empty()) why += "; ";
+            why += t;
+        }
+        mod_log("ap: connection refused - %s", why.c_str());
+        overlay::set_status("refused: " + why);
+        overlay::push_item("Archipelago: " + why);
     });
     g_ap->set_slot_connected_handler(on_slot_connected);
     g_ap->set_items_received_handler(on_items_received);

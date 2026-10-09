@@ -74,6 +74,7 @@ class YsOriginWorld(World):
 
     game = "Ys Origin"
     web = YsOriginWeb()
+    required_client_version = dt.REQUIRED_CLIENT_VERSION
 
     options_dataclass = YsOriginOptions
     options: YsOriginOptions
@@ -486,6 +487,9 @@ class YsOriginWorld(World):
             # needs the explicit map rather than a g_flags item index.
             "sp_items": dict(dt.SP_FILLER),
             "sp_flag_idx": dt.SP_FLAG_IDX,
+            # so the mod can tell the player when the seed's apworld is newer
+            # than the dll they are running
+            "apworld_version": dt.WORLD_VERSION,
             # item name -> tier int (1/2/4/0), for the overlay toast color when a
             # received item carries no classification flags (cheat /send etc.).
             "item_tiers": dt.item_tiers(),

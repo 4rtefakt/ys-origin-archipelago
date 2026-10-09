@@ -30,6 +30,20 @@ def _read_data(relpath: str) -> str:
             return raw.decode("utf-8")
     return (Path(__file__).parent / relpath).read_text(encoding="utf-8")
 
+# The apworld's version: the manifest (tools/build_apworld.py reads this line) and
+# slot_data's `apworld_version`, which the mod compares with its own.
+WORLD_VERSION = "2.0.1"
+
+# The client version the server demands of anything connecting to a Ys Origin
+# slot. Every dinput8.dll up to 2.0.1 reported 0.6.4 (apclientpp's default), and
+# an old DLL on a newer seed fails SILENTLY: it does not know the progressive
+# chains and drops them ("received 'Progressive Wind Skill' - no g_flags index,
+# skipped", a 1.9.x DLL on a 2.0.1 seed, Discord Oct 2026). From here the DLL
+# reports 0.6.7, so an older one is refused at the door instead. It must stay at
+# or below the Archipelago version we require (0.6.7): the text client and the
+# trackers report their own Archipelago version on the same slot.
+REQUIRED_CLIENT_VERSION = (0, 6, 7)
+
 LOC_BASE_ID = 0x59_6000
 ITEM_BASE_ID = 0x59_5000
 MENU = "Menu"

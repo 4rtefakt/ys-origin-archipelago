@@ -19,7 +19,10 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PKG = REPO / "ys_origin"
 
-WORLD_VERSION = "2.0.1"
+# the one place the version is written: ys_origin/data_tables.py (it is also in slot_data)
+import re as _re
+WORLD_VERSION = _re.search(r'^WORLD_VERSION = "([^"]+)"',
+                           (PKG / "data_tables.py").read_text(encoding="utf-8"), _re.M).group(1)
 MIN_AP_VERSION = "0.6.7"  # Rule Builder: verified present in the 0.6.7 release tag
 
 MANIFEST = {
