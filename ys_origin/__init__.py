@@ -263,8 +263,12 @@ class YsOriginWorld(World):
             bool(self.options.progressive_blessings.value))]
         # statue warp-unlock items (one per statue) when the option is on; they
         # take real-item slots, displacing that many filler.
+        # The spawn statue is open from the start (rules: "spawn statue free"),
+        # so its own unlock would be a dead item: "I started at 5F warp and later
+        # looted 5F Warp again". It is left out; a filler takes the slot.
         if self.options.statue_warp_locks.value:
-            pool += [self.create_item(n) for n in dt.statue_unlock_items()]
+            pool += [self.create_item(n) for n in dt.statue_unlock_items()
+                     if dt.STATUE_UNLOCKS[n]["scene"] != self.start_statue_scene]
         # Fill the remaining slots: the first `trap_count` become random traps
         # (they displace filler), the rest varied filler.
         n_fill = n_locations - len(pool)
