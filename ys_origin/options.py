@@ -193,7 +193,9 @@ class ExpMultiplierBase(Range):
     """Flat EXP multiplier applied everywhere while EXP scaling is on (the
     ``exp_multiplier`` / ``both`` modes). Default 20x: a rando run zig-zags the
     tower out of order and the mod's own EXP hook only reaches kills once fixed,
-    so a strong flat boost keeps leveling brisk. 1 = vanilla rate."""
+    so a strong flat boost keeps leveling brisk. 1 = vanilla rate. A kill never
+    gives less than half the multiplier, however far below your level the
+    monster is."""
     display_name = "Base EXP multiplier"
     range_start = 1
     range_end = 100
