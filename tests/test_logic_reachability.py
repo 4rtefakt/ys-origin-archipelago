@@ -340,6 +340,14 @@ def test_22f_path_2_is_fire_for_toal():
     assert dt.LOCATION_REQUIRES_BY_CHARACTER == {"toal": {loc: ["Gold Bracelet", "Crimson Lotusblade"]}}
 
 
+def test_22f_path_3_chests_need_the_double_jump():
+    """S_6015: both chests stand on 4.0-high steps (the pedestal at y -24 over the
+    -28 walkway; the -24 / -20 / -16 climb to the north-east platform). A single
+    jump peaks at 2.63, the double jump at 5.29 (measured in CleriaCore)."""
+    for loc in ("Demonic Core: 22F Path 3", "Demonic Core: 22F Path 3 #2"):
+        assert dt.LOCATION_REQUIRES[loc] == ["Gold Bracelet"]
+
+
 def test_undead_wards_need_the_chimes():
     """The revive family only stays dead under the Silver Chimes, and two wards
     are held by it: S_4009's Zarues and S_5080's four Zeruena, whose barrier
