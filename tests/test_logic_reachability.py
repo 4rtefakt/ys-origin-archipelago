@@ -332,6 +332,14 @@ def test_the_2f_gap_takes_wind_or_the_double_jump():
     assert edges[(r("S_1004"), r("S_1005"))] == [["Cerulean Flabellum", "Gold Bracelet"]]
 
 
+def test_22f_path_2_is_fire_for_toal():
+    """The 22F Path 2 chest: double jump + wind for Yunica and Hugo, double jump
+    + fire for Toal (the guide's three walkthroughs)."""
+    loc = "Demonic Core: 22F Path 2"
+    assert dt.LOCATION_REQUIRES[loc] == ["Gold Bracelet", "Cerulean Flabellum"]
+    assert dt.LOCATION_REQUIRES_BY_CHARACTER == {"toal": {loc: ["Gold Bracelet", "Crimson Lotusblade"]}}
+
+
 def test_undead_wards_need_the_chimes():
     """The revive family only stays dead under the Silver Chimes, and two wards
     are held by it: S_4009's Zarues and S_5080's four Zeruena, whose barrier

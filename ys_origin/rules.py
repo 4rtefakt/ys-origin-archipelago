@@ -25,6 +25,7 @@ from .data_tables import (
     CONNECTIONS,
     GOAL_ITEM,
     LOCATION_REQUIRES,
+    LOCATION_REQUIRES_BY_CHARACTER,
     RODA_FRUIT,
     ROO_LOCATIONS,
     active_gates,
@@ -83,8 +84,8 @@ def _sub(name: str) -> str:
 _GAP_GROUP = frozenset(("Cerulean Flabellum", "Gold Bracelet"))
 _FIRE_CROSSES = False
 # Chests the same dash reaches with nothing else: 22F Path 2 wants the double
-# jump AND the wind skill, and Toal took it with the fire skill alone (a
-# multiworld run, Oct 2026).
+# jump AND a skill (fire for Toal), and Toal took it with the fire skill alone
+# (a multiworld run, Oct 2026).
 _FIRE_REACHES = frozenset(("Demonic Core: 22F Path 2",))
 
 
@@ -202,7 +203,8 @@ def _set_location_requires(world: "YsOriginWorld") -> None:
 
 def _location_require_terms(world: "YsOriginWorld", loc_name: str) -> list:
     """The LOCATION_REQUIRES entry for one location, as rule terms."""
-    reqs = LOCATION_REQUIRES.get(loc_name, [])
+    reqs = LOCATION_REQUIRES_BY_CHARACTER.get(char_name(world.options), {}).get(
+        loc_name, LOCATION_REQUIRES.get(loc_name, []))
     live = set(world._region_names())
     scenes = [r for r in reqs if r.startswith("S_")]
     items = character_req([r for r in reqs if not r.startswith("S_")],

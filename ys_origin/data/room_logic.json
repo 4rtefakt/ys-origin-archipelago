@@ -1431,6 +1431,15 @@
       "Gold Bracelet"
     ]
   },
+  "location_requires_by_character": {
+    "_doc": "A character's own requirement for a location, replacing its location_requires entry. 22F Path 2: Yunica and Hugo cross with the double jump and the WIND skill, Toal with the double jump and the FIRE skill (the guide, all three walkthroughs).",
+    "toal": {
+      "Demonic Core: 22F Path 2": [
+        "Gold Bracelet",
+        "Crimson Lotusblade"
+      ]
+    }
+  },
   "zone_exits": {
     "Wailing Blue": "S_1097",
     "Flooded Prison": "S_2097",

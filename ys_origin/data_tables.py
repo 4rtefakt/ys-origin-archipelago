@@ -214,6 +214,11 @@ _loc_region_override: Dict[str, str] = _room_logic_doc.get("locations", {})
 LOCATION_REQUIRES: Dict[str, List[str]] = {
     k: v for k, v in _room_logic_doc.get("location_requires", {}).items()
     if not k.startswith("_")}
+# character -> {location: requirement} where one character's way to a location
+# differs (see the section's _doc); it replaces the LOCATION_REQUIRES entry.
+LOCATION_REQUIRES_BY_CHARACTER: Dict[str, Dict[str, List[str]]] = {
+    c: dict(m) for c, m in _room_logic_doc.get("location_requires_by_character", {}).items()
+    if not c.startswith("_")}
 # zone -> the authored scene you physically EXIT through to the next zone. For an
 # authored zone we route the next zone's entry from this room (so the next zone
 # is only reachable after the full intra-zone traversal), instead of the coarse
