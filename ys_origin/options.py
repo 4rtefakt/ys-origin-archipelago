@@ -348,11 +348,12 @@ class WeaponRequirements(DefaultOnToggle):
 
 
 class FireSkillCrossing(Toggle):
-    """Count Toal's fire skill as a way across a gap the logic otherwise wants the
-    wind skill or the double jump for (the 2F Path 2 gap). His fire skill is a
-    forward dash and carries him over; the other two characters' fire skills do
-    not, so the option does nothing for them.
-    Off (the default) = such a gap needs the wind skill or the Gold Bracelet."""
+    """Count Toal's fire skill as a way across gaps the logic otherwise wants the
+    wind skill or the double jump for: the 2F Path 2 gap, and the 22F Path 2
+    chest (which otherwise needs both). His fire skill is a forward dash and
+    carries him over; the other two characters' fire skills do not, so the
+    option does nothing for them.
+    Off (the default) = those need the wind skill and / or the Gold Bracelet."""
     display_name = "Fire skill crosses gaps (Toal)"
 
 

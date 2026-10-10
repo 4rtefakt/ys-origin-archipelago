@@ -236,7 +236,7 @@ overlay.
 | `exp_multiplier_catchup` | `1`–`100` | `60` | EXP multiplier while your level ≤ the deepest visited floor's expected level + margin — catch up by fighting anywhere, easy floors included |
 | `exp_catchup_margin` | `0`–`20` | `5` | Levels above the deepest floor's expected level that still count as catching up |
 | `progressive_armor` | `true` / `false` | `true` | Armor & Boots become progressive: gear chests hold "Progressive Armor"/"Progressive Boots", and receiving one grants your character's next tier (pickups never skip ahead). Off = raw pieces shuffled as-is |
-| `fire_skill_crossing` | `true` / `false` | `false` | Toal only: his fire skill (a forward dash) counts as a way across the 2F Path 2 gap, which otherwise needs the wind skill or the double jump (Gold Bracelet) |
+| `fire_skill_crossing` | `true` / `false` | `false` | Toal only: his fire skill (a forward dash) counts as a way across the 2F Path 2 gap (otherwise the wind skill or the double jump) and to the 22F Path 2 chest (otherwise both) |
 | `weapon_requirements` | `true` / `false` | `true` | Gate each zone behind enough Cleria Ore that the vanilla weapon level for that floor is obtainable first; Cleria Ore becomes progression and upgrades your weapon on pickup. Pairs with `level_scaling` to keep warped-ahead floors playable |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
 

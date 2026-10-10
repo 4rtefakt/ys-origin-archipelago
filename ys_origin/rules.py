@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from rule_builder.rules import And, CanReachRegion, Has, HasAny, True_
+from rule_builder.rules import And, CanReachRegion, Has, HasAny, Or, True_
 
 from .data_tables import (
     CLERIA_ORE,
@@ -82,6 +82,10 @@ def _sub(name: str) -> str:
 # fire skill joins that group. Set at the top of set_rules.
 _GAP_GROUP = frozenset(("Cerulean Flabellum", "Gold Bracelet"))
 _FIRE_CROSSES = False
+# Chests the same dash reaches with nothing else: 22F Path 2 wants the double
+# jump AND the wind skill, and Toal took it with the fire skill alone (a
+# multiworld run, Oct 2026).
+_FIRE_REACHES = frozenset(("Demonic Core: 22F Path 2",))
 
 
 def _or_group(names) -> list:
@@ -190,7 +194,10 @@ def _set_location_requires(world: "YsOriginWorld") -> None:
             continue
         terms = _location_require_terms(world, loc_name)
         if terms:
-            world.set_rule(location, terms[0] if len(terms) == 1 else And(*terms))
+            rule = terms[0] if len(terms) == 1 else And(*terms)
+            if _FIRE_CROSSES and loc_name in _FIRE_REACHES:
+                rule = Or(rule, Has(_sub("Crimson Lotusblade")))
+            world.set_rule(location, rule)
 
 
 def _location_require_terms(world: "YsOriginWorld", loc_name: str) -> list:
