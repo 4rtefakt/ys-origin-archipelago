@@ -325,6 +325,13 @@ def test_element_gates():
     assert dt.LOCATION_REQUIRES["Flames of Guilt: Bridge Room 2"] == [fire]
 
 
+def test_the_2f_gap_takes_wind_or_the_double_jump():
+    """The 2F Path 2 gap: the wind skill or the double jump (Gold Bracelet)."""
+    edges = dt.edge_requirements()
+    r = dt.scene_region
+    assert edges[(r("S_1004"), r("S_1005"))] == [["Cerulean Flabellum", "Gold Bracelet"]]
+
+
 def test_undead_wards_need_the_chimes():
     """The revive family only stays dead under the Silver Chimes, and two wards
     are held by it: S_4009's Zarues and S_5080's four Zeruena, whose barrier

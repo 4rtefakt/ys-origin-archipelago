@@ -77,6 +77,20 @@ def _sub(name: str) -> str:
     return _ACTIVE_SUBST.get(name, name)
 
 
+# A gap is authored as the OR-group [wind skill, double jump]. With the
+# fire_skill_crossing option (Toal only: his fire skill is a forward dash) the
+# fire skill joins that group. Set at the top of set_rules.
+_GAP_GROUP = frozenset(("Cerulean Flabellum", "Gold Bracelet"))
+_FIRE_CROSSES = False
+
+
+def _or_group(names) -> list:
+    out = [split_term(x)[0] for x in names]
+    if _FIRE_CROSSES and _GAP_GROUP <= set(out):
+        out.append("Crimson Lotusblade")
+    return [_sub(n) for n in out]
+
+
 def _req_rule(req: list):
     """Room-logic requirement expr -> Rule Builder rule.
 
@@ -86,7 +100,7 @@ def _req_rule(req: list):
     counter, so a name that is not a real item is simply never satisfied.
     """
     return _all_of(
-        [HasAny(*[_sub(split_term(x)[0]) for x in t]) if isinstance(t, (list, tuple))
+        [HasAny(*_or_group(t)) if isinstance(t, (list, tuple))
          else _has_term(t) for t in req]
     )
 
@@ -115,8 +129,10 @@ def _gate_rule(item: str | None, ore_n: int, anchor: str | None = None):
 def set_rules(world: "YsOriginWorld") -> None:
     """Forward (linear) rules by default; the bidirectional warp-network rules
     when random spawn is on."""
-    global _ACTIVE_SUBST
+    global _ACTIVE_SUBST, _FIRE_CROSSES
     _ACTIVE_SUBST = dict(_SKILL_SUBST) if world.options.progressive_skills.value else {}
+    _FIRE_CROSSES = bool(world.options.fire_skill_crossing.value
+                         and world.options.character.current_key == "toal")
     if getattr(world, "open_mode", False):
         _set_rules_open(world)
     else:

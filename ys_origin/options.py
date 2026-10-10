@@ -347,6 +347,15 @@ class WeaponRequirements(DefaultOnToggle):
     display_name = "Weapon requirements"
 
 
+class FireSkillCrossing(Toggle):
+    """Count Toal's fire skill as a way across a gap the logic otherwise wants the
+    wind skill or the double jump for (the 2F Path 2 gap). His fire skill is a
+    forward dash and carries him over; the other two characters' fire skills do
+    not, so the option does nothing for them.
+    Off (the default) = such a gap needs the wind skill or the Gold Bracelet."""
+    display_name = "Fire skill crosses gaps (Toal)"
+
+
 class ExpMultiplierMax(Range):
     """DEPRECATED (v1.6.0): the single EXP cap was replaced by the
     ``exp_multiplier_base`` / ``exp_multiplier_catchup`` pair. Kept as an accepted
@@ -438,6 +447,7 @@ class YsOriginOptions(PerGameCommonOptions):
     blessing_cost_max: BlessingCostMax
     blessing_shop_unlock: BlessingShopUnlock
     weapon_requirements: WeaponRequirements
+    fire_skill_crossing: FireSkillCrossing
     item_classification_overrides: ItemClassificationOverrides
     trap_count: TrapCount
     death_link: DeathLink
