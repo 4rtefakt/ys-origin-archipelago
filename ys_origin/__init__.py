@@ -146,7 +146,11 @@ class YsOriginWorld(World):
         # leaning would fail generation. An unknown / `full` key never demotes ->
         # never risks stranding a location.
         acc_key = getattr(getattr(o, "accessibility", None), "current_key", None)
-        self.lean_open_progression = self.open_mode and acc_key == "minimal"
+        # Not with the all-bosses goal: Pictimos's arena is entered only from
+        # below (the staircase above comes in behind him, room_logic S_5097), so
+        # the keys and the medallion on the way to it are win-critical there.
+        self.lean_open_progression = (self.open_mode and acc_key == "minimal"
+                                      and o.goal.value != o.goal.option_defeat_all_bosses)
 
         # Items that GATE a gear-upgrade blessing ("Strengthen <piece>"): you
         # cannot buy the upgrade until you own the piece. AP's Has() reads the

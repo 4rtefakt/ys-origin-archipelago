@@ -360,6 +360,16 @@ def test_undead_wards_need_the_chimes():
     assert "Silver Chimes" in dt.LOCATION_REQUIRES[idol[0]]
 
 
+def test_pictimos_is_not_entered_from_the_staircase():
+    """Coming down from 22F, the 21F boss room is entered behind Pictimos: he
+    blocks the way and the fight never starts (played Oct 2026, and walked in
+    CleriaCore's harness). So the staircase does not lead into the room in the
+    open graph; the room still leads up to it."""
+    r = dt.scene_region
+    assert (r("S_5099"), r("S_5097")) in dt.OPEN_SCENE_CONNECTIONS
+    assert (r("S_5097"), r("S_5099")) not in dt.OPEN_SCENE_CONNECTIONS
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
