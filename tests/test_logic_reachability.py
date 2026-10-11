@@ -401,6 +401,16 @@ def test_20f_drop_off_west_door_needs_the_double_jump():
     assert edges[(r("S_5009"), r("S_5010"))] == ["Gold Bracelet"]
 
 
+def test_9f_boss_door_is_sealed_from_the_pre_boss_room():
+    """S_2012's ward barrier (kekkai_01, flag 340) stands across the boss door and
+    its three wards are in the room. Leaving Nygtilger's room by that door, the
+    barrier stops you one step in (walked in CleriaCore's harness, with and
+    without the flag), so the boss room does not lead down into S_2012."""
+    r = dt.scene_region
+    assert (r("S_2099"), r("S_2012")) not in dt.OPEN_SCENE_CONNECTIONS
+    assert dt.OPEN_SCENE_EDGE_REQS[(r("S_2012"), r("S_2099"))] == ["Arthropod Medallion"]
+
+
 def test_slippery_fork_upper_walkway():
     """S_4006 is a pit: the Amber Key door and door A to 16F Path 1 are on its
     floor; the three chests are on the walkway and the ledges above, with 16F
