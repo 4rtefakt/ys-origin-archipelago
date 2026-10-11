@@ -5,53 +5,8 @@ into [Archipelago](https://archipelago.gg) multiworld. Items across the whole
 Darm Tower are shuffled; play as **Yunica, Hugo, or Toal**; everything runs
 **inside the game** via a small drop-in mod — no external app to keep open.
 
----
-
-## 🤖 AI usage disclosure
-
-Archipelago asks developers to disclose how they used AI so players and hosts can
-decide for themselves. Here it is, plainly.
-
-**This is not vibe-coded, but it is largely AI-written.** Those are two different
-claims, and they're worth weighing separately rather than collapsing into one.
-
-What the AI did:
-
-- **Wrote most of the code** — the mod (C++), the apworld (Python), the tests,
-  and most of this documentation, with Claude (Claude Code) used as a
-  pair-programmer. That is well past line autocomplete; it sits on the generative
-  side of the line, and you should know that going in.
-- **Did most of the reverse engineering** — disassembling `yso_win.exe`, locating
-  the memory offsets, and working out the game hooks.
-
-What it did not do:
-
-- **It did not pilot the design.** The scope, the options, how the traps should
-  feel, the pacing defaults — those were specified and held to. The in-game
-  overlay was built to sit inside the game's own UI rather than be a floating
-  debug window, because that was the brief.
-- **It did not ship unread.** Every line was read and reviewed before release.
-- **It did not ship unplayed.** Every feature was checked in the real game, and
-  the randomizer has been played end-to-end through a full multiworld to the
-  credits (Toal, Darm defeated) alongside other players.
-- **It did not make art.** No generated assets — the game's own art is all you
-  see, and the overlay is plain text.
-
-**Why "read it" isn't the safeguard people assume, and what is:** AI-written code
-arrives uniformly confident. The wrong parts look exactly like the right parts,
-with a tidy rationale attached, so review catches incoherence but is weak against
-coherent-and-wrong. The safeguard that actually earns its keep here is playing the
-thing. During a live multiworld, gear kept silently vanishing mid-run — the AI had
-written the granting code and could not see the bug. It was caught by noticing the
-boots were gone mid-fight, and traced to the game rebuilding its flag block on
-every save load. That fix shipped in 1.8.0.
-
-**Checkable rather than claimed:** real git history (not a dumped upload), 36
-offline tests, memory offsets verified live against the running binary instead of
-guessed, and a full playthrough behind every release.
-
-If you'd rather not use software built this way, that's a fair call — this section
-exists so it's yours to make.
+Most of this project was written with AI assistance; see the
+[AI usage disclosure](#-ai-usage-disclosure) further down.
 
 ---
 
@@ -127,7 +82,7 @@ overlay.
 - **3 playable characters** — Yunica, Hugo, Toal. Each gets *their own* gear; you
   pick the character in your yaml and the seed is built for them.
 - **Whole tower randomized** — chests, key-item events, goddess statues, and
-  divine blessings are shuffled (~155 checks by default), plus optional
+  divine blessings are shuffled (~200 checks by default), plus optional
   boss / floor / room "sanity" checks.
 - **Real progression logic** — the generator understands the tower: it knows you
   need the wind skill, dash, water-breathing, thunder, fire, climb, the various
@@ -152,8 +107,8 @@ overlay.
   single warp unlock can fling you (progress climbs in steps, not lucky leaps).
 - **Catch-up level scaling** — so warping to a far-off floor isn't a grind wall:
   the mod can bump an under-leveled character toward the floor's expected level,
-  and boosts EXP — a flat base multiplier everywhere (default 3x), raised to a
-  catch-up multiplier (default 5x) while your level is at or under the deepest
+  and boosts EXP — a flat base multiplier everywhere (default 20x), raised to a
+  catch-up multiplier (default 60x) while your level is at or under the deepest
   visited floor's expected level + 5, so falling behind your progress levels you
   back fast fighting anywhere. On by default; tune or disable with
   `level_scaling` and the `exp_*` options.
@@ -217,15 +172,15 @@ overlay.
 | `blessing_checks` | `true` / `false` | `true` | Buying divine blessings are checks |
 | `boss_checks` | `true` / `false` | `true` | Reaching each boss arena is a check |
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
-| `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~145 filler checks — big) |
+| `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~140 filler checks — big) |
 | `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
 | `blessing_costs` | `vanilla` / `shuffled` | `vanilla` | `shuffled` = the mod's own F5 shop overlay sells blessings at seed-randomized SP prices (the game's menu still works at vanilla prices) |
-| `blessing_cost_min` | `10`–`2000` | `100` | Cheapest possible randomized blessing price |
-| `blessing_cost_max` | `10`–`5000` | `800` | Priciest possible randomized blessing price |
+| `blessing_cost_min` | `10`–`5000` | `100` | Cheapest possible randomized blessing price |
+| `blessing_cost_max` | `10`–`500000` | `100000` | Priciest possible randomized blessing price |
 | `blessing_shop_unlock` | `all` / `one_per_floor` | `all` | `one_per_floor` = one more F5-shop slot (cheapest first) unlocks per distinct tower floor visited |
 | `statue_warp_locks` | `true` / `false` | `false` | Goddess statues start locked (no warp/heal/save) until you receive their unlock item; adds 21 "Statue Warp" items, one statue unlocked from the start |
 | `random_start` | `true` / `false` | `false` | **Start anywhere.** With `statue_warp_locks` on, New Game spawns you at a random statue: the mod skips the whole intro (movies + cutscenes, every character) and warps you there geared for the floor; bidirectional warp-network logic keeps the seed beatable from any spawn |
-| `max_starting_floor` | `1`–`25` | `10` | Cap the `random_start` spawn to statues on this floor or below, so New Game never drops you on the brutal deep floors with no gear behind you. Lower = gentler openings; raise for more variety. No effect unless `random_start` is on |
+| `max_starting_floor` | `1`–`25` | `5` | Cap the `random_start` spawn to statues on this floor or below, so New Game never drops you on the brutal deep floors with no gear behind you. Lower = gentler openings; raise for more variety. No effect unless `random_start` is on |
 | `max_warp_floors_skip` | `0`–`25` | `5` | How many floors ahead of your current reach a warp may jump (`0` = unlimited). With N > 0 a statue's warp only enters logic once you can reach a floor within N of it, so a single unlock can't teleport you across the tower. Everything still stays reachable on foot; this only paces the warp shortcuts. No effect unless `random_start` is on |
 | `starting_items` | list of item names | `[Crystal, Dark Crystal]` | Items to begin every New Game owning (applied as a floor — marked owned). Defaults to the warp Crystals the intro grants, so `random_start` (which skips the intro) still has them. Unknown names are ignored |
 | `starting_level` | `1`–`60` | `1` | Minimum character level at New Game (only ever raises you). `1` = vanilla. Stacks with `level_scaling` — you get the higher of this and the floor's expected level |
@@ -236,6 +191,10 @@ overlay.
 | `exp_multiplier_catchup` | `1`–`100` | `60` | EXP multiplier while your level ≤ the deepest visited floor's expected level + margin — catch up by fighting anywhere, easy floors included |
 | `exp_catchup_margin` | `0`–`20` | `5` | Levels above the deepest floor's expected level that still count as catching up |
 | `progressive_armor` | `true` / `false` | `true` | Armor & Boots become progressive: gear chests hold "Progressive Armor"/"Progressive Boots", and receiving one grants your character's next tier (pickups never skip ahead). Off = raw pieces shuffled as-is |
+| `blessing_items` | `true` / `false` | `false` | Shuffle the 24 Divine Blessing effects into the item pool: the statue then sells checks only, and the effects arrive as items from anywhere in the multiworld |
+| `progressive_blessings` | `true` / `false` | `true` | With `blessing_items` on, the tiered blessings (LV1 → LV2 → LV3) come as one chain granted in order |
+| `trap_count` | `0`–`50` | `6` | How many filler items become traps: EXP Leech, Chaos Warp, Butterfingers, Blinding Fog. `0` = none |
+| `item_classification_overrides` | item name → tier | `{}` | Advanced: force an item to `filler`, `useful`, `progression` or `trap` for this seed. Applied last, over every built-in tier |
 | `fire_skill_crossing` | `true` / `false` | `false` | Toal only: his fire skill (a forward dash) counts as a way across the 2F Path 2 gap (otherwise the wind skill or the double jump) and to the 22F Path 2 chest (otherwise both) |
 | `weapon_requirements` | `true` / `false` | `true` | Gate each zone behind enough Cleria Ore that the vanilla weapon level for that floor is obtainable first; Cleria Ore becomes progression and upgrades your weapon on pickup. Pairs with `level_scaling` to keep warped-ahead floors playable |
 | `death_link` | `true` / `false` | `false` | You die when any other DeathLink player dies (and vice-versa) |
@@ -252,6 +211,54 @@ overlay.
 - **Diagnostics:** the mod writes a log to `%TEMP%\yso_ap_mod.log`. It is safe to post when reporting a bug: your Windows user name, the room's port and any private server address are left out, and the password is never logged. It starts fresh at each launch (the launch before is kept as `yso_ap_mod.prev.log`).
 - **Starting gear missing?** Don't run any *other* external AP client at the same
   time as the mod — they conflict. The mod handles everything itself.
+
+---
+
+## 🤖 AI usage disclosure
+
+Archipelago asks developers to disclose how they used AI so players and hosts can
+decide for themselves. Here it is, plainly.
+
+**This is not vibe-coded, but it is largely AI-written.** Those are two different
+claims, and they're worth weighing separately rather than collapsing into one.
+
+What the AI did:
+
+- **Wrote most of the code** — the mod (C++), the apworld (Python), the tests,
+  and most of this documentation, with Claude (Claude Code) used as a
+  pair-programmer. That is well past line autocomplete; it sits on the generative
+  side of the line, and you should know that going in.
+- **Did most of the reverse engineering** — disassembling `yso_win.exe`, locating
+  the memory offsets, and working out the game hooks.
+
+What it did not do:
+
+- **It did not pilot the design.** The scope, the options, how the traps should
+  feel, the pacing defaults — those were specified and held to. The in-game
+  overlay was built to sit inside the game's own UI rather than be a floating
+  debug window, because that was the brief.
+- **It did not ship unread.** Every line was read and reviewed before release.
+- **It did not ship unplayed.** Every feature was checked in the real game, and
+  the randomizer has been played end-to-end through a full multiworld to the
+  credits (Toal, Darm defeated) alongside other players.
+- **It did not make art.** No generated assets — the game's own art is all you
+  see, and the overlay is plain text.
+
+**Why "read it" isn't the safeguard people assume, and what is:** AI-written code
+arrives uniformly confident. The wrong parts look exactly like the right parts,
+with a tidy rationale attached, so review catches incoherence but is weak against
+coherent-and-wrong. The safeguard that actually earns its keep here is playing the
+thing. During a live multiworld, gear kept silently vanishing mid-run — the AI had
+written the granting code and could not see the bug. It was caught by noticing the
+boots were gone mid-fight, and traced to the game rebuilding its flag block on
+every save load. That fix shipped in 1.8.0.
+
+**Checkable rather than claimed:** real git history (not a dumped upload), over 100
+offline tests, memory offsets verified live against the running binary instead of
+guessed, and a full playthrough behind every release.
+
+If you'd rather not use software built this way, that's a fair call — this section
+exists so it's yours to make.
 
 ---
 
