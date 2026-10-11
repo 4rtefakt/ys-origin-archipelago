@@ -85,6 +85,16 @@ def test_every_option_class_has_a_docstring():
     assert not missing, f"option classes with no docstring: {missing}"
 
 
+def test_site_option_list_is_current():
+    """docs/options.js (the website's yaml builder) is generated from options.py
+    and the README table; building it also fails on an option with no README row."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("build_site", _ROOT / "tools" / "build_site.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.OUT.read_text(encoding="utf-8") == mod.build(),         "docs/options.js is out of date: run python -m tools.build_site"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

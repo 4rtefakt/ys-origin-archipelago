@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ys Origin × Archipelago — setup and settings</title>
+<meta name="description" content="Set up the Ys Origin randomizer for Archipelago step by step, and build your settings file in the browser.">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f3ec; --panel: #fffdf8; --ink: #1f1b2e; --muted: #645f74; --line: #ddd5c4;
+  --accent: #8a5a12; --accent-ink: #fffdf8; --soft: #f0e7d3; --code: #f1ebdd; --ok: #2f6b3c; --warn: #a23b2a;
+  --shadow: 0 1px 2px rgba(31, 27, 46, .06), 0 8px 24px rgba(31, 27, 46, .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12111c; --panel: #1b1a29; --ink: #ece8dc; --muted: #a39db4; --line: #2f2d42;
+    --accent: #e0b65c; --accent-ink: #1a1408; --soft: #25233a; --code: #151421; --ok: #7fca8e; --warn: #f0907c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px rgba(0, 0, 0, .25);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+h1, h2, h3 { font-family: Georgia, "Iowan Old Style", "Times New Roman", serif; line-height: 1.2; margin: 0; font-weight: 600; }
+code, pre, kbd { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; }
+code { background: var(--code); padding: .1em .35em; border-radius: 4px; }
+kbd { background: var(--panel); border: 1px solid var(--line); border-bottom-width: 2px; padding: .05em .45em; border-radius: 5px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+header.hero { padding: 64px 0 40px; border-bottom: 1px solid var(--line);
+  background: radial-gradient(1200px 400px at 50% -120px, var(--soft), transparent 70%); }
+.hero h1 { font-size: clamp(2rem, 5vw, 3.1rem); letter-spacing: -.01em; }
+.hero p.lead { max-width: 46rem; color: var(--muted); font-size: 1.12rem; margin: 14px 0 26px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.small { padding: 7px 12px; font-size: .92rem; }
+.btn:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+nav.toc { margin-top: 26px; font-size: .95rem; color: var(--muted); }
+nav.toc a { margin-right: 18px; }
+
+section { padding: 52px 0 12px; }
+section > .wrap > h2 { font-size: 1.8rem; margin-bottom: 6px; }
+section > .wrap > p.sub { color: var(--muted); margin: 0 0 26px; max-width: 46rem; }
+
+ol.steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; counter-reset: step; }
+ol.steps > li { min-width: 0; counter-increment: step; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 20px 22px 20px 78px; position: relative; box-shadow: var(--shadow); }
+ol.steps > li::before { content: counter(step); position: absolute; left: 22px; top: 20px; width: 38px; height: 38px; border-radius: 50%;
+  background: var(--soft); color: var(--accent); font: 600 1.15rem Georgia, serif; display: grid; place-items: center; border: 1px solid var(--line); }
+ol.steps h3 { font-size: 1.2rem; margin-bottom: 6px; }
+ol.steps p { margin: 6px 0; }
+ol.steps ul { margin: 6px 0; padding-left: 20px; }
+.path { display: block; background: var(--code); padding: 9px 12px; border-radius: 8px; margin: 8px 0; overflow-x: auto; white-space: nowrap; }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted); margin: 10px 0 0; }
+
+.builder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 24px; align-items: start; }
+@media (max-width: 900px) { .builder { grid-template-columns: minmax(0, 1fr); } .out { position: static; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+details.group { border-bottom: 1px solid var(--line); }
+details.group:last-child { border-bottom: 0; }
+details.group > summary { cursor: pointer; padding: 16px 20px; font: 600 1.08rem Georgia, serif; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary::after { content: "+"; color: var(--muted); font: 400 1.3rem system-ui; }
+details.group[open] > summary::after { content: "–"; }
+.fields { padding: 0 20px 14px; display: grid; gap: 16px; }
+.field { display: grid; gap: 6px; }
+.field.off { opacity: .45; }
+.field .top { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+.field label.name, .field .name { font-weight: 600; }
+.field .key { color: var(--muted); font-size: .8rem; }
+.field .help { color: var(--muted); font-size: .92rem; margin: 0; }
+.field .why { color: var(--warn); font-size: .85rem; margin: 0; }
+input[type=text], input[type=number], textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+input[type=number] { width: 7.5rem; }
+textarea { min-height: 84px; resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: .9rem; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.rangerow { display: flex; gap: 12px; align-items: center; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg label { padding: 7px 13px; cursor: pointer; border-right: 1px solid var(--line); font-size: .95rem; }
+.seg label:last-child { border-right: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.switch { position: relative; width: 46px; height: 26px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; width: 100%; height: 100%; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 26px; transition: background .15s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; border-radius: 50%; background: var(--panel); transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.out { position: sticky; top: 16px; }
+.out .head { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+.out .head h3 { font-size: 1.1rem; }
+.out .head p { margin: 4px 0 12px; color: var(--muted); font-size: .9rem; }
+.out pre { margin: 0; padding: 16px 18px; max-height: 62vh; overflow: auto; background: var(--code); border-radius: 0 0 14px 14px; font-size: .84rem; line-height: 1.5; white-space: pre; }
+.status { font-size: .88rem; color: var(--ok); min-height: 1.3em; margin: 8px 0 0; }
+.status.bad { color: var(--warn); }
+
+.faq { display: grid; gap: 10px; }
+.faq details { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0 18px; }
+.faq summary { cursor: pointer; padding: 14px 0; font-weight: 600; }
+.faq p { margin: 0 0 14px; color: var(--muted); }
+footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 46px; color: var(--muted); font-size: .92rem; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Ys Origin × Archipelago</h1>
+    <p class="lead">A randomizer for Ys Origin that joins <a href="https://archipelago.gg">Archipelago</a> multiworlds. The whole of Darm Tower is shuffled, you play as Yunica, Hugo or Toal, and everything runs inside the game through one small file you drop in its folder.</p>
+    <div class="row">
+      <a class="btn primary" href="#setup">Set it up</a>
+      <a class="btn" href="#settings">Build my settings file</a>
+      <a class="btn" href="https://github.com/4rtefakt/ys-origin-archipelago/releases/latest">Latest release</a>
+    </div>
+    <nav class="toc"><a href="#setup">Setup</a><a href="#settings">Settings</a><a href="#help">Help</a><a href="https://github.com/4rtefakt/ys-origin-archipelago">GitHub</a></nav>
+  </div>
+</header>
+
+<section id="setup">
+  <div class="wrap">
+    <h2>Setup, step by step</h2>
+    <p class="sub">About ten minutes, once. You need Ys Origin on Steam (version 1.1.1.0, the current build) and nothing else to start.</p>
+    <ol class="steps">
+      <li>
+        <h3>Install Archipelago</h3>
+        <p>Download the installer from <a href="https://archipelago.gg/tutorial/Archipelago/setup/en">archipelago.gg</a> and run it. You need it to generate or host a game; to join a friend's game you still install it.</p>
+      </li>
+      <li>
+        <h3>Get the two files</h3>
+        <p>Both come from the latest release of this project.</p>
+        <div class="row">
+          <a class="btn small" href="https://github.com/4rtefakt/ys-origin-archipelago/releases/latest/download/ys_origin.apworld">Download ys_origin.apworld</a>
+          <a class="btn small" href="https://github.com/4rtefakt/ys-origin-archipelago/releases/latest/download/dinput8.dll">Download dinput8.dll</a>
+        </div>
+      </li>
+      <li>
+        <h3>Add Ys Origin to Archipelago</h3>
+        <p>Copy <code>ys_origin.apworld</code> into the <code>custom_worlds</code> folder inside your Archipelago install. Double-clicking the file does the same thing.</p>
+      </li>
+      <li>
+        <h3>Make your settings file</h3>
+        <p>Use the <a href="#settings">builder below</a>: pick your character and options, download the file, and put it in Archipelago's <code>Players</code> folder. Everyone in the multiworld brings one settings file for their own game.</p>
+      </li>
+      <li>
+        <h3>Generate and host</h3>
+        <p>Open the Archipelago Launcher and choose <b>Generate</b>. Then host the result from the Launcher, or upload it at <a href="https://archipelago.gg/uploads">archipelago.gg/uploads</a>. You get a room address such as <code>archipelago.gg:12345</code>.</p>
+        <p class="note">Joining someone else's game? Skip this step: send them your settings file and the <code>.apworld</code>, and they give you the address.</p>
+      </li>
+      <li>
+        <h3>Install the mod in the game</h3>
+        <p>Copy <code>dinput8.dll</code> into the Ys Origin folder, the one that contains <code>yso_win.exe</code>. Usually:</p>
+        <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Ys Origin\</code>
+        <p>To uninstall later, delete that file.</p>
+      </li>
+      <li>
+        <h3>Connect from the title screen</h3>
+        <p>Start the game. The title screen has a new <b>Archipelago</b> entry above <i>New Game</i>: press <kbd>F8</kbd> to open it and fill in:</p>
+        <ul>
+          <li><b>Server</b>, for example <code>archipelago.gg</code></li>
+          <li><b>Port</b>, your room's port</li>
+          <li><b>Slot</b>, the name in your settings file</li>
+          <li><b>Password</b>, blank unless the room has one</li>
+        </ul>
+        <p>Move with <kbd>Tab</kbd> or the arrow keys, then press <kbd>Enter</kbd>. The status line tells you the result.</p>
+      </li>
+      <li>
+        <h3>Play</h3>
+        <p>Start a New Game or load your save. An Archipelago overlay sits in the top right with your connection, your room and your items. Open chests as usual: you get the randomized item, and what other players find for you arrives by itself. <kbd>Insert</kbd> hides or shows the overlay.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="settings">
+  <div class="wrap">
+    <h2>Build your settings file</h2>
+    <p class="sub">Every option starts at its default, so you can set your name and character and download straight away. Nothing leaves your browser.</p>
+    <div class="builder">
+      <div class="card" id="form">
+        <details class="group" open>
+          <summary>Player</summary>
+          <div class="fields">
+            <div class="field">
+              <div class="top"><label class="name" for="f-name">Your name in the multiworld</label><span class="key">name</span></div>
+              <input type="text" id="f-name" maxlength="16" value="Player1" autocomplete="off" spellcheck="false">
+              <p class="help">Up to 16 characters. This is the slot name you type when connecting, and it must be unique in the room.</p>
+            </div>
+          </div>
+        </details>
+      </div>
+      <aside class="card out">
+        <div class="head">
+          <h3 id="filename">Player1.yaml</h3>
+          <p>Put this file in Archipelago's <code>Players</code> folder.</p>
+          <div class="row">
+            <button class="btn primary small" id="download" type="button">Download</button>
+            <button class="btn small" id="copy" type="button">Copy</button>
+            <button class="btn small" id="reset" type="button">Reset to defaults</button>
+          </div>
+          <p class="status" id="status" role="status" aria-live="polite"></p>
+        </div>
+        <pre id="yaml" tabindex="0" aria-label="Generated settings file"></pre>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section id="help">
+  <div class="wrap">
+    <h2>If something goes wrong</h2>
+    <p class="sub">The most common problems and what fixes them.</p>
+    <div class="faq">
+      <details><summary>No overlay in the game</summary><p>Press Insert. If nothing shows, the mod did not load: check that <code>dinput8.dll</code> is in the same folder as <code>yso_win.exe</code>.</p></details>
+      <details><summary>It will not connect</summary><p>The server, the port and the slot must match the room exactly, and the slot is the name in your settings file, capitals included.</p></details>
+      <details><summary>The game does not start, or crashes at once</summary><p>The mod is built for the current Steam build of Ys Origin, version 1.1.1.0. Check your game is up to date and that the dll comes from the latest release.</p></details>
+      <details><summary>Starting gear is missing</summary><p>Do not run another Archipelago client for Ys Origin next to the mod. The mod is the client, and two of them conflict.</p></details>
+      <details><summary>Reporting a bug</summary><p>The mod writes a log to <code>%TEMP%\yso_ap_mod.log</code>. It is safe to share: your Windows user name, the room's port and the password are left out. Attach it to an issue on <a href="https://github.com/4rtefakt/ys-origin-archipelago/issues">GitHub</a>.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Every option is explained in full in the <a href="https://github.com/4rtefakt/ys-origin-archipelago#readme">README</a>. This project was written largely with AI assistance: read the <a href="https://github.com/4rtefakt/ys-origin-archipelago#-ai-usage-disclosure">AI usage disclosure</a>.</p>
+    <p>A fan project, not affiliated with Nihon Falcom, XSEED Games or Archipelago.</p>
+  </div>
+</footer>
+
+<script src="options.js"></script>
+<script>
+(function () {
+  "use strict";
+  var Y = window.YSO, form = document.getElementById("form"), state = {}, byName = {};
+  var OPEN = { "You": true, "What counts as a check": true };
+  var el = function (tag, attrs, kids) {
+    var n = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === "text") n.textContent = attrs[k]; else if (k === "cls") n.className = attrs[k]; else n.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { n.appendChild(c); });
+    return n;
+  };
+  var words = function (s) { return String(s).replace(/_/g, " "); };
+
+  Y.options.forEach(function (o) { byName[o.name] = o; state[o.name] = JSON.parse(JSON.stringify(o.default)); });
+
+  function control(o) {
+    var id = "f-" + o.name, box;
+    if (o.type === "toggle") {
+      var cb = el("input", { type: "checkbox", id: id });
+      cb.checked = state[o.name];
+      cb.addEventListener("change", function () { state[o.name] = cb.checked; render(); });
+      return { node: el("span", { cls: "switch" }, [cb, el("span")]), inline: true, set: function (v) { cb.checked = v; }, inputs: [cb] };
+    }
+    if (o.type === "choice") {
+      var radios = [];
+      box = el("div", { cls: "seg", role: "radiogroup", "aria-labelledby": id + "-l" }, o.choices.map(function (c) {
+        var r = el("input", { type: "radio", name: id, value: c });
+        r.checked = state[o.name] === c;
+        r.addEventListener("change", function () { state[o.name] = c; render(); });
+        radios.push(r);
+        return el("label", {}, [r, document.createTextNode(words(c))]);
+      }));
+      return { node: box, set: function (v) { radios.forEach(function (r) { r.checked = r.value === v; }); }, inputs: radios };
+    }
+    if (o.type === "range") {
+      var num = el("input", { type: "number", id: id, min: o.min, max: o.max, value: state[o.name] });
+      var wide = o.max - o.min > 1000;
+      var sl = wide ? null : el("input", { type: "range", min: o.min, max: o.max, value: state[o.name], "aria-label": o.label });
+      var put = function (v) {
+        v = Math.round(Number(v));
+        if (!isFinite(v)) v = o.default;
+        v = Math.max(o.min, Math.min(o.max, v));
+        state[o.name] = v; num.value = v; if (sl) sl.value = v; render();
+      };
+      num.addEventListener("change", function () { put(num.value); });
+      if (sl) sl.addEventListener("input", function () { put(sl.value); });
+      return { node: el("div", { cls: "rangerow" }, sl ? [sl, num] : [num]), set: function (v) { num.value = v; if (sl) sl.value = v; }, inputs: sl ? [num, sl] : [num] };
+    }
+    if (o.type === "list") {
+      var t = el("input", { type: "text", id: id, value: state[o.name].join(", "), spellcheck: "false" });
+      t.addEventListener("input", function () { state[o.name] = t.value.split(",").map(function (s) { return s.trim(); }).filter(Boolean); render(); });
+      return { node: t, set: function (v) { t.value = v.join(", "); }, inputs: [t], hint: "Item names separated by commas." };
+    }
+    var ta = el("textarea", { id: id, spellcheck: "false", placeholder: "Mask of Eyes: useful\nSilver Bracelet: filler" });
+    ta.addEventListener("input", function () {
+      var d = {};
+      ta.value.split("\n").forEach(function (line) {
+        var i = line.lastIndexOf(":");
+        if (i > 0 && line.slice(i + 1).trim()) d[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      });
+      state[o.name] = d; render();
+    });
+    return { node: ta, set: function () { ta.value = ""; }, inputs: [ta], hint: "One per line, as: item name: tier." };
+  }
+
+  var fields = {};
+  Y.groups.forEach(function (g) {
+    var inner = el("div", { cls: "fields" });
+    Y.options.filter(function (o) { return o.group === g; }).forEach(function (o) {
+      var c = control(o), id = "f-" + o.name;
+      var label = el("label", { cls: "name", "for": id, id: id + "-l", text: o.label });
+      var top = el("div", { cls: "top" }, c.inline ? [label, c.node] : [label, el("span", { cls: "key", text: o.name })]);
+      var why = el("p", { cls: "why" });
+      var kids = [top];
+      if (!c.inline) kids.push(c.node);
+      kids.push(el("p", { cls: "help", text: o.help + (c.hint ? " " + c.hint : "") }), why);
+      var f = el("div", { cls: "field" }, kids);
+      fields[o.name] = { root: f, why: why, c: c };
+      inner.appendChild(f);
+    });
+    var d = el("details", { cls: "group" }, [el("summary", { text: g }), inner]);
+    if (OPEN[g]) d.open = true;
+    form.appendChild(d);
+  });
+
+  var q = function (s) { return JSON.stringify(String(s)); };
+  function yaml() {
+    var name = document.getElementById("f-name").value.trim();
+    var out = ["# Ys Origin settings for Archipelago. Put this file in Archipelago's Players folder.",
+               "name: " + q(name), "description: " + q("Ys Origin, " + words(state.character)), "game: " + q(Y.game),
+               "requires:", "  version: " + Y.requires, "", Y.game + ":"];
+    Y.options.forEach(function (o) {
+      var v = state[o.name], k = "  " + o.name + ":";
+      if (o.type === "list") { out.push(v.length ? k : k + " []"); v.forEach(function (x) { out.push("    - " + q(x)); }); }
+      else if (o.type === "dict") { var ks = Object.keys(v); if (ks.length) { out.push(k); ks.forEach(function (x) { out.push("    " + q(x) + ": " + v[x]); }); } }
+      else out.push(k + " " + v);
+    });
+    return out.join("\n") + "\n";
+  }
+
+  var status = document.getElementById("status");
+  function say(text, bad) { status.textContent = text; status.className = "status" + (bad ? " bad" : ""); }
+  function problem() {
+    var name = document.getElementById("f-name").value.trim();
+    if (!name) return "Enter your name first.";
+    if (state.blessing_costs === "shuffled" && state.blessing_cost_min > state.blessing_cost_max) return "The cheapest blessing price is above the priciest one.";
+    return "";
+  }
+  function render() {
+    Y.options.forEach(function (o) {
+      var f = fields[o.name], off = false, text = "";
+      if (o.needs) {
+        off = state[o.needs[0]] !== o.needs[1];
+        if (off) text = "Only used when " + byName[o.needs[0]].label.toLowerCase() + " is " + (o.needs[1] === true ? "on" : words(o.needs[1])) + ".";
+      }
+      f.root.classList.toggle("off", off);
+      f.why.textContent = text;
+    });
+    var name = document.getElementById("f-name").value.trim();
+    document.getElementById("filename").textContent = (name.replace(/[^\w.-]+/g, "_") || "Player") + ".yaml";
+    document.getElementById("yaml").textContent = yaml();
+    var p = problem();
+    say(p, !!p);
+  }
+
+  document.getElementById("f-name").addEventListener("input", render);
+  document.getElementById("download").addEventListener("click", function () {
+    var p = problem();
+    if (p) { say(p, true); return; }
+    var a = el("a", { href: URL.createObjectURL(new Blob([yaml()], { type: "text/yaml" })), download: document.getElementById("filename").textContent });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    say("Downloaded. Put it in Archipelago's Players folder.");
+  });
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = yaml();
+    var done = function () { say("Copied to the clipboard."); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { say("Could not copy: select the text below and copy it by hand.", true); });
+    else say("Could not copy: select the text below and copy it by hand.", true);
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    Y.options.forEach(function (o) { state[o.name] = JSON.parse(JSON.stringify(o.default)); fields[o.name].c.set(state[o.name]); });
+    render();
+    say("Options are back to their defaults.");
+  });
+  render();
+})();
+</script>
+</body>
+</html>

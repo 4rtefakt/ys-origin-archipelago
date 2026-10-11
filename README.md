@@ -5,6 +5,9 @@ into [Archipelago](https://archipelago.gg) multiworld. Items across the whole
 Darm Tower are shuffled; play as **Yunica, Hugo, or Toal**; everything runs
 **inside the game** via a small drop-in mod — no external app to keep open.
 
+**New here? The [setup guide and settings builder](https://4rtefakt.github.io/ys-origin-archipelago/)
+walks you through the install and makes your yaml in the browser.**
+
 Most of this project was written with AI assistance; see the
 [AI usage disclosure](#-ai-usage-disclosure) further down.
 
@@ -174,7 +177,7 @@ overlay.
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
 | `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~140 filler checks — big) |
 | `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
-| `blessing_costs` | `vanilla` / `shuffled` | `vanilla` | `shuffled` = the mod's own F5 shop overlay sells blessings at seed-randomized SP prices (the game's menu still works at vanilla prices) |
+| `blessing_costs` | `vanilla` / `shuffled` | `vanilla` | `shuffled` = blessings cost seed-randomized SP prices, at the goddess statue's own menu and in the mod's F5 shop overlay |
 | `blessing_cost_min` | `10`–`5000` | `100` | Cheapest possible randomized blessing price |
 | `blessing_cost_max` | `10`–`500000` | `100000` | Priciest possible randomized blessing price |
 | `blessing_shop_unlock` | `all` / `one_per_floor` | `all` | `one_per_floor` = one more F5-shop slot (cheapest first) unlocks per distinct tower floor visited |
@@ -273,6 +276,8 @@ This repo has two halves:
 - **`mod/`** — the native **mod** (a `dinput8.dll` proxy). It embeds the
   Archipelago client (apclientpp), hooks the game's Direct3D 9 + event-script VM,
   suppresses vanilla item grants, applies received items, and draws the overlay.
+- **`docs/`** — the website (GitHub Pages). `docs/options.js` is generated:
+  run `python -m tools.build_site` after changing an option or its README row.
 - `client/` + `tools/` — the legacy external memory client and the
   reverse-engineering / dataset-extraction toolchain (`RE_FINDINGS.md`).
 
