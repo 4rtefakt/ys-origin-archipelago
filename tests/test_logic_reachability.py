@@ -377,10 +377,15 @@ def test_20f_path_3_chest_needs_the_double_jump():
     assert (dt.scene_region("S_5013"), dt.scene_region("S_5015")) not in dt.OPEN_SCENE_EDGE_REQS
 
 
+def test_20f_small_room_chest_needs_the_double_jump():
+    """S_5011's chest is on top of a rock mound 10 above the floor (played Oct 2026)."""
+    assert dt.LOCATION_REQUIRES["Corrupted Blood: 20F Small Room"] == ["Gold Bracelet"]
+
+
 def test_slippery_fork_upper_walkway():
-    """S_4006 is a pit: the Amber Key door, the first chest and door A to 16F
-    Path 1 are on its floor; chests #2 and #3 are on the walkway and the ledge
-    above, with 16F Path 2. The way up is the platform climb in 16F Path 1
+    """S_4006 is a pit: the Amber Key door and door A to 16F Path 1 are on its
+    floor; the three chests are on the walkway and the ledges above, with 16F
+    Path 2. The way up is the platform climb in 16F Path 1
     (steps of 4, a double jump: played Oct 2026) or the slippery ramp from the
     16F Path 3 door (the claws). Down is free."""
     r = dt.scene_region
@@ -391,8 +396,9 @@ def test_slippery_fork_upper_walkway():
     assert (floor, up) not in dt.OPEN_SCENE_CONNECTIONS
     for down in ((up, floor), (up, p1), (up, p3)):
         assert down in dt.OPEN_SCENE_CONNECTIONS and down not in edges
-    for chest in ("#2", "#3"):
-        assert dt._loc_region_override["Silent Sands: Slippery Fork Path " + chest] == "S_4008"
+    # The first chest is on a ledge 8 above the sand: dropped onto from the walkway.
+    for chest in ("", " #2", " #3"):
+        assert dt._loc_region_override["Silent Sands: Slippery Fork Path" + chest] == "S_4008"
 
 
 def _run_all() -> int:

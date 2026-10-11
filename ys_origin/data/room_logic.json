@@ -1397,7 +1397,8 @@
     "Wailing Blue: 1F Save — Dreaming Idol": "S_4017",
     "Silent Sands: Roo End — Roo Trade": "S_4100",
     "Silent Sands: Slippery Fork Path #2": "S_4008",
-    "Silent Sands: Slippery Fork Path #3": "S_4008"
+    "Silent Sands: Slippery Fork Path #3": "S_4008",
+    "Silent Sands: Slippery Fork Path": "S_4008"
   },
   "location_requires": {
     "_doc": "location -> what it needs beyond its own room: scenes (S_xxxx) that must ALL be reachable too, for checks whose story event depends on other rooms; and items, for a chest its room's ledge or hidden bridge still gates.",
@@ -1452,6 +1453,9 @@
       "Gold Bracelet"
     ],
     "Corrupted Blood: 20F Path 3": [
+      "Gold Bracelet"
+    ],
+    "Corrupted Blood: 20F Small Room": [
       "Gold Bracelet"
     ]
   },
