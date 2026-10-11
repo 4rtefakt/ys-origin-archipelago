@@ -392,6 +392,15 @@ def test_waterway_entrance_gate_opens_from_the_east():
     assert dt.OPEN_SCENE_EDGE_REQS[(r("S_2007"), r("S_2008"))] == ["Water Dragon's Scales"]
 
 
+def test_20f_drop_off_west_door_needs_the_double_jump():
+    """S_5009's west door (the 20F save, S_5010) is cut off from the rest of the
+    room by a jump a single jump does not make (played Oct 2026)."""
+    r = dt.scene_region
+    edges = dt.OPEN_SCENE_EDGE_REQS
+    assert edges[(r("S_5010"), r("S_5009"))] == ["Gold Bracelet"]
+    assert edges[(r("S_5009"), r("S_5010"))] == ["Gold Bracelet"]
+
+
 def test_slippery_fork_upper_walkway():
     """S_4006 is a pit: the Amber Key door and door A to 16F Path 1 are on its
     floor; the three chests are on the walkway and the ledges above, with 16F

@@ -158,8 +158,9 @@ def _goal_region():
 
 def _lean_protected():
     """The set the shipped lean-progression demotion KEEPS as progression: the
-    goal medallion, Cleria Ore, and every warp unlock (the reachability spine)."""
-    return {dt.GOAL_ITEM, dt.CLERIA_ORE} | set(dt.statue_unlock_items())
+    goal medallion, Cleria Ore, the Gold Bracelet (the 20F save is cut off from
+    its floor without it) and every warp unlock (the reachability spine)."""
+    return {dt.GOAL_ITEM, dt.CLERIA_ORE, "Gold Bracelet"} | set(dt.statue_unlock_items())
 
 
 def criticality(char, spawn, max_skip=5):

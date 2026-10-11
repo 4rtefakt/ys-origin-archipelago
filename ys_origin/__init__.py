@@ -226,6 +226,9 @@ class YsOriginWorld(World):
                 and cls == ItemClassification.progression
                 and name != dt.GOAL_ITEM
                 and name != dt.CLERIA_ORE
+                # the 20F save is cut off from its floor without the double jump,
+                # and that floor is what lets the 25F warp into logic
+                and name != "Gold Bracelet"
                 and name not in dt.PROGRESSIVE_SKILLS   # Dalles needs all three
                 and name not in dt.STATUE_UNLOCKS):
             cls = ItemClassification.useful
