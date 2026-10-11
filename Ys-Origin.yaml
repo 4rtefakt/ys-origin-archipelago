@@ -21,7 +21,7 @@ Ys Origin:
                          #   hold real multiworld items (pay SP, get a check)
   boss_checks: true      # reaching each boss arena
   floor_checks: true     # reaching each floor
-  room_checks: false     # entering each room (adds ~145 filler checks — big!)
+  room_checks: false     # entering each room (adds ~140 filler checks — big!)
   shop_hints: true       # overlay shows what each blessing purchase actually
                          #   gives (scouted) while you're at a goddess statue;
                          #   false = blind buys
@@ -40,6 +40,11 @@ Ys Origin:
   blessing_shop_unlock: all # all | one_per_floor
                             #   one_per_floor = one more shop slot (cheapest
                             #   first) unlocks per distinct tower floor visited
+  blessing_items: false   # shuffle the 24 blessing EFFECTS into the item pool:
+                          #   the statue then sells checks only, and the effects
+                          #   arrive as items from anywhere in the multiworld
+  progressive_blessings: true # with blessing_items on, the tiered blessings
+                              #   (LV1 -> LV2 -> LV3) come as one chain, in order
 
   # --- goddess statue warp locks ---
   statue_warp_locks: false # when on, every goddess statue starts locked (dark:
@@ -100,6 +105,12 @@ Ys Origin:
                           #   receiving one grants your character's NEXT tier, so
                           #   pickups never skip ahead. Off = raw pieces shuffled
                           #   (you can find endgame armor first).
+
+  # --- logic ---
+  fire_skill_crossing: false # Toal only: count his fire skill (a forward dash) as
+                             #   a way across the 2F Path 2 gap (otherwise the wind
+                             #   skill or the double jump) and to the 22F Path 2
+                             #   chest (otherwise both)
 
   # --- weapon gating (so warping far ahead isn't a 1-damage wall) ---
   weapon_requirements: true # gate each zone behind enough Cleria Ore that the

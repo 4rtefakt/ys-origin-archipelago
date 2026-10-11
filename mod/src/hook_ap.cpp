@@ -124,7 +124,7 @@ static std::string log_addr(const char* host, int port) {
 }
 
 // This dll's version, compared (major.minor) with the seed's apworld_version.
-static const char kModVersion[] = "2.0.1";
+static const char kModVersion[] = "2.1.0";
 
 static void load_config() {
     FILE* f = fopen("yso_ap.cfg", "r");
