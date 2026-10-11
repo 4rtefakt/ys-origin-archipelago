@@ -370,6 +370,13 @@ def test_pictimos_is_not_entered_from_the_staircase():
     assert (r("S_5097"), r("S_5099")) not in dt.OPEN_SCENE_CONNECTIONS
 
 
+def test_20f_path_3_chest_needs_the_double_jump():
+    """S_5015's chest is on a spur west of the climb, past a gap a single jump
+    does not cross (played Oct 2026). The room itself is walked through."""
+    assert dt.LOCATION_REQUIRES["Corrupted Blood: 20F Path 3"] == ["Gold Bracelet"]
+    assert (dt.scene_region("S_5013"), dt.scene_region("S_5015")) not in dt.OPEN_SCENE_EDGE_REQS
+
+
 def test_slippery_fork_upper_walkway():
     """S_4006 is a pit: the Amber Key door, the first chest and door A to 16F
     Path 1 are on its floor; chests #2 and #3 are on the walkway and the ledge
