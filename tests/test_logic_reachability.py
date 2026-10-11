@@ -411,6 +411,17 @@ def test_9f_boss_door_is_sealed_from_the_pre_boss_room():
     assert dt.OPEN_SCENE_EDGE_REQS[(r("S_2012"), r("S_2099"))] == ["Arthropod Medallion"]
 
 
+def test_18f_path_1_spear_gates_open_from_below():
+    """S_5001 climbs through four spear gates (yari_00..03), each lowered by a
+    floor switch on the way up. Coming in at the top, from 18F Path 2, the first
+    gate is shut and its switch is below it (played Oct 2026), so the room, the
+    18F save and Toal's Room are reached from the bottom only."""
+    r = dt.scene_region
+    for upper in ("S_5003", "S_5004"):
+        assert (r("S_5001"), r(upper)) in dt.OPEN_SCENE_CONNECTIONS
+        assert (r(upper), r("S_5001")) not in dt.OPEN_SCENE_CONNECTIONS
+
+
 def test_slippery_fork_upper_walkway():
     """S_4006 is a pit: the Amber Key door and door A to 16F Path 1 are on its
     floor; the three chests are on the walkway and the ledges above, with 16F
