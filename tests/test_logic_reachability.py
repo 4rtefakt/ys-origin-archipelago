@@ -370,6 +370,24 @@ def test_pictimos_is_not_entered_from_the_staircase():
     assert (r("S_5097"), r("S_5099")) not in dt.OPEN_SCENE_CONNECTIONS
 
 
+def test_slippery_fork_upper_walkway():
+    """S_4006 is a pit: the Amber Key door, the first chest and door A to 16F
+    Path 1 are on its floor; chests #2 and #3 are on the walkway and the ledge
+    above, with 16F Path 2. The way up is the platform climb in 16F Path 1
+    (steps of 4, a double jump: played Oct 2026) or the slippery ramp from the
+    16F Path 3 door (the claws). Down is free."""
+    r = dt.scene_region
+    up, floor, p1, p3 = r("S_4008"), r("S_4006"), r("S_4007"), r("S_4011")
+    edges = dt.OPEN_SCENE_EDGE_REQS
+    assert edges[(p1, up)] == ["Gold Bracelet"]
+    assert edges[(p3, up)] == ["Earth Dragon's Claws"]
+    assert (floor, up) not in dt.OPEN_SCENE_CONNECTIONS
+    for down in ((up, floor), (up, p1), (up, p3)):
+        assert down in dt.OPEN_SCENE_CONNECTIONS and down not in edges
+    for chest in ("#2", "#3"):
+        assert dt._loc_region_override["Silent Sands: Slippery Fork Path " + chest] == "S_4008"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
