@@ -382,6 +382,16 @@ def test_20f_small_room_chest_needs_the_double_jump():
     assert dt.LOCATION_REQUIRES["Corrupted Blood: 20F Small Room"] == ["Gold Bracelet"]
 
 
+def test_waterway_entrance_gate_opens_from_the_east():
+    """S_2007's grate (s20stop_00, flag 333) opens when its four ward monsters
+    die, and they stand east of it, on the Outer Corridor side. Coming up from
+    8F Waterway 1 the west half is a dead end (played Oct 2026), so the room is
+    entered from S_2100 only; going on down to the waterway takes the scales."""
+    r = dt.scene_region
+    assert (r("S_2008"), r("S_2007")) not in dt.OPEN_SCENE_CONNECTIONS
+    assert dt.OPEN_SCENE_EDGE_REQS[(r("S_2007"), r("S_2008"))] == ["Water Dragon's Scales"]
+
+
 def test_slippery_fork_upper_walkway():
     """S_4006 is a pit: the Amber Key door and door A to 16F Path 1 are on its
     floor; the three chests are on the walkway and the ledges above, with 16F
