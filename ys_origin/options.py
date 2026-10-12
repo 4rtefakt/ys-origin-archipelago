@@ -52,7 +52,8 @@ class BlessingChecks(DefaultOnToggle):
 
 
 class BossChecks(DefaultOnToggle):
-    """Add a check for defeating each boss / mid-boss (~12)."""
+    """Add a check for defeating each boss / mid-boss (~12). Sent when the fight
+    is won, and it can hold any item."""
     display_name = "Boss checks"
 
 
@@ -62,7 +63,8 @@ class FloorChecks(DefaultOnToggle):
 
 
 class RoomChecks(Toggle):
-    """Add a check for entering each tower room (~145). Big, filler-heavy."""
+    """Add a check for entering each tower room (~140). Big. A room check can hold
+    any item, like a chest."""
     display_name = "Room checks (sanity)"
 
 

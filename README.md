@@ -173,9 +173,9 @@ overlay.
 | `goal` | `defeat_darm` / `defeat_all_bosses` | `defeat_darm` | What wins the seed |
 | `statue_checks` | `true` / `false` | `true` | Activating goddess statues are checks |
 | `blessing_checks` | `true` / `false` | `true` | Buying divine blessings are checks |
-| `boss_checks` | `true` / `false` | `true` | Reaching each boss arena is a check |
+| `boss_checks` | `true` / `false` | `true` | Winning each boss fight is a check. It can hold any item |
 | `floor_checks` | `true` / `false` | `true` | Reaching each floor is a check |
-| `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~140 filler checks — big) |
+| `room_checks` | `true` / `false` | `false` | Entering each room is a check (adds ~140 checks — big). They can hold any item |
 | `shop_hints` | `true` / `false` | `true` | Overlay lists what each Divine Blessing purchase actually gives (scouted) while you're at a goddess statue; `false` = blind buys |
 | `blessing_costs` | `vanilla` / `shuffled` | `vanilla` | `shuffled` = blessings cost seed-randomized SP prices, at the goddess statue's own menu and in the mod's F5 shop overlay |
 | `blessing_cost_min` | `10`–`5000` | `100` | Cheapest possible randomized blessing price |

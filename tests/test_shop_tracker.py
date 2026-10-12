@@ -7,7 +7,7 @@ Run directly::
 Covers:
 
   * blessings are no longer EXCLUDED (real/progression items can sit there);
-    boss/room stay filler-only;
+    rooms and bosses hold any item too, bosses on their win flag;
   * ``scene_locations_map`` / ``floor_locations_map`` — the per-room and
     per-floor tracker feeds — resolve active locations to AP ids sensibly;
   * ``blessing_location_names`` yields the 24 short shop names.
@@ -31,9 +31,32 @@ IDS = dt.location_name_to_id
 
 def test_blessings_not_excluded_anymore():
     assert "blessing" not in dt.EXCLUDED_TYPES
-    assert {"boss", "room"} <= dt.EXCLUDED_TYPES
     assert not dt.is_excluded("Divine Blessing: Increase SP gain")
-    assert dt.is_excluded("Boss: 5F Velagunder (S_1099)")
+
+
+def test_rooms_and_bosses_hold_any_item():
+    for name, meta in dt.LOC_META.items():
+        if meta["type"] in ("room", "boss"):
+            assert not dt.is_excluded(name), name
+    # an event that fell back to scene detection stays filler-only
+    assert dt.is_excluded("Demonic Core: 23F Midboss 1 — Rod")
+
+
+def test_boss_checks_wait_for_the_win_flag():
+    off = lambda flag: {"method": "flag", "offset": "0x%X" % (0x36B91C + 4 * flag)}
+    for char in ("yunica", "hugo", "toal"):
+        assert dt.boss_detect("Boss: 5F Velagunder (S_1099)", char) == off(220)
+        assert dt.boss_detect("Boss: Boss Room (S_5080)", char) == off(423)
+        # no fight in S_4080: entering it is the check
+        assert dt.boss_detect("Boss: 17F Room (S_4080)", char)["method"] == "scene"
+    # Toal's 12F duel sets its flag in Rado's Annex, not in the arena
+    assert dt.boss_detect("Boss: Boss Room (S_3080)", "hugo") == off(232)
+    assert dt.boss_detect("Boss: Boss Room (S_3080)", "toal")["method"] == "scene"
+    # every boss location is covered by the table or is S_4080
+    for name, meta in dt.LOC_META.items():
+        if meta["type"] == "boss":
+            sc = meta["detect"]["scene"]
+            assert sc in dt.BOSS_WIN_FLAG or sc == "S_4080", name
 
 
 def test_scene_locations_map():

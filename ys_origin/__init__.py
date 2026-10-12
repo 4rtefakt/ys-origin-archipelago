@@ -452,6 +452,9 @@ class YsOriginWorld(World):
         for n in active:
             if n in statue_scenes:
                 location_detect[n] = {"method": "scene", "scene": statue_scenes[n]}
+            elif LOC_META[n]["type"] == "boss":
+                # the fight's win flag, not the arena door (dt.BOSS_WIN_FLAG)
+                location_detect[n] = dt.boss_detect(n, dt.char_name(self.options))
             else:
                 location_detect[n] = LOC_META[n]["detect"]
         # Which statue starts unlocked (always-usable so the player can save).

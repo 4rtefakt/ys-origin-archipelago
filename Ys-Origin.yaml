@@ -19,9 +19,9 @@ Ys Origin:
   statue_checks: true    # activating goddess statues
   blessing_checks: true  # buying divine blessings — SHOP RANDO: blessings can
                          #   hold real multiworld items (pay SP, get a check)
-  boss_checks: true      # reaching each boss arena
+  boss_checks: true      # winning each boss fight
   floor_checks: true     # reaching each floor
-  room_checks: false     # entering each room (adds ~140 filler checks — big!)
+  room_checks: false     # entering each room (adds ~140 checks — big!)
   shop_hints: true       # overlay shows what each blessing purchase actually
                          #   gives (scouted) while you're at a goddess statue;
                          #   false = blind buys

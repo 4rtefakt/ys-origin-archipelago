@@ -80,15 +80,38 @@ FLOOR_BOSS_SCENES: Tuple[str, ...] = (
 CATEGORIES = ("chest", "event", "statue", "blessing", "boss", "floor", "room")
 ALWAYS_ON: Set[str] = {"chest", "event"}        # carry the real item pool
 
-# Categories not yet confirmed live-detectable (scene offset unmapped) or whose
-# index<->name map is provisional (blessings). Marked EXCLUDED so AP only puts
-# FILLER there -> seeds stay beatable via the confirmed checks. Upgrade once
-# their live detection / mapping is pinned.
-# blessing left this set with the shop rando: purchases are live-detected (the
-# bitfield poll), so blessings can hold real/progression items — buy a blessing,
-# get a check. boss stays excluded (detection is arena ENTRY, not the kill);
-# room stays excluded (scene-entry checks hold filler by design).
-EXCLUDED_TYPES: Set[str] = {"boss", "room"}   # floor live 0x36BC58; blessing live 0x36BC80
+# Categories that may only hold FILLER. Empty since 2.2: room checks fire on
+# entering the room and boss checks on winning the fight (BOSS_WIN_FLAG), both
+# played through a whole multiworld, so they hold any item like a chest does.
+# What stays filler-only is decided per location by ``is_excluded``.
+EXCLUDED_TYPES: Set[str] = set()
+
+# The flag each boss room's fight sets when it is won, read from the shipped
+# scripts: the floor bosses' brains set 220..224, the duels' own scripts 230 /
+# 231 / 232 / 235 / 236 (S_3080: BATTLE_0 for Yunica, BATTLE_WIN / BATTLE_LOSE ->
+# EV_FEENA02_2 for Hugo), and S_5080's only fight, the ward of four Zeruena, 423.
+# A boss check waits for that flag instead of firing at the door.
+#   * S_4080 has no fight (two trap scripts): its check stays on entry.
+#   * Toal's S_3080 duel sets nothing in the room (232 comes later, in S_4021,
+#     at the end of his Rado's Annex chain): his check stays on entry too.
+BOSS_WIN_FLAG: Dict[str, int] = {
+    "S_1099": 220, "S_2099": 221, "S_3099": 222, "S_4099": 223, "S_5099": 224,
+    "S_1080": 230, "S_2080": 231, "S_3080": 232, "S_6080": 235, "S_6099": 236,
+    "S_5080": 423,
+}
+_BOSS_ON_ENTRY: Dict[str, Set[str]] = {"toal": {"S_3080"}}
+_GFLAGS_REL = 0x36B91C   # g_flags[0], relative to the image base
+
+
+def boss_detect(loc_name: str, char: str) -> dict:
+    """How the client detects a boss check for this character: the fight's win
+    flag when it has one in the room, else entering the arena."""
+    detect = LOC_META[loc_name]["detect"]
+    scene = detect.get("scene", "")
+    flag = BOSS_WIN_FLAG.get(scene)
+    if flag is None or scene in _BOSS_ON_ENTRY.get(char, ()):
+        return detect
+    return {"method": "flag", "offset": "0x%X" % (_GFLAGS_REL + 4 * flag)}
 
 # Filler for sanity locations. ONLY items that are safe to grant in unbounded
 # quantity may go here:
@@ -1335,6 +1358,8 @@ def is_excluded(loc_name: str) -> bool:
         return False
     if meta["type"] in EXCLUDED_TYPES:
         return True
+    if meta["type"] in ("room", "boss"):
+        return False   # entering the room (or winning its fight) IS the check
     return meta.get("detect", {}).get("method") not in LIVE_DETECT_METHODS
 
 

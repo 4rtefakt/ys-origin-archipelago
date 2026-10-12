@@ -60,7 +60,7 @@ window.YSO = {
    "label": "Boss checks",
    "type": "toggle",
    "default": true,
-   "help": "Reaching each boss arena is a check",
+   "help": "Winning each boss fight is a check. It can hold any item",
    "group": "What counts as a check"
   },
   {
@@ -76,7 +76,7 @@ window.YSO = {
    "label": "Room checks (sanity)",
    "type": "toggle",
    "default": false,
-   "help": "Entering each room is a check (adds ~140 filler checks — big)",
+   "help": "Entering each room is a check (adds ~140 checks — big). They can hold any item",
    "group": "What counts as a check"
   },
   {

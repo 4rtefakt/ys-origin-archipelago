@@ -103,7 +103,11 @@ extern "C" int* __cdecl DecideStore(int* addr, int val) {
         return &g_sink;
     }
 
-    if (g_loc_flag[idx]) {  // a randomized location's flag is firing — a check
+    // A boss check waits for its fight's win flag (220..224, 230..236, 423 —
+    // dt.BOSS_WIN_FLAG). A script clearing one (S_5099/BATTLE_HUGO_1 zeroes 224
+    // as Hugo's fight starts) is not a win: only a store of 1 or more counts.
+    bool boss_flag = (idx >= 220 && idx <= 236) || idx == 423;
+    if (g_loc_flag[idx] && !(boss_flag && val < 1)) {  // a randomized location's flag is firing — a check
         snprintf(buf, sizeof(buf), "C %X", idx);
         bridge_emit(buf);     // legacy bridge (no-op if no socket client)
         if (val >= 1 && *addr < 1) ap_sp_chest((int)idx);   // first open only
