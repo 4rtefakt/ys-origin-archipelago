@@ -1,4 +1,15 @@
+<div align="center">
+
 # Ys Origin × Archipelago
+
+[![Latest release](https://img.shields.io/github/v/release/4rtefakt/ys-origin-archipelago?label=release&color=2f9e44)](https://github.com/4rtefakt/ys-origin-archipelago/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/4rtefakt/ys-origin-archipelago/total?color=4c6ef5)](https://github.com/4rtefakt/ys-origin-archipelago/releases)
+[![Archipelago](https://img.shields.io/badge/Archipelago-multiworld-e64980)](https://archipelago.gg)
+![Game](https://img.shields.io/badge/Ys%20Origin-Steam%201.1.1.0-1b2838?logo=steam)
+[![Setup guide](https://img.shields.io/badge/setup%20guide-online-f08c00)](https://4rtefakt.github.io/ys-origin-archipelago/)
+![Last commit](https://img.shields.io/github/last-commit/4rtefakt/ys-origin-archipelago)
+
+</div>
 
 A randomizer for **Ys Origin** (Steam, `yso_win.exe` **v1.1.1.0**) that plugs
 into [Archipelago](https://archipelago.gg) multiworld. Items across the whole
@@ -279,7 +290,7 @@ This repo has two halves:
 - **`docs/`** — the website (GitHub Pages). `docs/options.js` is generated:
   run `python -m tools.build_site` after changing an option or its README row.
 - `client/` + `tools/` — the legacy external memory client and the
-  reverse-engineering / dataset-extraction toolchain (`RE_FINDINGS.md`).
+  reverse-engineering / dataset-extraction toolchain.
 
 ### Build the apworld
 ```powershell
@@ -300,5 +311,6 @@ Put your yaml in `<Archipelago>/Players/`, copy `ys_origin/` into
 `<Archipelago>/worlds/ys_origin/` (or install the `.apworld`), then run the
 Archipelago generator. See [`ys_origin/docs/setup_en.md`](ys_origin/docs/setup_en.md).
 
-> Reverse-engineering notes, the memory map, and the offline data pipeline are in
-> [`RE_FINDINGS.md`](RE_FINDINGS.md).
+> The reverse-engineering notes and the memory map moved to the Ys Origin research
+> repository, [yso](https://github.com/4rtefakt/yso/blob/main/retail/archipelago/RE_FINDINGS.md)
+> (`retail/archipelago/RE_FINDINGS.md`), with the rest of what is known about the game.

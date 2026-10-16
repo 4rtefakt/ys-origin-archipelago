@@ -10,11 +10,10 @@ early milestones bridge to it over a localhost socket.
 > (a proxy DLL + runtime hooks) — for **single-player Ys Origin only**, which has
 > no anti-cheat. Uninstall anytime by deleting the DLL.
 
-## Status — milestone 1
-Proxy DLL + D3D9 `EndScene`/`Reset` hook + ImGui overlay showing "Hello
-Archipelago". Toggle in-game with **INSERT**. (Recent-items/terminal are stubs;
-milestones 2–5 wire the AP bridge, VM-grant hook, text relabel, and a New Game
-menu entry.)
+## Status
+
+Shipped: this is the `dinput8.dll` of every release. What it does in game is in the
+[main README](../README.md#-features); this page is about building it.
 
 ## 1. Install a C++ toolchain (one-time)
 You need a **32-bit** MSVC toolchain (the game is 32-bit). Easiest:
