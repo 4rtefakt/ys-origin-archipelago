@@ -71,7 +71,8 @@ and fill in:
 - **Slot name**: the **name** you put in your yaml
 - **Password**: leave blank if there isn't one
 
-Press **Connect**. The status line shows the result; with **Connect at start** on,
+Press **Connect**. (The same page is in CleriaOre's manager: click the mod.)
+The status line shows the result; with **Connect at start** on,
 it reconnects by itself next time.
 
 ### Step 6 — Play!

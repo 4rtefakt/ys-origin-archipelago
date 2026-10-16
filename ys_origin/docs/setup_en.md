@@ -53,7 +53,8 @@ it on. Uninstall with **Remove the loader**.
 Start the game, press **F1** and open **Mods > Archipelago**. Enter the room's
 **Server** (e.g. `archipelago.gg:12345`), your **Slot name** (the **name** from
 your yaml) and the **Password** if there is one, then **Connect**. *Connect at
-start* reconnects by itself next time.
+start* reconnects by itself next time. The same page is in CleriaOre's manager
+(click the mod in its list).
 
 Start a New Game with the seed's character, or load a save of that seed. The
 overlay shows your connection and the items found and received; press
