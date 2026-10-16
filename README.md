@@ -27,16 +27,17 @@ Most of this project was written with AI assistance; see the
 
 You need three things:
 
-1. **Ys Origin on Steam**, installed (must be version **1.1.1.0** — the current
+1. **Ys Origin on Steam**, installed (must be version **1.1.1.0**, the current
    Steam build).
-2. **Archipelago** — download and run the installer from
+2. **Archipelago**: download and run the installer from
    [archipelago.gg](https://archipelago.gg) (the "Setup" download). You only need
    this to make/host a game; to join a friend's game you still install it.
-3. The **two files from this project's [latest Release](../../releases/latest)**:
-   - `ys_origin.apworld`
-   - `dinput8.dll`
-
-Then follow these steps once:
+3. The game-side client:
+   - **CleriaOre**, the mod loader: `CleriaOre-Setup-<version>.exe` from its
+     [latest release](https://github.com/4rtefakt/CleriaOre/releases/latest);
+   - the **Archipelago mod** for it: `ysorigin.archipelago-<version>.cleriamod` from
+     [its latest release](https://github.com/4rtefakt/ys-origin-cleriacore-ap/releases/latest);
+   - and from this project's [latest Release](../../releases/latest), **`ys_origin.apworld`**.
 
 ### Step 1 — Add Ys Origin to Archipelago
 Copy **`ys_origin.apworld`** into Archipelago's **`custom_worlds`** folder
@@ -53,44 +54,49 @@ yaml. Then **Host** that seed (the Launcher walks you through it), or upload it
 at [archipelago.gg/uploads](https://archipelago.gg/uploads). You'll get a
 **room address** like `archipelago.gg:12345` (or `localhost` if hosting at home).
 
-### Step 4 — Install the mod in your game
-Copy **`dinput8.dll`** into your **Ys Origin game folder** — the one that
-contains `yso_win.exe`, usually:
+### Step 4 — Install the client in your game
+Run **`CleriaOre-Setup-<version>.exe`**. CleriaOre finds the game through Steam: on
+its **Game** page, press **Install the loader**. Then **double-click
+`ysorigin.archipelago-<version>.cleriamod`**: CleriaOre installs the mod and turns
+it on.
 
-```
-C:\Program Files (x86)\Steam\steamapps\common\Ys Origin\
-```
+(To uninstall later, press **Remove the loader** in CleriaOre.)
 
-(To uninstall later, just delete that file.)
+### Step 5 — Connect
+Start the game (from CleriaOre or Steam). Press **F1**, open **Mods > Archipelago**
+and fill in:
 
-### Step 5 — Connect from the in-game menu
-Launch the game. On the **title screen** there's a new **Archipelago** entry just
-above *New Game* — **press `F8`** to open the connect menu. Fill in:
+- **Server**: your room's address, e.g. `archipelago.gg:12345` (the secure `wss://`
+  is tried first)
+- **Slot name**: the **name** you put in your yaml
+- **Password**: leave blank if there isn't one
 
-- **Server** — e.g. `archipelago.gg` (the secure `wss://` is added automatically)
-- **Port** — your room's port
-- **Slot / Name** — the **name** you put in your yaml
-- **Password** — leave blank if there isn't one
-
-Use **Tab** or **↑/↓** to move between fields, type to edit, then press **Enter**
-to connect. The status line shows the result. That's it — no file editing needed.
-
-> **Prefer a config file?** The mod reads **`yso_ap.cfg`** next to `yso_win.exe`
-> (created on first launch) for the menu's default values. Set `autoconnect=1`
-> there to connect automatically at startup and skip the menu.
+Press **Connect**. The status line shows the result; with **Connect at start** on,
+it reconnects by itself next time.
 
 ### Step 6 — Play!
-Load your save or start a New Game. Top-right you'll see an **"Archipelago"**
-overlay showing your connection, your current room, and items. Open chests /
-trigger checks as normal — you'll get the **randomized** item, and items other
-players find for you arrive automatically. **Press `INSERT`** to hide/show the
-overlay.
+Start a New Game with the seed's character, or load a save of that seed. The
+overlay shows your connection, the items found and received, and (optionally) a
+tracker. Open chests / trigger checks as normal: you'll get the **randomized**
+item, and items other players find for you arrive automatically. **Press `INSERT`**
+to hide/show the overlay, **F6** for the chat (`!hint` and the other server
+commands work there).
+
+> **The older `dinput8.dll` client** from this project's Releases still works, but
+> it is no longer the recommended one: the CleriaOre mod has the same features,
+> gets updates from CleriaOre's manager, and also runs in
+> [CleriaCore](https://github.com/4rtefakt/YsOrigin-CleriaCore) on Linux and macOS.
+> Finish a run with the client it started on: their saves live in different
+> folders.
 
 > Stuck connecting? See [Troubleshooting](#-troubleshooting) below.
 
 ---
 
 ## ✨ Features
+
+> The `key=` settings named below are the older client's `yso_ap.cfg`. In the
+> CleriaOre mod the same options are on its page, **F1 > Mods > Archipelago**.
 
 - **3 playable characters** — Yunica, Hugo, Toal. Each gets *their own* gear; you
   pick the character in your yaml and the seed is built for them.
@@ -214,16 +220,21 @@ overlay.
 
 ## ❓ Troubleshooting
 
-- **No overlay in-game?** Press `INSERT`. If still nothing, the mod may not have
-  loaded — confirm `dinput8.dll` is in the same folder as `yso_win.exe`.
-- **Says disconnected / won't connect?** Check `yso_ap.cfg` — `host`, `port`, and
-  `slot` must match the hosted room and the **name** in your yaml exactly.
+- **No overlay in-game?** Press `INSERT`. If still nothing, open CleriaOre: the
+  **Game** page must say the loader is installed, and **Archipelago** must be on
+  in the **Mods** list.
+- **Says disconnected / won't connect?** On **F1 > Mods > Archipelago**, the
+  server and the slot must match the hosted room and the **name** in your yaml
+  exactly. The line under them says why the last try failed.
 - **Game won't launch / crashes immediately?** Make sure your Ys Origin is the
-  current Steam build (**v1.1.1.0**) and that you used the `dinput8.dll` from the
-  matching Release (it's built for that exact version).
-- **Diagnostics:** the mod writes a log to `%TEMP%\yso_ap_mod.log`. It is safe to post when reporting a bug: your Windows user name, the room's port and any private server address are left out, and the password is never logged. It starts fresh at each launch (the launch before is kept as `yso_ap_mod.prev.log`).
-- **Starting gear missing?** Don't run any *other* external AP client at the same
-  time as the mod — they conflict. The mod handles everything itself.
+  current Steam build (**v1.1.1.0**).
+- **Diagnostics:** CleriaOre writes `cleriaore\cleriaore.log` in the game folder
+  (the mod's lines start with `[lua:ysorigin.archipelago]`); the password is never
+  logged.
+- **Starting gear missing?** Don't run any *other* AP client for this slot at the
+  same time: the mod is the client.
+- **Using the older `dinput8.dll` client?** Its config is `yso_ap.cfg` next to
+  `yso_win.exe` and its log `%TEMP%\yso_ap_mod.log`.
 
 ---
 
