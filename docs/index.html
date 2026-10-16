@@ -115,7 +115,7 @@ footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 46
 <header class="hero">
   <div class="wrap">
     <h1>Ys Origin × Archipelago</h1>
-    <p class="lead">A randomizer for Ys Origin that joins <a href="https://archipelago.gg">Archipelago</a> multiworlds. The whole of Darm Tower is shuffled, you play as Yunica, Hugo or Toal, and everything runs inside the game through one small file you drop in its folder.</p>
+    <p class="lead">A randomizer for Ys Origin that joins <a href="https://archipelago.gg">Archipelago</a> multiworlds. The whole of Darm Tower is shuffled, you play as Yunica, Hugo or Toal, and everything runs inside the game through the CleriaOre mod loader.</p>
     <div class="row">
       <a class="btn primary" href="#setup">Set it up</a>
       <a class="btn" href="#settings">Build my settings file</a>
@@ -128,18 +128,19 @@ footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 46
 <section id="setup">
   <div class="wrap">
     <h2>Setup, step by step</h2>
-    <p class="sub">About ten minutes, once. You need Ys Origin on Steam (version 1.1.1.0, the current build) and nothing else to start.</p>
+    <p class="sub">About ten minutes, once. You need Ys Origin on Steam (version 1.1.1.0, the current build) on Windows, and nothing else to start.</p>
     <ol class="steps">
       <li>
         <h3>Install Archipelago</h3>
         <p>Download the installer from <a href="https://archipelago.gg/tutorial/Archipelago/setup/en">archipelago.gg</a> and run it. You need it to generate or host a game; to join a friend's game you still install it.</p>
       </li>
       <li>
-        <h3>Get the two files</h3>
-        <p>Both come from the latest release of this project.</p>
+        <h3>Get the three files</h3>
+        <p>The apworld from this project, the CleriaOre mod loader, and the Archipelago mod for it (take the <code>.exe</code> and the <code>.cleriamod</code> from their latest releases).</p>
         <div class="row">
           <a class="btn small" href="https://github.com/4rtefakt/ys-origin-archipelago/releases/latest/download/ys_origin.apworld">Download ys_origin.apworld</a>
-          <a class="btn small" href="https://github.com/4rtefakt/ys-origin-archipelago/releases/latest/download/dinput8.dll">Download dinput8.dll</a>
+          <a class="btn small" href="https://github.com/4rtefakt/CleriaOre/releases/latest">CleriaOre setup</a>
+          <a class="btn small" href="https://github.com/4rtefakt/ys-origin-cleriacore-ap/releases/latest">Archipelago mod</a>
         </div>
       </li>
       <li>
@@ -157,24 +158,23 @@ footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 46
       </li>
       <li>
         <h3>Install the mod in the game</h3>
-        <p>Copy <code>dinput8.dll</code> into the Ys Origin folder, the one that contains <code>yso_win.exe</code>. Usually:</p>
-        <code class="path">C:\Program Files (x86)\Steam\steamapps\common\Ys Origin\</code>
-        <p>To uninstall later, delete that file.</p>
+        <p>Run <code>CleriaOre-Setup-&lt;version&gt;.exe</code>. It finds the game through Steam: on its <b>Game</b> page, press <b>Install the loader</b>. Then double-click <code>ysorigin.archipelago-&lt;version&gt;.cleriamod</code>: CleriaOre installs the mod and turns it on.</p>
+        <p>Windows may warn that the setup comes from an unknown publisher: choose <i>More info</i>, then <i>Run anyway</i>. To uninstall later, press <b>Remove the loader</b> in CleriaOre.</p>
       </li>
       <li>
-        <h3>Connect from the title screen</h3>
-        <p>Start the game. The title screen has a new <b>Archipelago</b> entry above <i>New Game</i>: press <kbd>F8</kbd> to open it and fill in:</p>
+        <h3>Connect</h3>
+        <p>Start the game and press <kbd>F1</kbd>, then open <b>Mods &gt; Archipelago</b> (the same page is in CleriaOre: click the mod). Fill in:</p>
         <ul>
-          <li><b>Server</b>, for example <code>archipelago.gg</code></li>
-          <li><b>Port</b>, your room's port</li>
-          <li><b>Slot</b>, the name in your settings file</li>
+          <li><b>Server</b>, your room's address, for example <code>archipelago.gg:12345</code></li>
+          <li><b>Slot name</b>, the name in your settings file</li>
           <li><b>Password</b>, blank unless the room has one</li>
         </ul>
-        <p>Move with <kbd>Tab</kbd> or the arrow keys, then press <kbd>Enter</kbd>. The status line tells you the result.</p>
+        <p>Press <b>Connect</b>. The status line tells you the result; with <b>Connect at start</b> on, it reconnects by itself next time.</p>
       </li>
       <li>
         <h3>Play</h3>
-        <p>Start a New Game or load your save. An Archipelago overlay sits in the top right with your connection, your room and your items. Open chests as usual: you get the randomized item, and what other players find for you arrives by itself. <kbd>Insert</kbd> hides or shows the overlay.</p>
+        <p>Start a New Game with your seed's character, or load your save. The overlay shows your connection and the items found and received. Open chests as usual: you get the randomized item, and what other players find for you arrives by itself. <kbd>Insert</kbd> hides or shows the overlay, <kbd>F6</kbd> opens the chat.</p>
+        <p class="note">Using the older <code>dinput8.dll</code> client from this project's releases? It still works, but finish a run with the client it started on: the two keep their saves in different folders.</p>
       </li>
     </ol>
   </div>
@@ -219,11 +219,11 @@ footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 46
     <h2>If something goes wrong</h2>
     <p class="sub">The most common problems and what fixes them.</p>
     <div class="faq">
-      <details><summary>No overlay in the game</summary><p>Press Insert. If nothing shows, the mod did not load: check that <code>dinput8.dll</code> is in the same folder as <code>yso_win.exe</code>.</p></details>
-      <details><summary>It will not connect</summary><p>The server, the port and the slot must match the room exactly, and the slot is the name in your settings file, capitals included.</p></details>
-      <details><summary>The game does not start, or crashes at once</summary><p>The mod is built for the current Steam build of Ys Origin, version 1.1.1.0. Check your game is up to date and that the dll comes from the latest release.</p></details>
+      <details><summary>No overlay in the game</summary><p>Press Insert. If nothing shows, open CleriaOre: its <b>Game</b> page must say the loader is installed, and <b>Archipelago</b> must be on in the <b>Mods</b> list.</p></details>
+      <details><summary>It will not connect</summary><p>The server (with its port) and the slot must match the room exactly, and the slot is the name in your settings file, capitals included. The line under them on the mod's page says why the last try failed.</p></details>
+      <details><summary>The game does not start, or crashes at once</summary><p>The mod is built for the current Steam build of Ys Origin, version 1.1.1.0. Check your game is up to date and that CleriaOre is the latest release.</p></details>
       <details><summary>Starting gear is missing</summary><p>Do not run another Archipelago client for Ys Origin next to the mod. The mod is the client, and two of them conflict.</p></details>
-      <details><summary>Reporting a bug</summary><p>The mod writes a log to <code>%TEMP%\yso_ap_mod.log</code>. It is safe to share: your Windows user name, the room's port and the password are left out. Attach it to an issue on <a href="https://github.com/4rtefakt/ys-origin-archipelago/issues">GitHub</a>.</p></details>
+      <details><summary>Reporting a bug</summary><p>CleriaOre writes a log to <code>cleriaore\cleriaore.log</code> in the game folder; the mod's lines start with <code>[lua:ysorigin.archipelago]</code>, and the password is never logged. Attach it to an issue on <a href="https://github.com/4rtefakt/ys-origin-archipelago/issues">GitHub</a>.</p></details>
     </div>
   </div>
 </section>
