@@ -7,7 +7,6 @@
 [![Archipelago](https://img.shields.io/badge/Archipelago-multiworld-e64980)](https://archipelago.gg)
 ![Game](https://img.shields.io/badge/Ys%20Origin-Steam%201.1.1.0-1b2838?logo=steam)
 [![Setup guide](https://img.shields.io/badge/setup%20guide-online-f08c00)](https://4rtefakt.github.io/ys-origin-archipelago/)
-![Last commit](https://img.shields.io/github/last-commit/4rtefakt/ys-origin-archipelago)
 
 </div>
 
