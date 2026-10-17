@@ -2474,6 +2474,24 @@ static void repair_hugo_eyes() {
             "free - cleared");
 }
 
+// --- the 3F barrier broken before the first trip to 4F ---------------------- #
+//
+// hook_vm.cpp keeps an early Blue Necklace from breaking the S_1013 barrier
+// before S_1009 has been reached. A save that already broke it (444 = 1) while
+// 310 is still 0 can never reach the 4F rooms: only the barrier's zap leads
+// there, and a vanilla run always takes the zap first. Next to S_1013 (S_1005
+// on the south side, S_1010 on the north) the barrier is put back, so walking
+// into it zaps the player to 4F as on a first visit; with the necklace it
+// breaks again on the way back.
+static void repair_3f_barrier(int scene) {
+    volatile int* f = (volatile int*)kGFlagsAbs;
+    if (f[150] == 3 || f[444] != 1 || f[310] != 0) return;   // Toal passes by Boost
+    if (scene != 1005 && scene != 1010) return;
+    f[444] = 0;
+    mod_log("repair: the 3F barrier was broken before the first trip to 4F "
+            "(444 = 1, 310 = 0) - put back, so it teleports to S_1009 again");
+}
+
 // --- Dreaming Idol chain repair (Yunica) ----------------------------------- #
 //
 // "Got to the part where the party is turned to stone... Talking to Feena
@@ -2547,6 +2565,7 @@ static void poll_value_checks() {
     repair_1f_burden_softlock(scene); // repair the post-Kishgal 1F softlock
     repair_dreaming_idol_chain();      // Dino / idol use for Yunica
     repair_hugo_eyes();                // Eyes of Fact left hidden by a cut scene
+    repair_3f_barrier(scene);          // 4F stranded behind a broken barrier
     std::vector<int64_t> fire;
     for (const auto& pb : g_poll_bits)
         if (((*(volatile int*)pb.abs >> pb.bit) & 1) &&

@@ -359,6 +359,44 @@ __declspec(naked) static void Hook_IsXXX() {
     }
 }
 
+// The 3F barrier (S_1013, "3F Transfer Room"). S_EVT1013 asks Flag_IsEquip(55)
+// (pc 41): without the Blue Necklace, Yunica and Hugo are zapped to 4F
+// (S_EVT1013_2 -> ChangeScene S_1009); with it on they resist, and the same
+// event breaks the barrier for good (444 = 1 at pc 174; S_1013's root spawns it
+// only while 444 == 0). The 4F rooms behind S_1009 are reached only by that zap,
+// and in the vanilla order the necklace is found among them. A seed can hand it
+// over first: "3f transfer might be bugged for me as hugo" (Discord, Oct 2026)
+// was a player who walked in wearing it and could never reach 4F. So until
+// S_1009 has been entered once (its root sets 310 on every entry) the necklace
+// does not count as equipped in S_1013. Toal tests Boost (141) there instead.
+//
+// FUN_00443CE0 is the shared equip test (event VM 0x8C at 0x5689EA, the ASO VM,
+// FUN_00446750): __fastcall, ECX = item id, the answer in AL. Its callers expect
+// ECX kept, so the thunk keeps every register but EAX.
+static const uintptr_t kIsEquip = 0x00443CE0;
+static void* g_orig_isequip = nullptr;
+static int __cdecl barrier_hides_necklace() {
+    volatile int* f = (volatile int*)kGFlagsBase;
+    return f[0x1F9] == 1013 && f[310] == 0 && f[444] == 0;
+}
+__declspec(naked) static void Hook_IsEquip() {
+    __asm {
+        cmp  ecx, 0x37                  // the Blue Necklace
+        jne  pass
+        push ecx
+        push edx
+        call barrier_hides_necklace
+        pop  edx
+        pop  ecx
+        test eax, eax
+        jz   pass
+        xor  eax, eax                   // AL = 0: not equipped
+        ret
+    pass:
+        jmp  dword ptr [g_orig_isequip]
+    }
+}
+
 // 0xAF blessing grant. Reports the purchase as a check, and when the seed shuffles
 // blessing EFFECTS into the item pool, skips the vanilla grant entirely by jumping
 // to the dispatch tail instead of the jump table.
@@ -895,6 +933,10 @@ void hook_vm_install() {
     MH_STATUS eix = MH_EnableHook((void*)kIsXXX);
     mod_log("hook_vm_install: 0x9A IsXXX latch @0x%X create=%d enable=%d",
             (unsigned)kIsXXX, (int)cix, (int)eix);
+    MH_STATUS cie = MH_CreateHook((void*)kIsEquip, (void*)&Hook_IsEquip, &g_orig_isequip);
+    MH_STATUS eie = MH_EnableHook((void*)kIsEquip);
+    mod_log("hook_vm_install: 3F barrier equip test @0x%X create=%d enable=%d",
+            (unsigned)kIsEquip, (int)cie, (int)eie);
     MH_STATUS cbg = MH_CreateHook((void*)kBlessGrant, (void*)&Hook_BlessGrant,
                                   &g_orig_blessgrant);
     MH_STATUS ebg = MH_EnableHook((void*)kBlessGrant);
