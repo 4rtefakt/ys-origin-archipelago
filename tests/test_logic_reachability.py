@@ -127,12 +127,23 @@ def _full_inventory(char) -> dict:
     return inv
 
 
+# Rooms whose own vanilla chest holds the item needed to walk back out. Logic
+# asks for it on the way in (a random item there would strand the player), but
+# vanilla hands it over inside the room, so the sweep enters without it.
+_ESCAPE_ITEMS = {"S_2002": "Silver Bracelet"}   # 6F Small Room: the dash, for the timed platform
+
+
 def _vanilla_sweep(char, weapon_on):
     """Collect-as-you-go sweep with vanilla placement. Returns (goal_reached,
     reached_regions, unreached_locations)."""
     gates = dt.active_gates()
     ore_req = dt.zone_ore_requirements(weapon_on)
     edge_reqs = dt.edge_requirements()
+    escape = {dt.scene_region(sc): it for sc, it in _ESCAPE_ITEMS.items()}
+    for (src, dst), req in list(edge_reqs.items()):
+        item = escape.get(dst)
+        if item:
+            edge_reqs[(src, dst)] = [t for t in req if t != item]
     region_locs = _region_locs()
     inv: dict = defaultdict(int)
     state = _State(inv)
@@ -337,7 +348,18 @@ def test_22f_path_2_is_fire_for_toal():
     + fire for Toal (the guide's three walkthroughs)."""
     loc = "Demonic Core: 22F Path 2"
     assert dt.LOCATION_REQUIRES[loc] == ["Gold Bracelet", "Cerulean Flabellum"]
-    assert dt.LOCATION_REQUIRES_BY_CHARACTER == {"toal": {loc: ["Gold Bracelet", "Crimson Lotusblade"]}}
+    assert dt.LOCATION_REQUIRES_BY_CHARACTER["toal"][loc] == ["Gold Bracelet", "Crimson Lotusblade"]
+    assert loc not in dt.LOCATION_REQUIRES_BY_CHARACTER.get("yunica", {})
+    assert loc not in dt.LOCATION_REQUIRES_BY_CHARACTER.get("hugo", {})
+
+
+def test_10f_path_2_chests_for_toal():
+    """S_3003: Toal has no Mask bridge (the root deletes switch01 for him). He
+    slides under the spikes to the Roda Fruit chest with nothing, and reaches his
+    own 2000 SP chest (box_02) only with mid-air fire casts."""
+    assert dt.LOCATION_REQUIRES["Flames of Guilt: 10F Path 2"] == ["Mask of Eyes"]
+    assert dt.LOCATION_REQUIRES_BY_CHARACTER["toal"]["Flames of Guilt: 10F Path 2"] == []
+    assert dt.LOCATION_REQUIRES["Flames of Guilt: 10F Path 2 #2"] == ["Crimson Lotusblade"]
 
 
 def test_22f_path_3_chests_need_the_double_jump():

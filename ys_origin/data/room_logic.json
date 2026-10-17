@@ -271,7 +271,10 @@
       "from": [
         [
           "S_2001",
-          []
+          [
+            "Cerulean Flabellum",
+            "Silver Bracelet"
+          ]
         ]
       ]
     },
@@ -417,7 +420,9 @@
       "from": [
         [
           "S_2016",
-          []
+          [
+            "Water Dragon's Scales"
+          ]
         ]
       ]
     },
@@ -1106,7 +1111,9 @@
       "from": [
         [
           "S_5005",
-          []
+          [
+            "Gold Bracelet"
+          ]
         ]
       ]
     },
@@ -1201,7 +1208,10 @@
       "from": [
         [
           "S_5003",
-          []
+          [
+            "Gold Bracelet"
+          ],
+          "oneway"
         ]
       ]
     },
@@ -1339,7 +1349,8 @@
       "from": [
         [
           "S_6004",
-          []
+          [],
+          "oneway"
         ]
       ]
     },
@@ -1443,6 +1454,9 @@
     "Flames of Guilt: 10F Path 2": [
       "Mask of Eyes"
     ],
+    "Flames of Guilt: 10F Path 2 #2": [
+      "Crimson Lotusblade"
+    ],
     "Demonic Core: 22F Path 2": [
       "Gold Bracelet",
       "Cerulean Flabellum"
@@ -1461,14 +1475,31 @@
     ],
     "Corrupted Blood: 20F Small Room": [
       "Gold Bracelet"
+    ],
+    "Corrupted Blood: Outer Corridor 3 — Black Pearl": [],
+    "Boss: Boss Room (S_5080)": [
+      "Silver Chimes"
     ]
   },
   "location_requires_by_character": {
-    "_doc": "A character's own requirement for a location, replacing its location_requires entry. 22F Path 2: Yunica and Hugo cross with the double jump and the WIND skill, Toal with the double jump and the FIRE skill (the guide, all three walkthroughs).",
+    "_doc": "A character's own requirement for a location, replacing its location_requires entry. 22F Path 2: Yunica and Hugo cross with the double jump and the WIND skill, Toal with the double jump and the FIRE skill (the guide, all three walkthroughs). 10F Path 2: S_3003 deletes the Mask-bridge switch for Toal, who reaches the Roda Fruit chest by sliding under the spikes, with nothing. Black Pearl and Feena's idol: Yunica's S_5102 event (EV_5102_YUNICA_1) only starts once flag 268 is set, by S_EVT5080_YUNICA behind the Zeruena ward (Silver Chimes); Hugo's and Toal's need nothing.",
     "toal": {
       "Demonic Core: 22F Path 2": [
         "Gold Bracelet",
         "Crimson Lotusblade"
+      ],
+      "Flames of Guilt: 10F Path 2": []
+    },
+    "yunica": {
+      "Corrupted Blood: Outer Corridor 3 — Black Pearl": [
+        "S_5080",
+        "Silver Chimes"
+      ],
+      "Silent Sands: Rado Inside 4 (Feena) — Dreaming Idol": [
+        "S_4017",
+        "S_5102",
+        "S_5080",
+        "Silver Chimes"
       ]
     }
   },
