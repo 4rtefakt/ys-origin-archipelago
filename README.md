@@ -322,6 +322,4 @@ Put your yaml in `<Archipelago>/Players/`, copy `ys_origin/` into
 `<Archipelago>/worlds/ys_origin/` (or install the `.apworld`), then run the
 Archipelago generator. See [`ys_origin/docs/setup_en.md`](ys_origin/docs/setup_en.md).
 
-> The reverse-engineering notes and the memory map moved to the Ys Origin research
-> repository, [yso](https://github.com/4rtefakt/yso/blob/main/retail/archipelago/RE_FINDINGS.md)
-> (`retail/archipelago/RE_FINDINGS.md`), with the rest of what is known about the game.
+> How the code finds what it needs in the game is explained in [`RE_FINDINGS.md`](RE_FINDINGS.md).
