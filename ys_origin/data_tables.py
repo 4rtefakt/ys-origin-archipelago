@@ -32,7 +32,7 @@ def _read_data(relpath: str) -> str:
 
 # The apworld's version: the manifest (tools/build_apworld.py reads this line) and
 # slot_data's `apworld_version`, which the mod compares with its own.
-WORLD_VERSION = "2.1.0"
+WORLD_VERSION = "2.1.1"
 
 # The client version the server demands of anything connecting to a Ys Origin
 # slot. Every dinput8.dll up to 2.0.1 reported 0.6.4 (apclientpp's default), and
