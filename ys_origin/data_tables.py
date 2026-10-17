@@ -581,12 +581,19 @@ def statue_scenes() -> List[int]:
     return sorted({v["scene"] for v in STATUE_UNLOCKS.values()})
 
 
+# Statues no spawn may use. S_6053 (24F, before the Devil Medallion door): its
+# only walking exit leads back into S_6004 past the switch bridges, which are
+# raised from the S_6004 side, so logic treats that way as one-way and a spawn
+# there would have nowhere to go but its locked door.
+_NO_SPAWN = {6053}
+
+
 def start_statue_candidates(max_floor: int) -> List[int]:
     """Statue scene leaves eligible as a Random-start spawn under ``max_floor``:
     only statues on a tower floor <= max_floor. Never empty — if the cap excludes
     every statue (or a floor can't be resolved), the lowest-floor statue is used so
     a spawn is always available."""
-    scenes = statue_scenes()
+    scenes = [s for s in statue_scenes() if s not in _NO_SPAWN]
     eligible = [s for s in scenes if (scene_floor(s) or 1) <= max_floor]
     if eligible:
         return eligible

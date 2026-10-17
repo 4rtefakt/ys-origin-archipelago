@@ -270,7 +270,7 @@ evidence per the guide; medium/low ones want a live or map confirm before relyin
 | **S_2014 → S_2009** | Flooded Prison | med-high | Levinstrike Warhammer chamber: sink in, **Dark-Crystal teleport out** (no walk-back). Authored S_2009.from=[S_2014]. |
 | **S_3012 → S_3013/S_3011** | Flames of Guilt | med | 13F Panacea chest "drop down to the lower right, where you've been before." Exact landing scene uncertain. |
 | **S_4002 → S_4005** | Silent Sands | med | 14F "Rear Bend Room" optional shortcut drop back toward the S_4000 statue. Don't add the upward reverse. |
-| **S_6010 → S_6080** | Demonic Core | med | 23F "big ol' hole" to the Obsidian Key room. ⚠️ also flagged: the authored `S_6010→S_6080 [Obsidian Key]` gate may be **inverted** (prose drops in unlocked to GET the key; the key gates the door NORTH toward Kishgal) — verify. |
+| **S_6010 → S_6080** | Demonic Core | — | Not a drop. The 23F hole and the Obsidian Key chest are both inside S_6015 (S_BOX02 gives item 110 once the four Fliogans die); the key opens the S_6010 north door to S_6080 (OPEN_THE_DOOR tests flag 110, USEKEY sets 473). The authored `[Obsidian Key]` gate is right. |
 
 **NOT one-way (do NOT flag — reversible or in-room):**
 - S_2006 → S_2007 (7F→8F waterfall): room named "Waterfall Stopper" → likely re-traversable. (low)

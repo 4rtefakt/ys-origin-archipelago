@@ -2414,6 +2414,10 @@
   "zone": "Wailing Blue",
   "floor": "2F",
   "room": "2F Gemma Room",
+  "char": [
+   "yunica",
+   "hugo"
+  ],
   "name": "Explore: 2F Gemma Room (S_1012)",
   "detect": {
    "method": "scene",
@@ -4460,6 +4464,10 @@
   "zone": "Wailing Blue",
   "floor": "2F",
   "room": "2F Gemma Room",
+  "char": [
+   "yunica",
+   "hugo"
+  ],
   "name": "Wailing Blue: 2F Gemma Room — Blue Necklace",
   "detect": {
    "method": "scene",
